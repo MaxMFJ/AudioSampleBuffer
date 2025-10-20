@@ -554,19 +554,57 @@ typedef NS_ENUM(NSInteger, NCMDecryptorError) {
     
     // 下载歌词（如果有 musicId）
     if (metadata && metadata[@"musicId"]) {
-        NSString *lrcPath = [[outputPath stringByDeletingPathExtension] stringByAppendingPathExtension:@"lrc"];
+        // 🔧 修复：保存到 Documents/Lyrics/ 目录，与 LyricsManager 保持一致
+        NSArray *paths = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES);
+        NSString *documentsDirectory = paths.firstObject;
+        NSString *lyricsDirectory = [documentsDirectory stringByAppendingPathComponent:@"Lyrics"];
+        
+        // 确保目录存在
+        [[NSFileManager defaultManager] createDirectoryAtPath:lyricsDirectory
+                                  withIntermediateDirectories:YES
+                                                   attributes:nil
+                                                        error:nil];
+        
+        NSString *audioFileName = [[outputPath lastPathComponent] stringByDeletingPathExtension];
+        NSString *lrcPath = [lyricsDirectory stringByAppendingPathComponent:[NSString stringWithFormat:@"%@.lrc", audioFileName]];
         
         // 检查歌词文件是否已存在
         if (![[NSFileManager defaultManager] fileExistsAtPath:lrcPath]) {
-            // 异步下载歌词，不阻塞主流程
+            // 🔧 修复：使用同步下载，确保歌词在播放前就绪
             id musicIdObj = metadata[@"musicId"];
             NSString *musicId = [musicIdObj isKindOfClass:[NSString class]] ? musicIdObj : [musicIdObj stringValue];
+            
+            NSLog(@"   🎵 正在下载网易云歌词 (ID: %@)...", musicId);
+            
+            // 使用信号量实现同步等待
+            dispatch_semaphore_t semaphore = dispatch_semaphore_create(0);
+            __block BOOL downloadSuccess = NO;
+            
             [self downloadLyricsFromNetease:musicId completion:^(NSString *lyrics, NSError *lyricsError) {
                 if (lyrics) {
-                    [lyrics writeToFile:lrcPath atomically:YES encoding:NSUTF8StringEncoding error:nil];
-                    NSLog(@"   📝 歌词已下载: %@", lrcPath.lastPathComponent);
+                    NSError *writeError = nil;
+                    BOOL success = [lyrics writeToFile:lrcPath atomically:YES encoding:NSUTF8StringEncoding error:&writeError];
+                    if (success) {
+                        NSLog(@"   📝 网易云歌词已下载: %@", lrcPath.lastPathComponent);
+                        downloadSuccess = YES;
+                    } else {
+                        NSLog(@"   ⚠️  歌词写入失败: %@", writeError.localizedDescription);
+                    }
+                } else {
+                    NSLog(@"   ⚠️  网易云歌词下载失败: %@", lyricsError.localizedDescription);
                 }
+                dispatch_semaphore_signal(semaphore);
             }];
+            
+            // 等待下载完成（最多5秒超时）
+            dispatch_time_t timeout = dispatch_time(DISPATCH_TIME_NOW, 5 * NSEC_PER_SEC);
+            long result = dispatch_semaphore_wait(semaphore, timeout);
+            
+            if (result != 0) {
+                NSLog(@"   ⏱  歌词下载超时，将在后台继续");
+            }
+        } else {
+            NSLog(@"   📖 歌词已存在，跳过下载");
         }
     }
     

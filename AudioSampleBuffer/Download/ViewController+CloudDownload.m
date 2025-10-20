@@ -6,6 +6,7 @@
 //
 
 #import "ViewController+CloudDownload.h"
+#import "MusicLibraryManager.h"
 #import <objc/runtime.h>
 
 @implementation ViewController (CloudDownload)
@@ -293,35 +294,77 @@
 }
 
 - (void)playDownloadedMusic:(NSString *)fileName {
-    // 这里需要根据你的实际代码调整
-    // 假设你有 player 属性
-    if ([self respondsToSelector:@selector(player)]) {
-        id player = [self valueForKey:@"player"];
-        if (player && [player respondsToSelector:@selector(playWithFileName:)]) {
-            [player performSelector:@selector(playWithFileName:) withObject:fileName];
-            NSLog(@"▶️ [播放] %@", fileName);
+    NSLog(@"▶️ [播放下载] 准备播放: %@", fileName);
+    
+    // 获取播放器
+    if (![self respondsToSelector:@selector(player)]) {
+        NSLog(@"❌ [播放下载] 找不到播放器");
+        return;
+    }
+    
+    id player = [self valueForKey:@"player"];
+    if (!player || ![player respondsToSelector:@selector(playWithFileName:)]) {
+        NSLog(@"❌ [播放下载] 播放器无效或不支持播放");
+        return;
+    }
+    
+    // 构建完整文件路径（使用统一的下载目录）
+    NSString *downloadDir = [MusicLibraryManager cloudDownloadDirectory];
+    NSString *filePath = [downloadDir stringByAppendingPathComponent:fileName];
+    
+    // 检查文件是否存在
+    if (![[NSFileManager defaultManager] fileExistsAtPath:filePath]) {
+        NSLog(@"❌ [播放下载] 文件不存在: %@", filePath);
+        return;
+    }
+    
+    NSLog(@"✅ [播放下载] 文件路径: %@", filePath);
+    
+    // 使用完整路径播放（AudioSpectrumPlayer支持完整路径）
+    [player performSelector:@selector(playWithFileName:) withObject:filePath];
+    NSLog(@"▶️ [播放下载] 开始播放");
+    
+    // 更新当前播放索引到下载的歌曲
+    NSArray *allMusic = [[MusicLibraryManager sharedManager] allMusic];
+    for (NSInteger i = 0; i < allMusic.count; i++) {
+        MusicItem *item = allMusic[i];
+        if ([item.fileName isEqualToString:fileName] || [item.filePath isEqualToString:filePath]) {
+            // 更新 displayedMusicItems 和 index
+            if ([self respondsToSelector:@selector(setDisplayedMusicItems:)]) {
+                [self setValue:allMusic forKey:@"displayedMusicItems"];
+            }
+            if ([self respondsToSelector:@selector(setIndex:)]) {
+                [self setValue:@(i) forKey:@"index"];
+            }
+            NSLog(@"✅ [播放下载] 更新播放索引: %ld", (long)i);
+            break;
         }
     }
 }
 
 - (void)refreshMusicLibrary {
-    // 刷新音乐库显示
-    if ([self respondsToSelector:@selector(musicLibrary)]) {
-        id musicLibrary = [self valueForKey:@"musicLibrary"];
-        if (musicLibrary && [musicLibrary respondsToSelector:@selector(reloadMusicLibrary)]) {
-            [musicLibrary performSelector:@selector(reloadMusicLibrary)];
-        }
+    NSLog(@"🔄 [音乐库] 开始刷新...");
+    
+    // 1️⃣ 重新加载音乐库管理器
+    [[MusicLibraryManager sharedManager] reloadMusicLibrary];
+    
+    // 2️⃣ 更新 displayedMusicItems（显示全部音乐）
+    if ([self respondsToSelector:@selector(setDisplayedMusicItems:)]) {
+        NSArray *allMusic = [[MusicLibraryManager sharedManager] allMusic];
+        [self setValue:allMusic forKey:@"displayedMusicItems"];
+        NSLog(@"🔄 [音乐库] 更新显示列表: %ld 首歌曲", (long)allMusic.count);
     }
     
-    // 刷新表格
+    // 3️⃣ 刷新表格视图
     if ([self respondsToSelector:@selector(tableView)]) {
         UITableView *tableView = [self valueForKey:@"tableView"];
         if (tableView) {
             [tableView reloadData];
+            NSLog(@"🔄 [音乐库] 表格已刷新");
         }
     }
     
-    NSLog(@"🔄 [音乐库] 已刷新");
+    NSLog(@"✅ [音乐库] 刷新完成");
 }
 
 - (void)showSimpleAlert:(NSString *)title message:(NSString *)message {

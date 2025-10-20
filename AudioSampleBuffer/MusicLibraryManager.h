@@ -80,8 +80,12 @@ typedef NS_ENUM(NSInteger, MusicSortType) {
 
 @interface MusicLibraryManager : NSObject
 
-// 单例
 + (instancetype)sharedManager;
+
+/**
+ * 获取云下载目录路径（与 MusicDownloadManager 保持一致）
+ */
++ (NSString *)cloudDownloadDirectory;
 
 #pragma mark - 基础操作
 

@@ -73,7 +73,7 @@
 - (int)processFrame:(float *)frame {
     if (!_isInitialized) return 0;
     
-    // 转换为 SInt16
+    // 转换为 SInt16（使用对称的转换系数）
     _int16Buffer->resize(_frameSize);
     for (int i = 0; i < _frameSize; i++) {
         float sample = fmaxf(-1.0f, fminf(1.0f, frame[i]));
@@ -83,9 +83,9 @@
     // 处理
     int vad = speex_preprocess_run(_preprocessState, (spx_int16_t *)_int16Buffer->data());
     
-    // 转回 float
+    // 转回 float（修复：使用32767.0f保持对称）
     for (int i = 0; i < _frameSize; i++) {
-        frame[i] = (*_int16Buffer)[i] / 32768.0f;
+        frame[i] = (*_int16Buffer)[i] / 32767.0f;
     }
     
     return vad;
@@ -102,9 +102,27 @@
     int totalVAD = 0;
     int frameCount = 0;
     
+    // 🔧 修复杂音问题：处理完整帧
     for (NSUInteger i = 0; i < sampleCount; i += _frameSize) {
         NSUInteger remainingSamples = sampleCount - i;
-        if (remainingSamples < _frameSize) break;
+        if (remainingSamples < _frameSize) {
+            // ⚠️ 剩余样本不足一帧，使用零填充处理
+            // 这样可以避免未处理样本与处理样本混合产生杂音
+            _int16Buffer->resize(_frameSize);
+            memcpy(_int16Buffer->data(), &samples[i], remainingSamples * sizeof(SInt16));
+            // 零填充剩余部分
+            memset(_int16Buffer->data() + remainingSamples, 0, (_frameSize - remainingSamples) * sizeof(SInt16));
+            
+            // 处理填充后的帧
+            int vad = speex_preprocess_run(_preprocessState, (spx_int16_t *)_int16Buffer->data());
+            
+            // 只复制有效样本回去（忽略填充部分）
+            memcpy(&samples[i], _int16Buffer->data(), remainingSamples * sizeof(SInt16));
+            
+            totalVAD += vad;
+            frameCount++;
+            break;
+        }
         
         int vad = [self processInt16Frame:&samples[i]];
         totalVAD += vad;
@@ -292,8 +310,9 @@
                   echoFrame:int16Echo.data() 
                 outputFrame:int16Output.data()];
     
+    // 🔧 修复：使用32767.0f保持对称，避免精度损失
     for (int i = 0; i < _frameSize; i++) {
-        outputFrame[i] = int16Output[i] / 32768.0f;
+        outputFrame[i] = int16Output[i] / 32767.0f;
     }
 }
 

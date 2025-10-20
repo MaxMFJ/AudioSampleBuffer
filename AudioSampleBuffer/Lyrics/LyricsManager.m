@@ -78,15 +78,36 @@
         return;
     }
     
-    // 优先级2: 沙盒Documents中的LRC文件（动态下载）
+    // 优先级2: 沙盒Documents/Lyrics中的LRC文件（推荐位置）
     NSString *sandboxLrcPath = [[self lyricsSandboxDirectory] stringByAppendingPathComponent:
                                 [NSString stringWithFormat:@"%@.lrc", audioFileName]];
     
     if ([[NSFileManager defaultManager] fileExistsAtPath:sandboxLrcPath]) {
-        NSLog(@"📖 [歌词] 从沙盒加载: %@.lrc", audioFileName);
+        NSLog(@"📖 [歌词] 从沙盒Lyrics加载: %@.lrc", audioFileName);
         [self loadLocalLyrics:sandboxLrcPath completion:^(LRCParser *parser, NSError *error) {
             if (parser) {
                 [self.lyricsCache setObject:parser forKey:audioPath];
+            }
+            if (completion) {
+                completion(parser, error);
+            }
+        }];
+        return;
+    }
+    
+    // 优先级2.5: 检查音频文件同目录下的LRC文件（兼容NCM解密旧版本）
+    NSString *sameDirLrcPath = [[audioPath stringByDeletingPathExtension] stringByAppendingPathExtension:@"lrc"];
+    if ([[NSFileManager defaultManager] fileExistsAtPath:sameDirLrcPath]) {
+        NSLog(@"📖 [歌词] 从音频同目录加载: %@.lrc", audioFileName);
+        [self loadLocalLyrics:sameDirLrcPath completion:^(LRCParser *parser, NSError *error) {
+            if (parser) {
+                [self.lyricsCache setObject:parser forKey:audioPath];
+                
+                // 迁移到标准位置
+                NSString *targetPath = [[self lyricsSandboxDirectory] stringByAppendingPathComponent:
+                                       [NSString stringWithFormat:@"%@.lrc", audioFileName]];
+                [[NSFileManager defaultManager] copyItemAtPath:sameDirLrcPath toPath:targetPath error:nil];
+                NSLog(@"   📦 已迁移歌词到: Documents/Lyrics/");
             }
             if (completion) {
                 completion(parser, error);

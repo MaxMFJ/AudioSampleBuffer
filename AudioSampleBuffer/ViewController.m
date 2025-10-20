@@ -745,7 +745,13 @@
     self.searchBar.placeholder = @"搜索歌曲、艺术家...";
     self.searchBar.barStyle = UIBarStyleBlack;
     self.searchBar.searchBarStyle = UISearchBarStyleMinimal;
+    self.searchBar.enablesReturnKeyAutomatically = YES;  // 启用返回键
     [self.view addSubview:self.searchBar];
+    
+    // 🔧 添加点击背景隐藏键盘的手势
+    UITapGestureRecognizer *tapGesture = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(dismissKeyboard)];
+    tapGesture.cancelsTouchesInView = NO;  // 不取消其他触摸事件
+    [self.view addGestureRecognizer:tapGesture];
     
     // 更新 TableView 位置
     CGFloat tableY = topOffset + 60;
@@ -758,6 +764,7 @@
     self.tableView.tableFooterView = [UIView new];
     self.tableView.backgroundColor = [UIColor clearColor];
     self.tableView.rowHeight = 60;  // 增加行高以适应新的UI
+    self.tableView.keyboardDismissMode = UIScrollViewKeyboardDismissModeOnDrag;  // 🔧 滚动时自动隐藏键盘
     [self.view addSubview:self.tableView];
     
     // 确保控制按钮在tableView之上
@@ -827,6 +834,9 @@
 }
 -(void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath
 {
+    // 🔧 点击列表项时隐藏键盘
+    [self.searchBar resignFirstResponder];
+    
     index = indexPath.row;
     
     // 🆕 获取选中的音乐项
@@ -837,11 +847,32 @@
     
     [self updateAudioSelection];
     
-    // 🆕 自动处理 NCM 文件解密
-    NSString *fileName = musicItem.fileName;
-    NSString *playableFileName = [AudioFileFormats prepareAudioFileForPlayback:fileName];
+    // 🔧 优先使用完整路径，支持云下载的文件
+    NSString *playPath = nil;
     
-    [self.player playWithFileName:playableFileName];
+    NSLog(@"🎵 准备播放: fileName=%@, filePath=%@", musicItem.fileName, musicItem.filePath);
+    
+    // 检查是否有完整路径（云下载的文件或已解密的 NCM 文件）
+    if (musicItem.filePath && [musicItem.filePath hasPrefix:@"/"]) {
+        // 使用完整路径（云下载文件或已存在的文件）
+        playPath = musicItem.filePath;
+        
+        // 验证文件是否存在
+        if ([[NSFileManager defaultManager] fileExistsAtPath:playPath]) {
+            NSLog(@"✅ 使用完整路径播放: %@", playPath);
+        } else {
+            NSLog(@"❌ 文件不存在: %@，尝试从 Bundle 查找", playPath);
+            // 文件不存在，尝试从 Bundle 查找
+            playPath = [AudioFileFormats prepareAudioFileForPlayback:musicItem.fileName];
+        }
+    } else {
+        // 使用文件名（Bundle 中的文件）
+        NSString *fileName = musicItem.fileName;
+        playPath = [AudioFileFormats prepareAudioFileForPlayback:fileName];
+        NSLog(@"🎵 从 Bundle 播放: %@", playPath);
+    }
+    
+    [self.player playWithFileName:playPath];
 }
 
 // 🆕 转换NCM文件
@@ -998,7 +1029,6 @@
 #pragma mark - 歌词代理方法
 
 - (void)playerDidLoadLyrics:(LRCParser *)parser {
-    // ⚠️ 关键修复：确保所有 UI 更新都在主线程执行
     dispatch_async(dispatch_get_main_queue(), ^{
         if (parser) {
             NSLog(@"✅ 歌词加载成功: %@ - %@", parser.artist ?: @"未知", parser.title ?: @"未知");
@@ -1556,6 +1586,9 @@
 #pragma mark - UI 事件处理
 
 - (void)categoryButtonTapped:(UIButton *)sender {
+    // 🔧 隐藏键盘
+    [self.searchBar resignFirstResponder];
+    
     // 获取选中的分类
     MusicCategory selectedCategory = (MusicCategory)sender.tag;
     self.currentCategory = selectedCategory;
@@ -1582,6 +1615,9 @@
 }
 
 - (void)reloadMusicLibraryButtonTapped:(UIButton *)sender {
+    // 🔧 隐藏键盘
+    [self.searchBar resignFirstResponder];
+    
     NSLog(@"🔄 开始重新扫描音乐库...");
     
     // 显示加载提示
@@ -1616,6 +1652,9 @@
 }
 
 - (void)sortButtonTapped:(UIButton *)sender {
+    // 🔧 隐藏键盘
+    [self.searchBar resignFirstResponder];
+    
     // 创建排序选项菜单
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"排序方式" 
                                                                    message:@"选择排序方式" 
@@ -1704,6 +1743,20 @@
     searchBar.text = @"";
     [searchBar resignFirstResponder];
     [self refreshMusicList];
+}
+
+// 🔧 点击背景隐藏键盘
+- (void)dismissKeyboard {
+    [self.searchBar resignFirstResponder];
+}
+
+#pragma mark - UIScrollViewDelegate
+
+// 🔧 开始拖动时隐藏键盘
+- (void)scrollViewWillBeginDragging:(UIScrollView *)scrollView {
+    if (scrollView == self.tableView) {
+        [self.searchBar resignFirstResponder];
+    }
 }
 
 - (void)dealloc {

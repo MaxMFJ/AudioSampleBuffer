@@ -220,6 +220,11 @@
     return instance;
 }
 
++ (NSString *)cloudDownloadDirectory {
+    NSString *documentsPath = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES) firstObject];
+    return [documentsPath stringByAppendingPathComponent:@"Downloads"];
+}
+
 - (instancetype)init {
     if (self = [super init]) {
         _musicLibrary = [NSMutableArray array];
@@ -229,13 +234,11 @@
         NSString *cachesDir = NSSearchPathForDirectoriesInDomains(NSCachesDirectory, NSUserDomainMask, YES).firstObject;
         _cacheFilePath = [cachesDir stringByAppendingPathComponent:@"MusicLibrary.cache"];
         
-        // 尝试从缓存加载
-        [self loadFromCache];
+        // 🔧 总是重新加载音乐库，确保能发现新下载的文件
+        [self loadMusicLibrary];
         
-        // 如果缓存为空，加载音乐库
-        if (self.musicLibrary.count == 0) {
-            [self loadMusicLibrary];
-        }
+        // 从缓存恢复播放记录等元数据
+        [self mergeMetadataFromCache];
     }
     return self;
 }
@@ -247,15 +250,43 @@
     
     [self.musicLibrary removeAllObjects];
     
-    // 从 AudioFileFormats 加载所有音频文件
-    NSArray<NSString *> *fileNames = [AudioFileFormats loadAudioFilesFromBundle];
+    // 1️⃣ 从 Bundle 加载所有音频文件
+    NSArray<NSString *> *bundleFileNames = [AudioFileFormats loadAudioFilesFromBundle];
     
-    for (NSString *fileName in fileNames) {
+    for (NSString *fileName in bundleFileNames) {
         MusicItem *item = [MusicItem itemWithFileName:fileName];
         [self.musicLibrary addObject:item];
     }
     
-    NSLog(@"📚 音乐库加载完成: %ld 首歌曲", (long)self.musicLibrary.count);
+    NSLog(@"📚 从 Bundle 加载: %ld 首歌曲", (long)bundleFileNames.count);
+    
+    // 2️⃣ 从云下载目录加载音频文件
+    NSString *downloadDir = [MusicLibraryManager cloudDownloadDirectory];
+    
+    NSFileManager *fm = [NSFileManager defaultManager];
+    if ([fm fileExistsAtPath:downloadDir]) {
+        NSArray *downloadedFiles = [fm contentsOfDirectoryAtPath:downloadDir error:nil];
+        NSInteger downloadCount = 0;
+        
+        for (NSString *fileName in downloadedFiles) {
+            // 只加载音频文件（排除 .lrc 歌词文件）
+            NSString *ext = [[fileName pathExtension] lowercaseString];
+            if ([ext isEqualToString:@"mp3"] || 
+                [ext isEqualToString:@"m4a"] || 
+                [ext isEqualToString:@"flac"] ||
+                [ext isEqualToString:@"wav"]) {
+                
+                NSString *fullPath = [downloadDir stringByAppendingPathComponent:fileName];
+                MusicItem *item = [MusicItem itemWithFileName:fileName filePath:fullPath];
+                [self.musicLibrary addObject:item];
+                downloadCount++;
+            }
+        }
+        
+        NSLog(@"📥 从云下载目录加载: %ld 首歌曲", (long)downloadCount);
+    }
+    
+    NSLog(@"📚 音乐库加载完成: 总共 %ld 首歌曲", (long)self.musicLibrary.count);
     
     // 保存到缓存
     [self saveToCache];
@@ -580,6 +611,50 @@
             NSLog(@"📚 从缓存加载了 %ld 首歌曲", (long)cached.count);
         }
     }
+}
+
+// 🔧 从缓存合并元数据（播放记录、最爱等）
+- (void)mergeMetadataFromCache {
+    if (![[NSFileManager defaultManager] fileExistsAtPath:self.cacheFilePath]) {
+        return;
+    }
+    
+    NSData *data = [NSData dataWithContentsOfFile:self.cacheFilePath];
+    NSArray<MusicItem *> *cached = [NSKeyedUnarchiver unarchivedObjectOfClasses:[NSSet setWithObjects:[NSArray class], [MusicItem class], nil]
+                                                                       fromData:data
+                                                                          error:nil];
+    
+    if (!cached || cached.count == 0) {
+        return;
+    }
+    
+    // 创建文件名到缓存项的映射
+    NSMutableDictionary<NSString *, MusicItem *> *cachedMap = [NSMutableDictionary dictionary];
+    for (MusicItem *item in cached) {
+        cachedMap[item.fileName] = item;
+    }
+    
+    // 合并元数据到新加载的音乐项
+    NSInteger mergedCount = 0;
+    for (MusicItem *newItem in self.musicLibrary) {
+        MusicItem *cachedItem = cachedMap[newItem.fileName];
+        if (cachedItem) {
+            // 恢复播放记录
+            newItem.playCount = cachedItem.playCount;
+            newItem.lastPlayDate = cachedItem.lastPlayDate;
+            newItem.isFavorite = cachedItem.isFavorite;
+            
+            // 恢复 NCM 解密信息
+            if (cachedItem.isDecrypted && cachedItem.decryptedPath) {
+                newItem.isDecrypted = cachedItem.isDecrypted;
+                newItem.decryptedPath = cachedItem.decryptedPath;
+            }
+            
+            mergedCount++;
+        }
+    }
+    
+    NSLog(@"📚 从缓存恢复了 %ld 首歌曲的元数据", (long)mergedCount);
 }
 
 @end
