@@ -97,6 +97,11 @@
     // 所有设备使用30fps，节省功耗，视觉效果依然流畅
     _metalView.preferredFramesPerSecond = 30;
     
+    // ⚠️ 关键修复：禁用自动渲染，使用手动渲染模式
+    // 这样paused=YES时才能真正停止渲染
+    _metalView.enableSetNeedsDisplay = NO;  // 使用自动模式，但会通过paused控制
+    _metalView.paused = YES;  // 默认暂停，等待startRendering启动
+    
     // 监听容器视图大小变化
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(containerViewDidChangeFrame:)

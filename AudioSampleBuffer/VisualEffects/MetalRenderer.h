@@ -169,9 +169,9 @@ NS_ASSUME_NONNULL_BEGIN
 @end
 
 /**
- * 烟花效果渲染器
+ * 光雾之心效果渲染器
  */
-@interface FireworksRenderer : BaseMetalRenderer
+@interface LuminousMistCoreRenderer : BaseMetalRenderer
 @end
 
 /**

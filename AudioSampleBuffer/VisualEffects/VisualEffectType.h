@@ -30,7 +30,7 @@ typedef NS_ENUM(NSUInteger, VisualEffectType) {
     // 创意效果
     VisualEffectTypeGalaxy,                 // 星系
     VisualEffectTypeLightning,              // 闪电
-    VisualEffectTypeFireworks,              // 烟花
+    VisualEffectTypeFireworks,              // 漂浮光点（Floating Lights）
     VisualEffectTypeLiquidMetal,            // 液态金属
     VisualEffectTypeGeometricMorph,         // 几何变形
     VisualEffectTypeFractalPattern,         // 分形图案

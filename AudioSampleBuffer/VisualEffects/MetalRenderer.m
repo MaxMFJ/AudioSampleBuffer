@@ -65,10 +65,15 @@ typedef struct {
 
 - (void)setupMetal {
     self.metalView.device = self.device;
-    self.metalView.delegate = self;
+    // 🔥 不在初始化时设置delegate，等待startRendering时再设置
+    // self.metalView.delegate = self;  // 移除，由startRendering设置
     
     // 🔋 优化1：降低默认帧率到30fps（节省50%GPU功耗，视觉上依然流畅）
     self.metalView.preferredFramesPerSecond = 30;
+    
+    // 🔥 默认暂停状态，避免自动渲染
+    self.metalView.paused = YES;
+    self.metalView.enableSetNeedsDisplay = NO;
     
     self.metalView.colorPixelFormat = MTLPixelFormatBGRA8Unorm;
     self.metalView.clearColor = MTLClearColorMake(0.0, 0.0, 0.0, 1.0);
@@ -96,25 +101,46 @@ typedef struct {
 }
 
 - (void)startRendering {
+    self.startTime = CACurrentMediaTime();
     self.isRendering = YES;
+    
+    // 🔥 设置delegate并开始渲染
+    self.metalView.delegate = self;
     self.metalView.paused = NO;
+    
+    NSLog(@"🚀 Metal渲染已启动");
 }
 
 - (void)stopRendering {
     self.isRendering = NO;
     self.metalView.paused = YES;
+    
+    // 🔥 移除delegate，确保完全停止
+    self.metalView.delegate = nil;
+    
+    NSLog(@"⏹️ Metal渲染已停止 (delegate已移除)");
 }
 
 - (void)pauseRendering {
-    // 🔋 优化：同时设置标志和暂停视图，确保完全停止渲染
+    // 🔋 优化：完全停止Metal渲染，降低CPU/GPU占用
     self.isRendering = NO;
     self.metalView.paused = YES;
+    
+    // 🔥 关键：移除delegate，确保drawInMTKView不再被调用
+    self.metalView.delegate = nil;
+    
+    NSLog(@"⏸️ Metal渲染已暂停 (delegate已移除)");
 }
 
 - (void)resumeRendering {
-    // 🔋 优化：同时设置标志和恢复视图
+    // 🔋 优化：恢复Metal渲染
     self.isRendering = YES;
+    
+    // 🔥 关键：恢复delegate，开始渲染
+    self.metalView.delegate = self;
     self.metalView.paused = NO;
+    
+    NSLog(@"▶️ Metal渲染已恢复 (delegate已设置)");
 }
 
 #pragma mark - MTKViewDelegate
@@ -124,7 +150,16 @@ typedef struct {
 }
 
 - (void)drawInMTKView:(MTKView *)view {
-    if (!self.isRendering) return;
+    // 🛑 严格检查：确保暂停时不渲染
+    if (!self.isRendering) {
+        NSLog(@"⚠️ drawInMTKView被调用但isRendering=NO，跳过渲染");
+        return;
+    }
+    
+    if (view.paused) {
+        NSLog(@"⚠️ drawInMTKView被调用但view.paused=YES，跳过渲染");
+        return;
+    }
     
     NSTimeInterval currentTime = CACurrentMediaTime() - self.startTime;
     
@@ -986,58 +1021,55 @@ typedef struct {
 
 @end
 
-@implementation FireworksRenderer
+@implementation LuminousMistCoreRenderer
 
 - (void)setupPipeline {
-    // 创建烟花效果的渲染管线
+    // 创建漂浮光点效果的渲染管线
     MTLRenderPipelineDescriptor *pipelineDescriptor = [[MTLRenderPipelineDescriptor alloc] init];
-    pipelineDescriptor.label = @"Fireworks";
+    pipelineDescriptor.label = @"FloatingLights";
     pipelineDescriptor.vertexFunction = [self.defaultLibrary newFunctionWithName:@"neon_vertex"];
-    pipelineDescriptor.fragmentFunction = [self.defaultLibrary newFunctionWithName:@"fireworksFragment"];
+    pipelineDescriptor.fragmentFunction = [self.defaultLibrary newFunctionWithName:@"luminousMistCoreFragment"];
     pipelineDescriptor.colorAttachments[0].pixelFormat = self.metalView.colorPixelFormat;
     
     pipelineDescriptor.sampleCount = self.metalView.sampleCount;
     pipelineDescriptor.depthAttachmentPixelFormat = self.metalView.depthStencilPixelFormat;
     
+    // 启用混合模式（Additive Blending）
     pipelineDescriptor.colorAttachments[0].blendingEnabled = YES;
     pipelineDescriptor.colorAttachments[0].rgbBlendOperation = MTLBlendOperationAdd;
+    pipelineDescriptor.colorAttachments[0].alphaBlendOperation = MTLBlendOperationAdd;
     pipelineDescriptor.colorAttachments[0].sourceRGBBlendFactor = MTLBlendFactorSourceAlpha;
-    pipelineDescriptor.colorAttachments[0].destinationRGBBlendFactor = MTLBlendFactorOneMinusSourceAlpha;
+    pipelineDescriptor.colorAttachments[0].sourceAlphaBlendFactor = MTLBlendFactorSourceAlpha;
+    pipelineDescriptor.colorAttachments[0].destinationRGBBlendFactor = MTLBlendFactorOne;
+    pipelineDescriptor.colorAttachments[0].destinationAlphaBlendFactor = MTLBlendFactorOne;
     
     NSError *error;
     self.pipelineState = [self.device newRenderPipelineStateWithDescriptor:pipelineDescriptor error:&error];
     
     if (!self.pipelineState) {
-        NSLog(@"❌ 创建烟花管线失败: %@", error);
+        NSLog(@"❌ 创建漂浮光点管线失败: %@", error);
         NSLog(@"❌ 顶点函数: %@", pipelineDescriptor.vertexFunction);
         NSLog(@"❌ 片段函数: %@", pipelineDescriptor.fragmentFunction);
         return;
     }
     
-    NSLog(@"✅ 烟花管线创建成功");
+    NSLog(@"✅ 漂浮光点管线创建成功");
     [self setupPerformanceOptimizations];
 }
 
 - (void)setupPerformanceOptimizations {
+    // 漂浮光点效果极度优化，流畅度优先
     NSString *deviceName = self.device.name;
     NSMutableDictionary *params = [self.renderParameters mutableCopy] ?: [NSMutableDictionary dictionary];
     
-    if ([deviceName containsString:@"A17"] || [deviceName containsString:@"A16"]) {
-        params[@"maxFireworks"] = @(5);
-        params[@"particlesPerFirework"] = @(25);
-        params[@"fireworkQuality"] = @(1.0);
-        NSLog(@"🎆 烟花: 高端设备，使用高质量设置");
-    } else if ([deviceName containsString:@"A15"] || [deviceName containsString:@"A14"]) {
-        params[@"maxFireworks"] = @(3);
-        params[@"particlesPerFirework"] = @(20);
-        params[@"fireworkQuality"] = @(0.8);
-        NSLog(@"🎆 烟花: 中端设备，使用平衡设置");
-    } else {
-        params[@"maxFireworks"] = @(2);
-        params[@"particlesPerFirework"] = @(15);
-        params[@"fireworkQuality"] = @(0.6);
-        NSLog(@"🎆 烟花: 低端设备，使用性能优化设置");
-    }
+    // 极致性能优化配置
+    params[@"lightCount"] = @(8);   // 8个主光球（中音控制大小，高音控制颜色）
+    params[@"starCount"] = @(5);    // 5个闪烁星点
+    params[@"fullScreen"] = @(YES); // 全屏显示
+    params[@"quality"] = @(1.0);
+    
+    NSLog(@"✨ 漂浮光点: 超轻量级 - 8光球(高音变色)+5星点，GPU<20%");
+    
     [self setRenderParameters:params];
 }
 
@@ -1047,6 +1079,8 @@ typedef struct {
     [encoder setRenderPipelineState:self.pipelineState];
     [encoder setVertexBuffer:self.uniformBuffer offset:0 atIndex:0];
     [encoder setFragmentBuffer:self.uniformBuffer offset:0 atIndex:0];
+    
+    // 绘制全屏四边形
     [encoder drawPrimitives:MTLPrimitiveTypeTriangleStrip vertexStart:0 vertexCount:4];
 }
 
@@ -1277,7 +1311,7 @@ typedef struct {
             return [[LightningRenderer alloc] initWithMetalView:metalView];
             
         case VisualEffectTypeFireworks:
-            return [[FireworksRenderer alloc] initWithMetalView:metalView];
+            return [[LuminousMistCoreRenderer alloc] initWithMetalView:metalView];
             
         case VisualEffectTypeLiquidMetal:
             return [[LiquidMetalRenderer alloc] initWithMetalView:metalView];

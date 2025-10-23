@@ -274,7 +274,9 @@
             if ([ext isEqualToString:@"mp3"] || 
                 [ext isEqualToString:@"m4a"] || 
                 [ext isEqualToString:@"flac"] ||
-                [ext isEqualToString:@"wav"]) {
+                [ext isEqualToString:@"wav"] ||
+                [ext isEqualToString:@"ncm"] ||  // 🔧 支持 NCM 加密文件
+                [ext isEqualToString:@"aac"]) {
                 
                 NSString *fullPath = [downloadDir stringByAppendingPathComponent:fileName];
                 MusicItem *item = [MusicItem itemWithFileName:fileName filePath:fullPath];

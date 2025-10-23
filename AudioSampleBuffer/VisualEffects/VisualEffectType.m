@@ -123,10 +123,10 @@
                                        performanceLevel:PerformanceLevelMedium]];
     
     [effects addObject:[VisualEffectInfo effectWithType:VisualEffectTypeFireworks
-                                                   name:@"烟花"
-                                            description:@"绚烂的烟花绽放效果"
+                                                   name:@"漂浮光点"
+                                            description:@"温暖柔和的光球缓慢漂浮，适合抒情慢歌"
                                                category:EffectCategoryCreative
-                                       performanceLevel:PerformanceLevelHigh]];
+                                       performanceLevel:PerformanceLevelLow]];
     
     [effects addObject:[VisualEffectInfo effectWithType:VisualEffectTypeLiquidMetal
                                                    name:@"液态金属"

@@ -1050,22 +1050,61 @@ typedef NS_ENUM(NSInteger, NCMDecryptorError) {
     if ([[fileName.pathExtension lowercaseString] isEqualToString:@"ncm"]) {
         NSLog(@"🔓 准备播放 NCM 文件: %@", fileName);
         
-        // 获取 NCM 文件完整路径（Bundle 中）
-        NSURL *fileURL = [[NSBundle mainBundle] URLForResource:fileName withExtension:nil];
-        if (!fileURL) {
-            // 尝试在 Audio 目录中查找
-            NSString *audioPath = [[NSBundle mainBundle] pathForResource:@"Audio" ofType:nil];
-            NSString *fullPath = [audioPath stringByAppendingPathComponent:fileName];
-            fileURL = [NSURL fileURLWithPath:fullPath];
+        // 🔧 获取 NCM 文件完整路径 - 支持多个位置
+        NSURL *fileURL = nil;
+        NSString *sourcePath = nil;
+        
+        // 1. 检查是否已经是完整路径
+        if ([fileName hasPrefix:@"/"]) {
+            if ([[NSFileManager defaultManager] fileExistsAtPath:fileName]) {
+                sourcePath = fileName;
+                fileURL = [NSURL fileURLWithPath:fileName];
+                NSLog(@"✅ 使用完整路径: %@", fileName);
+            }
         }
         
+        // 2. 尝试从 Documents/Downloads 目录查找（导入的文件）
         if (!fileURL) {
-            NSLog(@"❌ 找不到文件: %@", fileName);
+            NSString *documentsPath = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES).firstObject;
+            NSString *downloadDir = [documentsPath stringByAppendingPathComponent:@"Downloads"];
+            sourcePath = [downloadDir stringByAppendingPathComponent:fileName];
+            if ([[NSFileManager defaultManager] fileExistsAtPath:sourcePath]) {
+                fileURL = [NSURL fileURLWithPath:sourcePath];
+                NSLog(@"✅ 找到导入的NCM文件: %@", sourcePath);
+            }
+        }
+        
+        // 3. 尝试从 Bundle 主目录查找
+        if (!fileURL) {
+            fileURL = [[NSBundle mainBundle] URLForResource:fileName withExtension:nil];
+            if (fileURL) {
+                sourcePath = fileURL.path;
+                NSLog(@"✅ 找到Bundle中的NCM文件: %@", sourcePath);
+            }
+        }
+        
+        // 4. 尝试在 Audio 目录中查找
+        if (!fileURL) {
+            NSString *audioPath = [[NSBundle mainBundle] pathForResource:@"Audio" ofType:nil];
+            if (audioPath) {
+                sourcePath = [audioPath stringByAppendingPathComponent:fileName];
+                if ([[NSFileManager defaultManager] fileExistsAtPath:sourcePath]) {
+                    fileURL = [NSURL fileURLWithPath:sourcePath];
+                    NSLog(@"✅ 找到Audio目录中的NCM文件: %@", sourcePath);
+                }
+            }
+        }
+        
+        // 5. 如果都没找到，返回原文件名
+        if (!fileURL || !sourcePath) {
+            NSLog(@"❌ 找不到NCM文件: %@", fileName);
             return fileName;
         }
         
         // 🔧 关键修复：解密后的文件保存到 Documents 目录（可写）
-        NSString *decryptedFileName = [[fileName stringByDeletingPathExtension] stringByAppendingPathExtension:@"mp3"];
+        // 从完整路径或文件名中提取纯文件名
+        NSString *baseFileName = [sourcePath lastPathComponent];
+        NSString *decryptedFileName = [[baseFileName stringByDeletingPathExtension] stringByAppendingPathExtension:@"mp3"];
         NSString *documentsPath = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES).firstObject;
         NSString *decryptedPath = [documentsPath stringByAppendingPathComponent:decryptedFileName];
         

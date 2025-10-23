@@ -23,8 +23,9 @@
 #import "MusicLibraryManager.h"  // 🆕 音乐库管理器
 #import "ViewController+CloudDownload.h"  // 🆕 云端下载功能
 #import <AVFoundation/AVFoundation.h>
+#import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>  // 用于文件类型识别
 
-@interface ViewController ()<CAAnimationDelegate,UITableViewDelegate, UITableViewDataSource, AudioSpectrumPlayerDelegate, VisualEffectManagerDelegate, GalaxyControlDelegate, CyberpunkControlDelegate, PerformanceControlDelegate, LyricsEffectControlDelegate, UISearchBarDelegate>
+@interface ViewController ()<CAAnimationDelegate,UITableViewDelegate, UITableViewDataSource, AudioSpectrumPlayerDelegate, VisualEffectManagerDelegate, GalaxyControlDelegate, CyberpunkControlDelegate, PerformanceControlDelegate, LyricsEffectControlDelegate, UISearchBarDelegate, UIDocumentPickerDelegate>
 {
     BOOL enterBackground;
     NSInteger index;
@@ -44,6 +45,7 @@
 @property (nonatomic, strong) UISearchBar *searchBar;  // 搜索栏
 @property (nonatomic, strong) UIButton *sortButton;  // 排序按钮
 @property (nonatomic, strong) UIButton *reloadButton;  // 刷新音乐库按钮
+@property (nonatomic, strong) UIButton *importButton;  // 导入音乐按钮
 @property (nonatomic, assign) MusicSortType currentSortType;  // 当前排序方式
 @property (nonatomic, assign) BOOL sortAscending;  // 排序方向
 
@@ -169,7 +171,10 @@
         } 
         // 检查是否是NCM文件，需要先解密
         else if ([AudioFileFormats needsDecryption:musicItem.fileName]) {
-            playPath = [AudioFileFormats prepareAudioFileForPlayback:musicItem.fileName];
+            // 🔧 优先传递完整路径
+            NSString *fileToDecrypt = (musicItem.filePath && [musicItem.filePath hasPrefix:@"/"]) ? musicItem.filePath : musicItem.fileName;
+            playPath = [AudioFileFormats prepareAudioFileForPlayback:fileToDecrypt];
+            
             // 如果解密成功，更新状态
             if (playPath && [playPath hasPrefix:@"/"] && [[NSFileManager defaultManager] fileExistsAtPath:playPath]) {
                 [self.musicLibrary updateNCMDecryptionStatus:musicItem decryptedPath:playPath];
@@ -550,6 +555,12 @@
             self.reloadButton.userInteractionEnabled = !self.isUIHidden;
         }
         
+        // 导入按钮
+        if (self.importButton) {
+            self.importButton.alpha = self.isUIHidden ? 0.0 : 1.0;
+            self.importButton.userInteractionEnabled = !self.isUIHidden;
+        }
+        
         // 搜索框
         if (self.searchBar) {
             self.searchBar.alpha = self.isUIHidden ? 0.0 : 1.0;
@@ -893,6 +904,20 @@
     [self.reloadButton addTarget:self action:@selector(reloadMusicLibraryButtonTapped:) forControlEvents:UIControlEventTouchUpInside];
     [self.view addSubview:self.reloadButton];
     
+    // 🆕 导入音乐按钮 - 放在重新扫描按钮下方
+    CGFloat importButtonY = reloadButtonY + buttonHeight + spacing;
+    self.importButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    [self.importButton setTitle:@"📥 导入" forState:UIControlStateNormal];
+    [self.importButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+    self.importButton.titleLabel.font = [UIFont boldSystemFontOfSize:13];
+    self.importButton.backgroundColor = [UIColor colorWithRed:0.2 green:0.6 blue:0.8 alpha:0.85];
+    self.importButton.layer.cornerRadius = 8;
+    self.importButton.layer.borderWidth = 1.5;
+    self.importButton.layer.borderColor = [UIColor colorWithRed:0.3 green:0.7 blue:1.0 alpha:0.8].CGColor;
+    self.importButton.frame = CGRectMake(leftX, importButtonY, buttonWidth, buttonHeight);
+    [self.importButton addTarget:self action:@selector(importMusicButtonTapped:) forControlEvents:UIControlEventTouchUpInside];
+    [self.view addSubview:self.importButton];
+    
     // 🆕 添加搜索栏 - 放在右侧
     CGFloat searchBarX = leftX + buttonWidth + 15;
     CGFloat searchBarWidth = self.view.frame.size.width - searchBarX - 10;
@@ -972,7 +997,10 @@
             } 
             // 检查是否是NCM文件，需要先解密
             else if ([AudioFileFormats needsDecryption:musicItem.fileName]) {
-                playPath = [AudioFileFormats prepareAudioFileForPlayback:musicItem.fileName];
+                // 🔧 优先传递完整路径
+                NSString *fileToDecrypt = (musicItem.filePath && [musicItem.filePath hasPrefix:@"/"]) ? musicItem.filePath : musicItem.fileName;
+                playPath = [AudioFileFormats prepareAudioFileForPlayback:fileToDecrypt];
+                
                 // 如果解密成功，更新状态
                 if (playPath && [playPath hasPrefix:@"/"] && [[NSFileManager defaultManager] fileExistsAtPath:playPath]) {
                     [weakSelf.musicLibrary updateNCMDecryptionStatus:musicItem decryptedPath:playPath];
@@ -1031,7 +1059,10 @@
     // 🔧 检查是否是NCM文件，如果是则需要先解密
     else if ([AudioFileFormats needsDecryption:musicItem.fileName]) {
         NSLog(@"🔓 检测到NCM文件，开始自动解密...");
-        playPath = [AudioFileFormats prepareAudioFileForPlayback:musicItem.fileName];
+        
+        // 🔧 优先传递完整路径（如果有的话）
+        NSString *fileToDecrypt = (musicItem.filePath && [musicItem.filePath hasPrefix:@"/"]) ? musicItem.filePath : musicItem.fileName;
+        playPath = [AudioFileFormats prepareAudioFileForPlayback:fileToDecrypt];
         
         // 如果解密成功，更新 MusicItem 的解密路径
         if (playPath && [playPath hasPrefix:@"/"] && [[NSFileManager defaultManager] fileExistsAtPath:playPath]) {
@@ -1073,18 +1104,46 @@
     
     // 在后台线程执行转换
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-        // 获取NCM文件路径
-        NSURL *fileURL = [[NSBundle mainBundle] URLForResource:musicItem.fileName withExtension:nil];
-        if (!fileURL) {
-            NSString *audioPath = [[NSBundle mainBundle] pathForResource:@"Audio" ofType:nil];
-            NSString *fullPath = [audioPath stringByAppendingPathComponent:musicItem.fileName];
-            fileURL = [NSURL fileURLWithPath:fullPath];
+        // 🔧 获取NCM文件路径 - 优先使用完整路径（导入的文件）
+        NSURL *fileURL = nil;
+        NSString *sourcePath = nil;
+        
+        // 1. 优先使用 filePath（导入的文件或云下载的文件）
+        if (musicItem.filePath && [musicItem.filePath hasPrefix:@"/"]) {
+            sourcePath = musicItem.filePath;
+            if ([[NSFileManager defaultManager] fileExistsAtPath:sourcePath]) {
+                fileURL = [NSURL fileURLWithPath:sourcePath];
+                NSLog(@"✅ 找到导入的NCM文件: %@", sourcePath);
+            }
         }
         
+        // 2. 如果没有找到，尝试从 Bundle 查找
         if (!fileURL) {
+            fileURL = [[NSBundle mainBundle] URLForResource:musicItem.fileName withExtension:nil];
+            if (fileURL) {
+                sourcePath = fileURL.path;
+                NSLog(@"✅ 找到Bundle中的NCM文件: %@", sourcePath);
+            }
+        }
+        
+        // 3. 尝试从 Audio 目录查找
+        if (!fileURL) {
+            NSString *audioPath = [[NSBundle mainBundle] pathForResource:@"Audio" ofType:nil];
+            if (audioPath) {
+                sourcePath = [audioPath stringByAppendingPathComponent:musicItem.fileName];
+                if ([[NSFileManager defaultManager] fileExistsAtPath:sourcePath]) {
+                    fileURL = [NSURL fileURLWithPath:sourcePath];
+                    NSLog(@"✅ 找到Audio目录中的NCM文件: %@", sourcePath);
+                }
+            }
+        }
+        
+        // 4. 如果都没找到，报错
+        if (!fileURL || !sourcePath) {
+            NSLog(@"❌ 找不到NCM文件: fileName=%@, filePath=%@", musicItem.fileName, musicItem.filePath);
             dispatch_async(dispatch_get_main_queue(), ^{
                 [loadingAlert dismissViewControllerAnimated:YES completion:^{
-                    [self showAlert:@"❌ 错误" message:@"找不到文件"];
+                    [self showAlert:@"❌ 错误" message:[NSString stringWithFormat:@"找不到文件: %@", musicItem.fileName]];
                 }];
             });
             return;
@@ -1219,7 +1278,11 @@
         // 检查是否是NCM文件，需要先解密
         else if ([AudioFileFormats needsDecryption:musicItem.fileName]) {
             NSLog(@"🔓 自动解密NCM文件: %@", musicItem.fileName);
-            playPath = [AudioFileFormats prepareAudioFileForPlayback:musicItem.fileName];
+            
+            // 🔧 优先传递完整路径
+            NSString *fileToDecrypt = (musicItem.filePath && [musicItem.filePath hasPrefix:@"/"]) ? musicItem.filePath : musicItem.fileName;
+            playPath = [AudioFileFormats prepareAudioFileForPlayback:fileToDecrypt];
+            
             // 如果解密成功，更新状态
             if (playPath && [playPath hasPrefix:@"/"] && [[NSFileManager defaultManager] fileExistsAtPath:playPath]) {
                 [self.musicLibrary updateNCMDecryptionStatus:musicItem decryptedPath:playPath];
@@ -1859,6 +1922,50 @@
     });
 }
 
+- (void)importMusicButtonTapped:(UIButton *)sender {
+    // 🔧 隐藏键盘
+    [self.searchBar resignFirstResponder];
+    
+    NSLog(@"📥 打开文件选择器导入音乐...");
+    
+    UIDocumentPickerViewController *documentPicker;
+    if (@available(iOS 14.0, *)) {
+        // iOS 14+ 使用 UTType
+        NSMutableArray *contentTypes = [NSMutableArray array];
+        
+        // 添加常见音频格式
+        [contentTypes addObject:[UTType typeWithFilenameExtension:@"mp3"]];
+        [contentTypes addObject:[UTType typeWithFilenameExtension:@"m4a"]];
+        [contentTypes addObject:[UTType typeWithFilenameExtension:@"flac"]];
+        [contentTypes addObject:[UTType typeWithFilenameExtension:@"wav"]];
+        [contentTypes addObject:[UTType typeWithFilenameExtension:@"aac"]];
+        
+        // 🔧 添加 NCM 格式支持
+        UTType *ncmType = [UTType typeWithFilenameExtension:@"ncm"];
+        if (ncmType) {
+            [contentTypes addObject:ncmType];
+        }
+        
+        documentPicker = [[UIDocumentPickerViewController alloc] initForOpeningContentTypes:contentTypes];
+    } else {
+        // iOS 13 及以下版本 - 使用通用的文档类型，可以选择任何文件
+        NSArray *audioTypes = @[
+            @"public.audio",           // 通用音频
+            @"public.mp3",             // MP3
+            @"public.mpeg-4-audio",    // M4A
+            @"public.data",            // 通用数据（包括 NCM）
+            @"public.item"             // 通用项目（兜底）
+        ];
+        documentPicker = [[UIDocumentPickerViewController alloc] initWithDocumentTypes:audioTypes inMode:UIDocumentPickerModeImport];
+    }
+    
+    documentPicker.delegate = self;
+    documentPicker.allowsMultipleSelection = YES;  // 允许多选
+    documentPicker.modalPresentationStyle = UIModalPresentationFormSheet;
+    
+    [self presentViewController:documentPicker animated:YES completion:nil];
+}
+
 - (void)sortButtonTapped:(UIButton *)sender {
     // 🔧 隐藏键盘
     [self.searchBar resignFirstResponder];
@@ -1988,6 +2095,124 @@
     // 添加触觉反馈
     UIImpactFeedbackGenerator *feedback = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleLight];
     [feedback impactOccurred];
+}
+
+#pragma mark - UIDocumentPickerDelegate
+
+- (void)documentPicker:(UIDocumentPickerViewController *)controller didPickDocumentsAtURLs:(NSArray<NSURL *> *)urls {
+    NSLog(@"📥 用户选择了 %ld 个文件", (long)urls.count);
+    
+    if (urls.count == 0) {
+        return;
+    }
+    
+    // 显示导入进度提示
+    UIAlertController *progressAlert = [UIAlertController alertControllerWithTitle:@"正在导入"
+                                                                            message:@"正在复制文件到音乐库..."
+                                                                     preferredStyle:UIAlertControllerStyleAlert];
+    [self presentViewController:progressAlert animated:YES completion:nil];
+    
+    // 在后台线程执行文件复制
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+        NSFileManager *fileManager = [NSFileManager defaultManager];
+        
+        // 获取目标目录（使用与云下载相同的目录）
+        NSString *targetDirectory = [MusicLibraryManager cloudDownloadDirectory];
+        
+        // 确保目标目录存在
+        if (![fileManager fileExistsAtPath:targetDirectory]) {
+            NSError *createError = nil;
+            [fileManager createDirectoryAtPath:targetDirectory 
+                   withIntermediateDirectories:YES 
+                                    attributes:nil 
+                                         error:&createError];
+            if (createError) {
+                NSLog(@"❌ 创建目标目录失败: %@", createError.localizedDescription);
+            }
+        }
+        
+        NSInteger successCount = 0;
+        NSInteger failureCount = 0;
+        NSMutableArray *importedFiles = [NSMutableArray array];
+        
+        for (NSURL *sourceURL in urls) {
+            // 开始访问安全范围资源
+            BOOL didStartAccessing = [sourceURL startAccessingSecurityScopedResource];
+            
+            @try {
+                NSString *fileName = sourceURL.lastPathComponent;
+                NSString *targetPath = [targetDirectory stringByAppendingPathComponent:fileName];
+                
+                // 如果文件已存在，添加时间戳避免覆盖
+                if ([fileManager fileExistsAtPath:targetPath]) {
+                    NSString *baseName = [fileName stringByDeletingPathExtension];
+                    NSString *extension = [fileName pathExtension];
+                    NSTimeInterval timestamp = [[NSDate date] timeIntervalSince1970];
+                    fileName = [NSString stringWithFormat:@"%@_%ld.%@", baseName, (long)timestamp, extension];
+                    targetPath = [targetDirectory stringByAppendingPathComponent:fileName];
+                }
+                
+                // 复制文件
+                NSError *copyError = nil;
+                BOOL success = [fileManager copyItemAtURL:sourceURL toURL:[NSURL fileURLWithPath:targetPath] error:&copyError];
+                
+                if (success) {
+                    successCount++;
+                    [importedFiles addObject:fileName];
+                    NSLog(@"✅ 成功导入: %@", fileName);
+                } else {
+                    failureCount++;
+                    NSLog(@"❌ 导入失败: %@ - %@", fileName, copyError.localizedDescription);
+                }
+            }
+            @finally {
+                // 停止访问安全范围资源
+                if (didStartAccessing) {
+                    [sourceURL stopAccessingSecurityScopedResource];
+                }
+            }
+        }
+        
+        // 回到主线程更新UI
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [progressAlert dismissViewControllerAnimated:YES completion:^{
+                if (successCount > 0) {
+                    // 导入成功，重新加载音乐库
+                    [self.musicLibrary reloadMusicLibrary];
+                    [self refreshMusicList];
+                    
+                    // 显示成功提示
+                    NSString *message;
+                    if (failureCount > 0) {
+                        message = [NSString stringWithFormat:@"成功导入 %ld 首\n失败 %ld 首", (long)successCount, (long)failureCount];
+                    } else {
+                        message = [NSString stringWithFormat:@"成功导入 %ld 首音乐文件", (long)successCount];
+                    }
+                    
+                    UIAlertController *successAlert = [UIAlertController alertControllerWithTitle:@"✅ 导入完成"
+                                                                                          message:message
+                                                                                   preferredStyle:UIAlertControllerStyleAlert];
+                    [successAlert addAction:[UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil]];
+                    [self presentViewController:successAlert animated:YES completion:nil];
+                    
+                    NSLog(@"✅ 导入完成: 成功 %ld 首, 失败 %ld 首", (long)successCount, (long)failureCount);
+                } else {
+                    // 全部失败
+                    UIAlertController *errorAlert = [UIAlertController alertControllerWithTitle:@"❌ 导入失败"
+                                                                                         message:@"所有文件导入失败，请检查文件格式"
+                                                                                  preferredStyle:UIAlertControllerStyleAlert];
+                    [errorAlert addAction:[UIAlertAction actionWithTitle:@"确定" style:UIAlertActionStyleDefault handler:nil]];
+                    [self presentViewController:errorAlert animated:YES completion:nil];
+                    
+                    NSLog(@"❌ 导入失败: 所有文件导入失败");
+                }
+            }];
+        });
+    });
+}
+
+- (void)documentPickerWasCancelled:(UIDocumentPickerViewController *)controller {
+    NSLog(@"📥 用户取消了文件选择");
 }
 
 @end

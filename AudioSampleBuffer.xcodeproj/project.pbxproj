@@ -12,8 +12,8 @@
 		4C110D4A2EA9CD5100D59E12 /* CircularWaveShader.metal in Sources */ = {isa = PBXBuildFile; fileRef = 4C110D422EA9CD5100D59E12 /* CircularWaveShader.metal */; };
 		4C110D4B2EA9CD5100D59E12 /* FractalPatternShader.metal in Sources */ = {isa = PBXBuildFile; fileRef = 4C110D442EA9CD5100D59E12 /* FractalPatternShader.metal */; };
 		4C110D4C2EA9CD5100D59E12 /* LiquidMetalShader.metal in Sources */ = {isa = PBXBuildFile; fileRef = 4C110D462EA9CD5100D59E12 /* LiquidMetalShader.metal */; };
-		4C110D4E2EA9CD5100D59E12 /* FireworksShader.metal in Sources */ = {isa = PBXBuildFile; fileRef = 4C110D432EA9CD5100D59E12 /* FireworksShader.metal */; };
 		4C110D502EA9DA7F00D59E12 /* ParticleFlowShader.metal in Sources */ = {isa = PBXBuildFile; fileRef = 4C110D4F2EA9DA7F00D59E12 /* ParticleFlowShader.metal */; };
+		4C110D512EAA365E00D59E12 /* LuminousMistCoreShader.metal in Sources */ = {isa = PBXBuildFile; fileRef = 4C110D502EAA365E00D59E12 /* LuminousMistCoreShader.metal */; };
 		4C2C69F02EA216AF00D18118 /* 队长 - 楼顶上的小斑鸠.ncm in Resources */ = {isa = PBXBuildFile; fileRef = 4C2C69EC2EA216AF00D18118 /* 队长 - 楼顶上的小斑鸠.ncm */; };
 		4C2C69F12EA216AF00D18118 /* 小霞,海洋Bo - 向云端.ncm in Resources */ = {isa = PBXBuildFile; fileRef = 4C2C69EF2EA216AF00D18118 /* 小霞,海洋Bo - 向云端.ncm */; };
 		4C2C69F22EA216AF00D18118 /* 郭顶 - 凄美地.ncm in Resources */ = {isa = PBXBuildFile; fileRef = 4C2C69ED2EA216AF00D18118 /* 郭顶 - 凄美地.ncm */; };
@@ -35,8 +35,6 @@
 		4C2C6A822EA24E4D00D18118 /* 周杰伦-最伟大的作品.mp3 in Resources */ = {isa = PBXBuildFile; fileRef = 4C2C6A7F2EA24E4D00D18118 /* 周杰伦-最伟大的作品.mp3 */; };
 		4C2C6A832EA24E4D00D18118 /* 周杰伦-错过的烟火.mp3 in Resources */ = {isa = PBXBuildFile; fileRef = 4C2C6A772EA24E4D00D18118 /* 周杰伦-错过的烟火.mp3 */; };
 		4C2C6A842EA24E4D00D18118 /* 周杰伦-Intro.mp3 in Resources */ = {isa = PBXBuildFile; fileRef = 4C2C6A802EA24E4D00D18118 /* 周杰伦-Intro.mp3 */; };
-		4C2C6A852EA24E4D00D18118 /* 周杰伦-等你下课 (with 杨瑞代).mp3 in Resources */ = {isa = PBXBuildFile; fileRef = 4C2C6A792EA24E4D00D18118 /* 周杰伦-等你下课 (with 杨瑞代).mp3 */; };
-		4C2C6A862EA24E4D00D18118 /* 周杰伦-说好不哭 (with 五月天阿信).mp3 in Resources */ = {isa = PBXBuildFile; fileRef = 4C2C6A7D2EA24E4D00D18118 /* 周杰伦-说好不哭 (with 五月天阿信).mp3 */; };
 		4C2C6A872EA24E4D00D18118 /* 周杰伦-Mojito.mp3 in Resources */ = {isa = PBXBuildFile; fileRef = 4C2C6A812EA24E4D00D18118 /* 周杰伦-Mojito.mp3 */; };
 		4C2C6A882EA24E4D00D18118 /* 周杰伦-还在流浪.mp3 in Resources */ = {isa = PBXBuildFile; fileRef = 4C2C6A7B2EA24E4D00D18118 /* 周杰伦-还在流浪.mp3 */; };
 		4C2C6A892EA24E4D00D18118 /* 周杰伦-不爱我就拉倒.mp3 in Resources */ = {isa = PBXBuildFile; fileRef = 4C2C6A762EA24E4D00D18118 /* 周杰伦-不爱我就拉倒.mp3 */; };
@@ -78,7 +76,6 @@
 		4C5E4BB82EA10825009B5708 /* 队长 - 哪里都是你.mp3 in Resources */ = {isa = PBXBuildFile; fileRef = 4C5E4B9D2EA10825009B5708 /* 队长 - 哪里都是你.mp3 */; };
 		4C5E4BB92EA10825009B5708 /* Jessie J - Ain't No Mountain High Enough (Live).mp3 in Resources */ = {isa = PBXBuildFile; fileRef = 4C5E4B9F2EA10825009B5708 /* Jessie J - Ain't No Mountain High Enough (Live).mp3 */; };
 		4C5E4BBA2EA10825009B5708 /* Jessie J - Domino (Live).mp3 in Resources */ = {isa = PBXBuildFile; fileRef = 4C5E4BA12EA10825009B5708 /* Jessie J - Domino (Live).mp3 */; };
-		4C5E4BBB2EA10825009B5708 /* Jessie J,李玟,KZ Tandingan - Bang Bang + 龙拳 (Live).mp3 in Resources */ = {isa = PBXBuildFile; fileRef = 4C5E4BAA2EA10825009B5708 /* Jessie J,李玟,KZ Tandingan - Bang Bang + 龙拳 (Live).mp3 */; };
 		4C5E4BBC2EA10825009B5708 /* Jessie J - Purple Rain (Live).mp3 in Resources */ = {isa = PBXBuildFile; fileRef = 4C5E4BA82EA10825009B5708 /* Jessie J - Purple Rain (Live).mp3 */; };
 		4C5E4BC02EA10DA5009B5708 /* 赵雷 - 吉姆餐厅.ncm in Resources */ = {isa = PBXBuildFile; fileRef = 4C5E4BBD2EA10DA5009B5708 /* 赵雷 - 吉姆餐厅.ncm */; };
 		4C5E4BC12EA10DA5009B5708 /* Jessie J - Thunder.ncm in Resources */ = {isa = PBXBuildFile; fileRef = 4C5E4BBF2EA10DA5009B5708 /* Jessie J - Thunder.ncm */; };
@@ -98,45 +95,6 @@
 		4C6548872EA0C500006DD8DD /* decrypt_ncm_to_mp3.py in Resources */ = {isa = PBXBuildFile; fileRef = 4C6548702EA0C500006DD8DD /* decrypt_ncm_to_mp3.py */; };
 		4C6548B32EA0D302006DD8DD /* 吴青峰,Robin Guthrie - 哥伦布的蛋.mp3 in Resources */ = {isa = PBXBuildFile; fileRef = 4C6548B22EA0D302006DD8DD /* 吴青峰,Robin Guthrie - 哥伦布的蛋.mp3 */; };
 		4C6548B52EA0E643006DD8DD /* 福禄寿FloruitShow - 我用什么把你留住.ncm in Resources */ = {isa = PBXBuildFile; fileRef = 4C6548B42EA0E643006DD8DD /* 福禄寿FloruitShow - 我用什么把你留住.ncm */; };
-		4C6548DF2EA0ECE0006DD8DD /* 华晨宇 - 向阳而生.lrc in Resources */ = {isa = PBXBuildFile; fileRef = 4C6548B92EA0ECE0006DD8DD /* 华晨宇 - 向阳而生.lrc */; };
-		4C6548E02EA0ECE0006DD8DD /* A公馆 - 与时间赛跑的人.lrc in Resources */ = {isa = PBXBuildFile; fileRef = 4C6548C12EA0ECE0006DD8DD /* A公馆 - 与时间赛跑的人.lrc */; };
-		4C6548E12EA0ECE0006DD8DD /* DOUDOU - 南三环东路.lrc in Resources */ = {isa = PBXBuildFile; fileRef = 4C6548C52EA0ECE0006DD8DD /* DOUDOU - 南三环东路.lrc */; };
-		4C6548E22EA0ECE0006DD8DD /* LOVE PSYCHEDELICO - Last Smile.lrc in Resources */ = {isa = PBXBuildFile; fileRef = 4C6548DB2EA0ECE0006DD8DD /* LOVE PSYCHEDELICO - Last Smile.lrc */; };
-		4C6548E32EA0ECE0006DD8DD /* DOUDOU - 春夏秋冬（Live in 昆明 20231210）.lrc in Resources */ = {isa = PBXBuildFile; fileRef = 4C6548C32EA0ECE0006DD8DD /* DOUDOU - 春夏秋冬（Live in 昆明 20231210）.lrc */; };
-		4C6548E42EA0ECE0006DD8DD /* 痛仰乐队 - 为你唱首歌.lrc in Resources */ = {isa = PBXBuildFile; fileRef = 4C6548BB2EA0ECE0006DD8DD /* 痛仰乐队 - 为你唱首歌.lrc */; };
-		4C6548E52EA0ECE0006DD8DD /* Jessie J - Earth Song (Live).lrc in Resources */ = {isa = PBXBuildFile; fileRef = 4C6548CE2EA0ECE0006DD8DD /* Jessie J - Earth Song (Live).lrc */; };
-		4C6548E62EA0ECE0006DD8DD /* Lenka - Crystal Ball.lrc in Resources */ = {isa = PBXBuildFile; fileRef = 4C6548D92EA0ECE0006DD8DD /* Lenka - Crystal Ball.lrc */; };
-		4C6548E72EA0ECE0006DD8DD /* Jessie J,Luke James - I'll Be There (Live).lrc in Resources */ = {isa = PBXBuildFile; fileRef = 4C6548D72EA0ECE0006DD8DD /* Jessie J,Luke James - I'll Be There (Live).lrc */; };
-		4C6548E82EA0ECE0006DD8DD /* Jessie J - Killing Me Softly With His Song (Live).lrc in Resources */ = {isa = PBXBuildFile; fileRef = 4C6548D12EA0ECE0006DD8DD /* Jessie J - Killing Me Softly With His Song (Live).lrc */; };
-		4C6548E92EA0ECE0006DD8DD /* Little Mix,Steve Void - Break Up Song (Steve Void Remix).lrc in Resources */ = {isa = PBXBuildFile; fileRef = 4C6548DA2EA0ECE0006DD8DD /* Little Mix,Steve Void - Break Up Song (Steve Void Remix).lrc */; };
-		4C6548EA2EA0ECE0006DD8DD /* Jonah Kagen - God Needs The Devil.lrc in Resources */ = {isa = PBXBuildFile; fileRef = 4C6548D82EA0ECE0006DD8DD /* Jonah Kagen - God Needs The Devil.lrc */; };
-		4C6548EB2EA0ECE0006DD8DD /* Jessie J - Domino (Live).lrc in Resources */ = {isa = PBXBuildFile; fileRef = 4C6548CD2EA0ECE0006DD8DD /* Jessie J - Domino (Live).lrc */; };
-		4C6548EC2EA0ECE0006DD8DD /* Imagine Dragons,JID,英雄联盟 - Enemy (from the series Arcane League of Legends).lrc in Resources */ = {isa = PBXBuildFile; fileRef = 4C6548CA2EA0ECE0006DD8DD /* Imagine Dragons,JID,英雄联盟 - Enemy (from the series Arcane League of Legends).lrc */; };
-		4C6548ED2EA0ECE0006DD8DD /* 周深 - 光亮 (Live版).lrc in Resources */ = {isa = PBXBuildFile; fileRef = 4C6548BD2EA0ECE0006DD8DD /* 周深 - 光亮 (Live版).lrc */; };
-		4C6548EE2EA0ECE0006DD8DD /* Jessie J - Purple Rain (Live).lrc in Resources */ = {isa = PBXBuildFile; fileRef = 4C6548D42EA0ECE0006DD8DD /* Jessie J - Purple Rain (Live).lrc */; };
-		4C6548EF2EA0ECE0006DD8DD /* Jessie J - Ain't No Mountain High Enough (Live).lrc in Resources */ = {isa = PBXBuildFile; fileRef = 4C6548CB2EA0ECE0006DD8DD /* Jessie J - Ain't No Mountain High Enough (Live).lrc */; };
-		4C6548F02EA0ECE0006DD8DD /* Imagine Dragons - Warriors.lrc in Resources */ = {isa = PBXBuildFile; fileRef = 4C6548C92EA0ECE0006DD8DD /* Imagine Dragons - Warriors.lrc */; };
-		4C6548F12EA0ECE0006DD8DD /* 梁博 - 出现又离开 (Live).lrc in Resources */ = {isa = PBXBuildFile; fileRef = 4C6548BA2EA0ECE0006DD8DD /* 梁博 - 出现又离开 (Live).lrc */; };
-		4C6548F22EA0ECE0006DD8DD /* DOUDOU - 拂过沙的光.lrc in Resources */ = {isa = PBXBuildFile; fileRef = 4C6548C42EA0ECE0006DD8DD /* DOUDOU - 拂过沙的光.lrc */; };
-		4C6548F32EA0ECE0006DD8DD /* Jessie J - Ain't Nobody (Live).lrc in Resources */ = {isa = PBXBuildFile; fileRef = 4C6548CC2EA0ECE0006DD8DD /* Jessie J - Ain't Nobody (Live).lrc */; };
-		4C6548F42EA0ECE0006DD8DD /* 吴垚滔,DOUDOU - 暮野荒原.lrc in Resources */ = {isa = PBXBuildFile; fileRef = 4C6548BC2EA0ECE0006DD8DD /* 吴垚滔,DOUDOU - 暮野荒原.lrc */; };
-		4C6548F52EA0ECE0006DD8DD /* Jessie J - My Heart Will Go On (Live).lrc in Resources */ = {isa = PBXBuildFile; fileRef = 4C6548D22EA0ECE0006DD8DD /* Jessie J - My Heart Will Go On (Live).lrc */; };
-		4C6548F62EA0ECE0006DD8DD /* Missio - I See You.lrc in Resources */ = {isa = PBXBuildFile; fileRef = 4C6548DC2EA0ECE0006DD8DD /* Missio - I See You.lrc */; };
-		4C6548F72EA0ECE0006DD8DD /* Elektronomia - Vision.lrc in Resources */ = {isa = PBXBuildFile; fileRef = 4C6548C62EA0ECE0006DD8DD /* Elektronomia - Vision.lrc */; };
-		4C6548F82EA0ECE0006DD8DD /* Jessie J - I Will Always Love You (Live).lrc in Resources */ = {isa = PBXBuildFile; fileRef = 4C6548D02EA0ECE0006DD8DD /* Jessie J - I Will Always Love You (Live).lrc */; };
-		4C6548F92EA0ECE0006DD8DD /* Zedd - Ignite.lrc in Resources */ = {isa = PBXBuildFile; fileRef = 4C6548DD2EA0ECE0006DD8DD /* Zedd - Ignite.lrc */; };
-		4C6548FA2EA0ECE0006DD8DD /* Jessie J,李玟,KZ Tandingan - Bang Bang + 龙拳 (Live).lrc in Resources */ = {isa = PBXBuildFile; fileRef = 4C6548D62EA0ECE0006DD8DD /* Jessie J,李玟,KZ Tandingan - Bang Bang + 龙拳 (Live).lrc */; };
-		4C6548FB2EA0ECE0006DD8DD /* ILLENIUM,Nevve - Fractures.lrc in Resources */ = {isa = PBXBuildFile; fileRef = 4C6548C72EA0ECE0006DD8DD /* ILLENIUM,Nevve - Fractures.lrc */; };
-		4C6548FC2EA0ECE0006DD8DD /* A公馆 - 放漾.lrc in Resources */ = {isa = PBXBuildFile; fileRef = 4C6548BF2EA0ECE0006DD8DD /* A公馆 - 放漾.lrc */; };
-		4C6548FD2EA0ECE0006DD8DD /* 黑豹乐队 - 散，作鸟兽.lrc in Resources */ = {isa = PBXBuildFile; fileRef = 4C6548B82EA0ECE0006DD8DD /* 黑豹乐队 - 散，作鸟兽.lrc */; };
-		4C6548FE2EA0ECE0006DD8DD /* 周深 - Rubia.lrc in Resources */ = {isa = PBXBuildFile; fileRef = 4C6548BE2EA0ECE0006DD8DD /* 周深 - Rubia.lrc */; };
-		4C6548FF2EA0ECE0006DD8DD /* Jessie J - Reflection (Live).lrc in Resources */ = {isa = PBXBuildFile; fileRef = 4C6548D52EA0ECE0006DD8DD /* Jessie J - Reflection (Live).lrc */; };
-		4C6549002EA0ECE0006DD8DD /* Jessie J - Never Too Much (Live).lrc in Resources */ = {isa = PBXBuildFile; fileRef = 4C6548D32EA0ECE0006DD8DD /* Jessie J - Never Too Much (Live).lrc */; };
-		4C6549012EA0ECE0006DD8DD /* A公馆 - 海浪回潮.lrc in Resources */ = {isa = PBXBuildFile; fileRef = 4C6548C02EA0ECE0006DD8DD /* A公馆 - 海浪回潮.lrc */; };
-		4C6549022EA0ECE0006DD8DD /* 八仙 8Immortals - 单身旅记 (Live).lrc in Resources */ = {isa = PBXBuildFile; fileRef = 4C6548B72EA0ECE0006DD8DD /* 八仙 8Immortals - 单身旅记 (Live).lrc */; };
-		4C6549032EA0ECE0006DD8DD /* Alida - Feathers.lrc in Resources */ = {isa = PBXBuildFile; fileRef = 4C6548C22EA0ECE0006DD8DD /* Alida - Feathers.lrc */; };
-		4C6549042EA0ECE0006DD8DD /* Jessie J - I Have Nothing (Live).lrc in Resources */ = {isa = PBXBuildFile; fileRef = 4C6548CF2EA0ECE0006DD8DD /* Jessie J - I Have Nothing (Live).lrc */; };
-		4C6549052EA0ECE0006DD8DD /* Imagine Dragons - Shots.lrc in Resources */ = {isa = PBXBuildFile; fileRef = 4C6548C82EA0ECE0006DD8DD /* Imagine Dragons - Shots.lrc */; };
 		4C66E6D92E8A89E8003200DA /* Vicetone - Tremble (Original Mix).mp3 in Resources */ = {isa = PBXBuildFile; fileRef = 4C66E6D42E8A89E8003200DA /* Vicetone - Tremble (Original Mix).mp3 */; };
 		4C66E6DA2E8A89E8003200DA /* ILLENIUM,Nevve - Fractures.mp3 in Resources */ = {isa = PBXBuildFile; fileRef = 4C66E6CA2E8A89E8003200DA /* ILLENIUM,Nevve - Fractures.mp3 */; };
 		4C66E6DB2E8A89E8003200DA /* Alida - Feathers.mp3 in Resources */ = {isa = PBXBuildFile; fileRef = 4C66E6C72E8A89E8003200DA /* Alida - Feathers.mp3 */; };
@@ -154,10 +112,8 @@
 		4C66E6EC2E8A89E8003200DA /* Zero Venture - Northern Skies (Original Mix).mp3 in Resources */ = {isa = PBXBuildFile; fileRef = 4C66E6D72E8A89E8003200DA /* Zero Venture - Northern Skies (Original Mix).mp3 */; };
 		4C66E6F02E8A89E8003200DA /* CMA - You're Not Alone.mp3 in Resources */ = {isa = PBXBuildFile; fileRef = 4C66E6C82E8A89E8003200DA /* CMA - You're Not Alone.mp3 */; };
 		4C66E6F12E8A89E8003200DA /* Missio - I See You.mp3 in Resources */ = {isa = PBXBuildFile; fileRef = 4C66E6CF2E8A89E8003200DA /* Missio - I See You.mp3 */; };
-		4C66E6F22E8A89E8003200DA /* 周深 - Rubia.mp3 in Resources */ = {isa = PBXBuildFile; fileRef = 4C66E6C42E8A89E8003200DA /* 周深 - Rubia.mp3 */; };
 		4C66E6F32E8A89E8003200DA /* 岩崎琢 - Bang! Bang! Bang! Bang! Have a Nice Dream.mp3 in Resources */ = {isa = PBXBuildFile; fileRef = 4C66E6C22E8A89E8003200DA /* 岩崎琢 - Bang! Bang! Bang! Bang! Have a Nice Dream.mp3 */; };
 		4C66E6F42E8A89E8003200DA /* 鈴木瑛美子 - フロントメモリー.mp3 in Resources */ = {isa = PBXBuildFile; fileRef = 4C66E6BF2E8A89E8003200DA /* 鈴木瑛美子 - フロントメモリー.mp3 */; };
-		4C66E6F52E8A89E8003200DA /* 初音ミク,CosMo@暴走P - 初音未来的消失.mp3 in Resources */ = {isa = PBXBuildFile; fileRef = 4C66E6BB2E8A89E8003200DA /* 初音ミク,CosMo@暴走P - 初音未来的消失.mp3 */; };
 		4C66E6F62E8A89E8003200DA /* 陈致逸,HOYO-MiX - Symphony of Boreal Wind 冰封交响曲.mp3 in Resources */ = {isa = PBXBuildFile; fileRef = 4C66E6BA2E8A89E8003200DA /* 陈致逸,HOYO-MiX - Symphony of Boreal Wind 冰封交响曲.mp3 */; };
 		4C66E7062E8A8DBB003200DA /* AnimationCoordinator.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C66E6F82E8A8DBB003200DA /* AnimationCoordinator.m */; };
 		4C66E7072E8A8DBB003200DA /* RotationAnimationManager.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C66E7012E8A8DBB003200DA /* RotationAnimationManager.m */; };
@@ -228,11 +184,11 @@
 /* Begin PBXFileReference section */
 		4C110D412EA9CD5100D59E12 /* AudioReactive3DShader.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = AudioReactive3DShader.metal; sourceTree = "<group>"; };
 		4C110D422EA9CD5100D59E12 /* CircularWaveShader.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = CircularWaveShader.metal; sourceTree = "<group>"; };
-		4C110D432EA9CD5100D59E12 /* FireworksShader.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = FireworksShader.metal; sourceTree = "<group>"; };
 		4C110D442EA9CD5100D59E12 /* FractalPatternShader.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = FractalPatternShader.metal; sourceTree = "<group>"; };
 		4C110D452EA9CD5100D59E12 /* GeometricMorphShader.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = GeometricMorphShader.metal; sourceTree = "<group>"; };
 		4C110D462EA9CD5100D59E12 /* LiquidMetalShader.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = LiquidMetalShader.metal; sourceTree = "<group>"; };
 		4C110D4F2EA9DA7F00D59E12 /* ParticleFlowShader.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = ParticleFlowShader.metal; sourceTree = "<group>"; };
+		4C110D502EAA365E00D59E12 /* LuminousMistCoreShader.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = LuminousMistCoreShader.metal; sourceTree = "<group>"; };
 		4C2C69EC2EA216AF00D18118 /* 队长 - 楼顶上的小斑鸠.ncm */ = {isa = PBXFileReference; lastKnownFileType = file; path = "队长 - 楼顶上的小斑鸠.ncm"; sourceTree = "<group>"; };
 		4C2C69ED2EA216AF00D18118 /* 郭顶 - 凄美地.ncm */ = {isa = PBXFileReference; lastKnownFileType = file; path = "郭顶 - 凄美地.ncm"; sourceTree = "<group>"; };
 		4C2C69EE2EA216AF00D18118 /* 黄绮珊 - 离不开你 (Live).ncm */ = {isa = PBXFileReference; lastKnownFileType = file; path = "黄绮珊 - 离不开你 (Live).ncm"; sourceTree = "<group>"; };
@@ -279,11 +235,9 @@
 		4C2C6A762EA24E4D00D18118 /* 周杰伦-不爱我就拉倒.mp3 */ = {isa = PBXFileReference; lastKnownFileType = audio.mp3; path = "周杰伦-不爱我就拉倒.mp3"; sourceTree = "<group>"; };
 		4C2C6A772EA24E4D00D18118 /* 周杰伦-错过的烟火.mp3 */ = {isa = PBXFileReference; lastKnownFileType = audio.mp3; path = "周杰伦-错过的烟火.mp3"; sourceTree = "<group>"; };
 		4C2C6A782EA24E4D00D18118 /* 周杰伦-倒影.mp3 */ = {isa = PBXFileReference; lastKnownFileType = audio.mp3; path = "周杰伦-倒影.mp3"; sourceTree = "<group>"; };
-		4C2C6A792EA24E4D00D18118 /* 周杰伦-等你下课 (with 杨瑞代).mp3 */ = {isa = PBXFileReference; lastKnownFileType = audio.mp3; path = "周杰伦-等你下课 (with 杨瑞代).mp3"; sourceTree = "<group>"; };
 		4C2C6A7A2EA24E4D00D18118 /* 周杰伦-粉色海洋.mp3 */ = {isa = PBXFileReference; lastKnownFileType = audio.mp3; path = "周杰伦-粉色海洋.mp3"; sourceTree = "<group>"; };
 		4C2C6A7B2EA24E4D00D18118 /* 周杰伦-还在流浪.mp3 */ = {isa = PBXFileReference; lastKnownFileType = audio.mp3; path = "周杰伦-还在流浪.mp3"; sourceTree = "<group>"; };
 		4C2C6A7C2EA24E4D00D18118 /* 周杰伦-红颜如霜.mp3 */ = {isa = PBXFileReference; lastKnownFileType = audio.mp3; path = "周杰伦-红颜如霜.mp3"; sourceTree = "<group>"; };
-		4C2C6A7D2EA24E4D00D18118 /* 周杰伦-说好不哭 (with 五月天阿信).mp3 */ = {isa = PBXFileReference; lastKnownFileType = audio.mp3; path = "周杰伦-说好不哭 (with 五月天阿信).mp3"; sourceTree = "<group>"; };
 		4C2C6A7E2EA24E4D00D18118 /* 周杰伦-我是如此相信.mp3 */ = {isa = PBXFileReference; lastKnownFileType = audio.mp3; path = "周杰伦-我是如此相信.mp3"; sourceTree = "<group>"; };
 		4C2C6A7F2EA24E4D00D18118 /* 周杰伦-最伟大的作品.mp3 */ = {isa = PBXFileReference; lastKnownFileType = audio.mp3; path = "周杰伦-最伟大的作品.mp3"; sourceTree = "<group>"; };
 		4C2C6A802EA24E4D00D18118 /* 周杰伦-Intro.mp3 */ = {isa = PBXFileReference; lastKnownFileType = audio.mp3; path = "周杰伦-Intro.mp3"; sourceTree = "<group>"; };
@@ -336,7 +290,6 @@
 		4C5E4BA72EA10825009B5708 /* Jessie J - Never Too Much (Live).mp3 */ = {isa = PBXFileReference; lastKnownFileType = audio.mp3; path = "Jessie J - Never Too Much (Live).mp3"; sourceTree = "<group>"; };
 		4C5E4BA82EA10825009B5708 /* Jessie J - Purple Rain (Live).mp3 */ = {isa = PBXFileReference; lastKnownFileType = audio.mp3; path = "Jessie J - Purple Rain (Live).mp3"; sourceTree = "<group>"; };
 		4C5E4BA92EA10825009B5708 /* Jessie J - Reflection (Live).mp3 */ = {isa = PBXFileReference; lastKnownFileType = audio.mp3; path = "Jessie J - Reflection (Live).mp3"; sourceTree = "<group>"; };
-		4C5E4BAA2EA10825009B5708 /* Jessie J,李玟,KZ Tandingan - Bang Bang + 龙拳 (Live).mp3 */ = {isa = PBXFileReference; lastKnownFileType = audio.mp3; path = "Jessie J,李玟,KZ Tandingan - Bang Bang + 龙拳 (Live).mp3"; sourceTree = "<group>"; };
 		4C5E4BAB2EA10825009B5708 /* Jessie J,Luke James - I'll Be There (Live).mp3 */ = {isa = PBXFileReference; lastKnownFileType = audio.mp3; path = "Jessie J,Luke James - I'll Be There (Live).mp3"; sourceTree = "<group>"; };
 		4C5E4BAC2EA10825009B5708 /* KDA,Madison Beer,i-dle - POPSTARS.mp3 */ = {isa = PBXFileReference; lastKnownFileType = audio.mp3; path = "KDA,Madison Beer,i-dle - POPSTARS.mp3"; sourceTree = "<group>"; };
 		4C5E4BBD2EA10DA5009B5708 /* 赵雷 - 吉姆餐厅.ncm */ = {isa = PBXFileReference; lastKnownFileType = file; path = "赵雷 - 吉姆餐厅.ncm"; sourceTree = "<group>"; };
@@ -360,52 +313,11 @@
 		4C65487A2EA0C500006DD8DD /* unlock_qq_music.py */ = {isa = PBXFileReference; lastKnownFileType = text.script.python; path = unlock_qq_music.py; sourceTree = "<group>"; };
 		4C6548B22EA0D302006DD8DD /* 吴青峰,Robin Guthrie - 哥伦布的蛋.mp3 */ = {isa = PBXFileReference; lastKnownFileType = audio.mp3; path = "吴青峰,Robin Guthrie - 哥伦布的蛋.mp3"; sourceTree = "<group>"; };
 		4C6548B42EA0E643006DD8DD /* 福禄寿FloruitShow - 我用什么把你留住.ncm */ = {isa = PBXFileReference; lastKnownFileType = file; path = "福禄寿FloruitShow - 我用什么把你留住.ncm"; sourceTree = "<group>"; };
-		4C6548B72EA0ECE0006DD8DD /* 八仙 8Immortals - 单身旅记 (Live).lrc */ = {isa = PBXFileReference; lastKnownFileType = text; path = "八仙 8Immortals - 单身旅记 (Live).lrc"; sourceTree = "<group>"; };
-		4C6548B82EA0ECE0006DD8DD /* 黑豹乐队 - 散，作鸟兽.lrc */ = {isa = PBXFileReference; lastKnownFileType = text; path = "黑豹乐队 - 散，作鸟兽.lrc"; sourceTree = "<group>"; };
-		4C6548B92EA0ECE0006DD8DD /* 华晨宇 - 向阳而生.lrc */ = {isa = PBXFileReference; lastKnownFileType = text; path = "华晨宇 - 向阳而生.lrc"; sourceTree = "<group>"; };
-		4C6548BA2EA0ECE0006DD8DD /* 梁博 - 出现又离开 (Live).lrc */ = {isa = PBXFileReference; lastKnownFileType = text; path = "梁博 - 出现又离开 (Live).lrc"; sourceTree = "<group>"; };
-		4C6548BB2EA0ECE0006DD8DD /* 痛仰乐队 - 为你唱首歌.lrc */ = {isa = PBXFileReference; lastKnownFileType = text; path = "痛仰乐队 - 为你唱首歌.lrc"; sourceTree = "<group>"; };
-		4C6548BC2EA0ECE0006DD8DD /* 吴垚滔,DOUDOU - 暮野荒原.lrc */ = {isa = PBXFileReference; lastKnownFileType = text; path = "吴垚滔,DOUDOU - 暮野荒原.lrc"; sourceTree = "<group>"; };
-		4C6548BD2EA0ECE0006DD8DD /* 周深 - 光亮 (Live版).lrc */ = {isa = PBXFileReference; lastKnownFileType = text; path = "周深 - 光亮 (Live版).lrc"; sourceTree = "<group>"; };
-		4C6548BE2EA0ECE0006DD8DD /* 周深 - Rubia.lrc */ = {isa = PBXFileReference; lastKnownFileType = text; path = "周深 - Rubia.lrc"; sourceTree = "<group>"; };
-		4C6548BF2EA0ECE0006DD8DD /* A公馆 - 放漾.lrc */ = {isa = PBXFileReference; lastKnownFileType = text; path = "A公馆 - 放漾.lrc"; sourceTree = "<group>"; };
-		4C6548C02EA0ECE0006DD8DD /* A公馆 - 海浪回潮.lrc */ = {isa = PBXFileReference; lastKnownFileType = text; path = "A公馆 - 海浪回潮.lrc"; sourceTree = "<group>"; };
-		4C6548C12EA0ECE0006DD8DD /* A公馆 - 与时间赛跑的人.lrc */ = {isa = PBXFileReference; lastKnownFileType = text; path = "A公馆 - 与时间赛跑的人.lrc"; sourceTree = "<group>"; };
-		4C6548C22EA0ECE0006DD8DD /* Alida - Feathers.lrc */ = {isa = PBXFileReference; lastKnownFileType = text; path = "Alida - Feathers.lrc"; sourceTree = "<group>"; };
-		4C6548C32EA0ECE0006DD8DD /* DOUDOU - 春夏秋冬（Live in 昆明 20231210）.lrc */ = {isa = PBXFileReference; lastKnownFileType = text; path = "DOUDOU - 春夏秋冬（Live in 昆明 20231210）.lrc"; sourceTree = "<group>"; };
-		4C6548C42EA0ECE0006DD8DD /* DOUDOU - 拂过沙的光.lrc */ = {isa = PBXFileReference; lastKnownFileType = text; path = "DOUDOU - 拂过沙的光.lrc"; sourceTree = "<group>"; };
-		4C6548C52EA0ECE0006DD8DD /* DOUDOU - 南三环东路.lrc */ = {isa = PBXFileReference; lastKnownFileType = text; path = "DOUDOU - 南三环东路.lrc"; sourceTree = "<group>"; };
-		4C6548C62EA0ECE0006DD8DD /* Elektronomia - Vision.lrc */ = {isa = PBXFileReference; lastKnownFileType = text; path = "Elektronomia - Vision.lrc"; sourceTree = "<group>"; };
-		4C6548C72EA0ECE0006DD8DD /* ILLENIUM,Nevve - Fractures.lrc */ = {isa = PBXFileReference; lastKnownFileType = text; path = "ILLENIUM,Nevve - Fractures.lrc"; sourceTree = "<group>"; };
-		4C6548C82EA0ECE0006DD8DD /* Imagine Dragons - Shots.lrc */ = {isa = PBXFileReference; lastKnownFileType = text; path = "Imagine Dragons - Shots.lrc"; sourceTree = "<group>"; };
-		4C6548C92EA0ECE0006DD8DD /* Imagine Dragons - Warriors.lrc */ = {isa = PBXFileReference; lastKnownFileType = text; path = "Imagine Dragons - Warriors.lrc"; sourceTree = "<group>"; };
-		4C6548CA2EA0ECE0006DD8DD /* Imagine Dragons,JID,英雄联盟 - Enemy (from the series Arcane League of Legends).lrc */ = {isa = PBXFileReference; lastKnownFileType = text; path = "Imagine Dragons,JID,英雄联盟 - Enemy (from the series Arcane League of Legends).lrc"; sourceTree = "<group>"; };
-		4C6548CB2EA0ECE0006DD8DD /* Jessie J - Ain't No Mountain High Enough (Live).lrc */ = {isa = PBXFileReference; lastKnownFileType = text; path = "Jessie J - Ain't No Mountain High Enough (Live).lrc"; sourceTree = "<group>"; };
-		4C6548CC2EA0ECE0006DD8DD /* Jessie J - Ain't Nobody (Live).lrc */ = {isa = PBXFileReference; lastKnownFileType = text; path = "Jessie J - Ain't Nobody (Live).lrc"; sourceTree = "<group>"; };
-		4C6548CD2EA0ECE0006DD8DD /* Jessie J - Domino (Live).lrc */ = {isa = PBXFileReference; lastKnownFileType = text; path = "Jessie J - Domino (Live).lrc"; sourceTree = "<group>"; };
-		4C6548CE2EA0ECE0006DD8DD /* Jessie J - Earth Song (Live).lrc */ = {isa = PBXFileReference; lastKnownFileType = text; path = "Jessie J - Earth Song (Live).lrc"; sourceTree = "<group>"; };
-		4C6548CF2EA0ECE0006DD8DD /* Jessie J - I Have Nothing (Live).lrc */ = {isa = PBXFileReference; lastKnownFileType = text; path = "Jessie J - I Have Nothing (Live).lrc"; sourceTree = "<group>"; };
-		4C6548D02EA0ECE0006DD8DD /* Jessie J - I Will Always Love You (Live).lrc */ = {isa = PBXFileReference; lastKnownFileType = text; path = "Jessie J - I Will Always Love You (Live).lrc"; sourceTree = "<group>"; };
-		4C6548D12EA0ECE0006DD8DD /* Jessie J - Killing Me Softly With His Song (Live).lrc */ = {isa = PBXFileReference; lastKnownFileType = text; path = "Jessie J - Killing Me Softly With His Song (Live).lrc"; sourceTree = "<group>"; };
-		4C6548D22EA0ECE0006DD8DD /* Jessie J - My Heart Will Go On (Live).lrc */ = {isa = PBXFileReference; lastKnownFileType = text; path = "Jessie J - My Heart Will Go On (Live).lrc"; sourceTree = "<group>"; };
-		4C6548D32EA0ECE0006DD8DD /* Jessie J - Never Too Much (Live).lrc */ = {isa = PBXFileReference; lastKnownFileType = text; path = "Jessie J - Never Too Much (Live).lrc"; sourceTree = "<group>"; };
-		4C6548D42EA0ECE0006DD8DD /* Jessie J - Purple Rain (Live).lrc */ = {isa = PBXFileReference; lastKnownFileType = text; path = "Jessie J - Purple Rain (Live).lrc"; sourceTree = "<group>"; };
-		4C6548D52EA0ECE0006DD8DD /* Jessie J - Reflection (Live).lrc */ = {isa = PBXFileReference; lastKnownFileType = text; path = "Jessie J - Reflection (Live).lrc"; sourceTree = "<group>"; };
-		4C6548D62EA0ECE0006DD8DD /* Jessie J,李玟,KZ Tandingan - Bang Bang + 龙拳 (Live).lrc */ = {isa = PBXFileReference; lastKnownFileType = text; path = "Jessie J,李玟,KZ Tandingan - Bang Bang + 龙拳 (Live).lrc"; sourceTree = "<group>"; };
-		4C6548D72EA0ECE0006DD8DD /* Jessie J,Luke James - I'll Be There (Live).lrc */ = {isa = PBXFileReference; lastKnownFileType = text; path = "Jessie J,Luke James - I'll Be There (Live).lrc"; sourceTree = "<group>"; };
-		4C6548D82EA0ECE0006DD8DD /* Jonah Kagen - God Needs The Devil.lrc */ = {isa = PBXFileReference; lastKnownFileType = text; path = "Jonah Kagen - God Needs The Devil.lrc"; sourceTree = "<group>"; };
-		4C6548D92EA0ECE0006DD8DD /* Lenka - Crystal Ball.lrc */ = {isa = PBXFileReference; lastKnownFileType = text; path = "Lenka - Crystal Ball.lrc"; sourceTree = "<group>"; };
-		4C6548DA2EA0ECE0006DD8DD /* Little Mix,Steve Void - Break Up Song (Steve Void Remix).lrc */ = {isa = PBXFileReference; lastKnownFileType = text; path = "Little Mix,Steve Void - Break Up Song (Steve Void Remix).lrc"; sourceTree = "<group>"; };
-		4C6548DB2EA0ECE0006DD8DD /* LOVE PSYCHEDELICO - Last Smile.lrc */ = {isa = PBXFileReference; lastKnownFileType = text; path = "LOVE PSYCHEDELICO - Last Smile.lrc"; sourceTree = "<group>"; };
-		4C6548DC2EA0ECE0006DD8DD /* Missio - I See You.lrc */ = {isa = PBXFileReference; lastKnownFileType = text; path = "Missio - I See You.lrc"; sourceTree = "<group>"; };
-		4C6548DD2EA0ECE0006DD8DD /* Zedd - Ignite.lrc */ = {isa = PBXFileReference; lastKnownFileType = text; path = "Zedd - Ignite.lrc"; sourceTree = "<group>"; };
 		4C66E6BA2E8A89E8003200DA /* 陈致逸,HOYO-MiX - Symphony of Boreal Wind 冰封交响曲.mp3 */ = {isa = PBXFileReference; lastKnownFileType = audio.mp3; path = "陈致逸,HOYO-MiX - Symphony of Boreal Wind 冰封交响曲.mp3"; sourceTree = "<group>"; };
-		4C66E6BB2E8A89E8003200DA /* 初音ミク,CosMo@暴走P - 初音未来的消失.mp3 */ = {isa = PBXFileReference; lastKnownFileType = audio.mp3; path = "初音ミク,CosMo@暴走P - 初音未来的消失.mp3"; sourceTree = "<group>"; };
 		4C66E6BF2E8A89E8003200DA /* 鈴木瑛美子 - フロントメモリー.mp3 */ = {isa = PBXFileReference; lastKnownFileType = audio.mp3; path = "鈴木瑛美子 - フロントメモリー.mp3"; sourceTree = "<group>"; };
 		4C66E6C02E8A89E8003200DA /* 马頔 - 无畏.mp3 */ = {isa = PBXFileReference; lastKnownFileType = audio.mp3; path = "马頔 - 无畏.mp3"; sourceTree = "<group>"; };
 		4C66E6C22E8A89E8003200DA /* 岩崎琢 - Bang! Bang! Bang! Bang! Have a Nice Dream.mp3 */ = {isa = PBXFileReference; lastKnownFileType = audio.mp3; path = "岩崎琢 - Bang! Bang! Bang! Bang! Have a Nice Dream.mp3"; sourceTree = "<group>"; };
 		4C66E6C32E8A89E8003200DA /* 岩崎琢 - PSYCHEDELIC SOUL JAM.mp3 */ = {isa = PBXFileReference; lastKnownFileType = audio.mp3; path = "岩崎琢 - PSYCHEDELIC SOUL JAM.mp3"; sourceTree = "<group>"; };
-		4C66E6C42E8A89E8003200DA /* 周深 - Rubia.mp3 */ = {isa = PBXFileReference; lastKnownFileType = audio.mp3; path = "周深 - Rubia.mp3"; sourceTree = "<group>"; };
 		4C66E6C62E8A89E8003200DA /* Alex Aiono,Feder,MDZN - Lordly (MDZN Remix).mp3 */ = {isa = PBXFileReference; lastKnownFileType = audio.mp3; path = "Alex Aiono,Feder,MDZN - Lordly (MDZN Remix).mp3"; sourceTree = "<group>"; };
 		4C66E6C72E8A89E8003200DA /* Alida - Feathers.mp3 */ = {isa = PBXFileReference; lastKnownFileType = audio.mp3; path = "Alida - Feathers.mp3"; sourceTree = "<group>"; };
 		4C66E6C82E8A89E8003200DA /* CMA - You're Not Alone.mp3 */ = {isa = PBXFileReference; lastKnownFileType = audio.mp3; path = "CMA - You're Not Alone.mp3"; sourceTree = "<group>"; };
@@ -660,45 +572,6 @@
 		4C6548DE2EA0ECE0006DD8DD /* lrc */ = {
 			isa = PBXGroup;
 			children = (
-				4C6548B72EA0ECE0006DD8DD /* 八仙 8Immortals - 单身旅记 (Live).lrc */,
-				4C6548B82EA0ECE0006DD8DD /* 黑豹乐队 - 散，作鸟兽.lrc */,
-				4C6548B92EA0ECE0006DD8DD /* 华晨宇 - 向阳而生.lrc */,
-				4C6548BA2EA0ECE0006DD8DD /* 梁博 - 出现又离开 (Live).lrc */,
-				4C6548BB2EA0ECE0006DD8DD /* 痛仰乐队 - 为你唱首歌.lrc */,
-				4C6548BC2EA0ECE0006DD8DD /* 吴垚滔,DOUDOU - 暮野荒原.lrc */,
-				4C6548BD2EA0ECE0006DD8DD /* 周深 - 光亮 (Live版).lrc */,
-				4C6548BE2EA0ECE0006DD8DD /* 周深 - Rubia.lrc */,
-				4C6548BF2EA0ECE0006DD8DD /* A公馆 - 放漾.lrc */,
-				4C6548C02EA0ECE0006DD8DD /* A公馆 - 海浪回潮.lrc */,
-				4C6548C12EA0ECE0006DD8DD /* A公馆 - 与时间赛跑的人.lrc */,
-				4C6548C22EA0ECE0006DD8DD /* Alida - Feathers.lrc */,
-				4C6548C32EA0ECE0006DD8DD /* DOUDOU - 春夏秋冬（Live in 昆明 20231210）.lrc */,
-				4C6548C42EA0ECE0006DD8DD /* DOUDOU - 拂过沙的光.lrc */,
-				4C6548C52EA0ECE0006DD8DD /* DOUDOU - 南三环东路.lrc */,
-				4C6548C62EA0ECE0006DD8DD /* Elektronomia - Vision.lrc */,
-				4C6548C72EA0ECE0006DD8DD /* ILLENIUM,Nevve - Fractures.lrc */,
-				4C6548C82EA0ECE0006DD8DD /* Imagine Dragons - Shots.lrc */,
-				4C6548C92EA0ECE0006DD8DD /* Imagine Dragons - Warriors.lrc */,
-				4C6548CA2EA0ECE0006DD8DD /* Imagine Dragons,JID,英雄联盟 - Enemy (from the series Arcane League of Legends).lrc */,
-				4C6548CB2EA0ECE0006DD8DD /* Jessie J - Ain't No Mountain High Enough (Live).lrc */,
-				4C6548CC2EA0ECE0006DD8DD /* Jessie J - Ain't Nobody (Live).lrc */,
-				4C6548CD2EA0ECE0006DD8DD /* Jessie J - Domino (Live).lrc */,
-				4C6548CE2EA0ECE0006DD8DD /* Jessie J - Earth Song (Live).lrc */,
-				4C6548CF2EA0ECE0006DD8DD /* Jessie J - I Have Nothing (Live).lrc */,
-				4C6548D02EA0ECE0006DD8DD /* Jessie J - I Will Always Love You (Live).lrc */,
-				4C6548D12EA0ECE0006DD8DD /* Jessie J - Killing Me Softly With His Song (Live).lrc */,
-				4C6548D22EA0ECE0006DD8DD /* Jessie J - My Heart Will Go On (Live).lrc */,
-				4C6548D32EA0ECE0006DD8DD /* Jessie J - Never Too Much (Live).lrc */,
-				4C6548D42EA0ECE0006DD8DD /* Jessie J - Purple Rain (Live).lrc */,
-				4C6548D52EA0ECE0006DD8DD /* Jessie J - Reflection (Live).lrc */,
-				4C6548D62EA0ECE0006DD8DD /* Jessie J,李玟,KZ Tandingan - Bang Bang + 龙拳 (Live).lrc */,
-				4C6548D72EA0ECE0006DD8DD /* Jessie J,Luke James - I'll Be There (Live).lrc */,
-				4C6548D82EA0ECE0006DD8DD /* Jonah Kagen - God Needs The Devil.lrc */,
-				4C6548D92EA0ECE0006DD8DD /* Lenka - Crystal Ball.lrc */,
-				4C6548DA2EA0ECE0006DD8DD /* Little Mix,Steve Void - Break Up Song (Steve Void Remix).lrc */,
-				4C6548DB2EA0ECE0006DD8DD /* LOVE PSYCHEDELICO - Last Smile.lrc */,
-				4C6548DC2EA0ECE0006DD8DD /* Missio - I See You.lrc */,
-				4C6548DD2EA0ECE0006DD8DD /* Zedd - Ignite.lrc */,
 			);
 			path = lrc;
 			sourceTree = "<group>";
@@ -713,12 +586,10 @@
 				4C77CD122E98F31B008EA7C6 /* LOVE PSYCHEDELICO - Last Smile.mp3 */,
 				4C77CD092E98DB75008EA7C6 /* Jonah Kagen - God Needs The Devil.mp3 */,
 				4C66E6BA2E8A89E8003200DA /* 陈致逸,HOYO-MiX - Symphony of Boreal Wind 冰封交响曲.mp3 */,
-				4C66E6BB2E8A89E8003200DA /* 初音ミク,CosMo@暴走P - 初音未来的消失.mp3 */,
 				4C66E6BF2E8A89E8003200DA /* 鈴木瑛美子 - フロントメモリー.mp3 */,
 				4C66E6C02E8A89E8003200DA /* 马頔 - 无畏.mp3 */,
 				4C66E6C22E8A89E8003200DA /* 岩崎琢 - Bang! Bang! Bang! Bang! Have a Nice Dream.mp3 */,
 				4C66E6C32E8A89E8003200DA /* 岩崎琢 - PSYCHEDELIC SOUL JAM.mp3 */,
-				4C66E6C42E8A89E8003200DA /* 周深 - Rubia.mp3 */,
 				4C66E6C62E8A89E8003200DA /* Alex Aiono,Feder,MDZN - Lordly (MDZN Remix).mp3 */,
 				4C66E6C72E8A89E8003200DA /* Alida - Feathers.mp3 */,
 				4C66E6C82E8A89E8003200DA /* CMA - You're Not Alone.mp3 */,
@@ -761,17 +632,14 @@
 				4C5E4BA72EA10825009B5708 /* Jessie J - Never Too Much (Live).mp3 */,
 				4C5E4BA82EA10825009B5708 /* Jessie J - Purple Rain (Live).mp3 */,
 				4C5E4BA92EA10825009B5708 /* Jessie J - Reflection (Live).mp3 */,
-				4C5E4BAA2EA10825009B5708 /* Jessie J,李玟,KZ Tandingan - Bang Bang + 龙拳 (Live).mp3 */,
 				4C5E4BAB2EA10825009B5708 /* Jessie J,Luke James - I'll Be There (Live).mp3 */,
 				4C5E4BAC2EA10825009B5708 /* KDA,Madison Beer,i-dle - POPSTARS.mp3 */,
 				4C2C6A762EA24E4D00D18118 /* 周杰伦-不爱我就拉倒.mp3 */,
 				4C2C6A772EA24E4D00D18118 /* 周杰伦-错过的烟火.mp3 */,
 				4C2C6A782EA24E4D00D18118 /* 周杰伦-倒影.mp3 */,
-				4C2C6A792EA24E4D00D18118 /* 周杰伦-等你下课 (with 杨瑞代).mp3 */,
 				4C2C6A7A2EA24E4D00D18118 /* 周杰伦-粉色海洋.mp3 */,
 				4C2C6A7B2EA24E4D00D18118 /* 周杰伦-还在流浪.mp3 */,
 				4C2C6A7C2EA24E4D00D18118 /* 周杰伦-红颜如霜.mp3 */,
-				4C2C6A7D2EA24E4D00D18118 /* 周杰伦-说好不哭 (with 五月天阿信).mp3 */,
 				4C2C6A7E2EA24E4D00D18118 /* 周杰伦-我是如此相信.mp3 */,
 				4C2C6A7F2EA24E4D00D18118 /* 周杰伦-最伟大的作品.mp3 */,
 				4C2C6A802EA24E4D00D18118 /* 周杰伦-Intro.mp3 */,
@@ -809,9 +677,9 @@
 		4C66E7152E8A9255003200DA /* VisualEffects */ = {
 			isa = PBXGroup;
 			children = (
+				4C110D502EAA365E00D59E12 /* LuminousMistCoreShader.metal */,
 				4C110D412EA9CD5100D59E12 /* AudioReactive3DShader.metal */,
 				4C110D422EA9CD5100D59E12 /* CircularWaveShader.metal */,
-				4C110D432EA9CD5100D59E12 /* FireworksShader.metal */,
 				4C110D442EA9CD5100D59E12 /* FractalPatternShader.metal */,
 				4C110D452EA9CD5100D59E12 /* GeometricMorphShader.metal */,
 				4C110D462EA9CD5100D59E12 /* LiquidMetalShader.metal */,
@@ -1051,8 +919,6 @@
 				4C2C6A822EA24E4D00D18118 /* 周杰伦-最伟大的作品.mp3 in Resources */,
 				4C2C6A832EA24E4D00D18118 /* 周杰伦-错过的烟火.mp3 in Resources */,
 				4C2C6A842EA24E4D00D18118 /* 周杰伦-Intro.mp3 in Resources */,
-				4C2C6A852EA24E4D00D18118 /* 周杰伦-等你下课 (with 杨瑞代).mp3 in Resources */,
-				4C2C6A862EA24E4D00D18118 /* 周杰伦-说好不哭 (with 五月天阿信).mp3 in Resources */,
 				4C2C6A872EA24E4D00D18118 /* 周杰伦-Mojito.mp3 in Resources */,
 				4C2C6A882EA24E4D00D18118 /* 周杰伦-还在流浪.mp3 in Resources */,
 				4C2C6A892EA24E4D00D18118 /* 周杰伦-不爱我就拉倒.mp3 in Resources */,
@@ -1072,14 +938,12 @@
 				4C66E6F02E8A89E8003200DA /* CMA - You're Not Alone.mp3 in Resources */,
 				4C5167FE2E9E211000853960 /* A公馆 - 放漾.mp3 in Resources */,
 				4C66E6F12E8A89E8003200DA /* Missio - I See You.mp3 in Resources */,
-				4C66E6F22E8A89E8003200DA /* 周深 - Rubia.mp3 in Resources */,
 				4C4906902E99FF6E00075C82 /* Imagine Dragons,JID,英雄联盟 - Enemy (from the series Arcane League of Legends).mp3 in Resources */,
 				4C66E6F32E8A89E8003200DA /* 岩崎琢 - Bang! Bang! Bang! Bang! Have a Nice Dream.mp3 in Resources */,
 				4C5C27A92E9CB0A400D9AEA9 /* 吴垚滔,DOUDOU - 暮野荒原.mp3 in Resources */,
 				4C5C27AA2E9CB0A400D9AEA9 /* DOUDOU - 春夏秋冬（Live in 昆明 20231210）.mp3 in Resources */,
 				4C5C27AB2E9CB0A400D9AEA9 /* DOUDOU - 嗵嗵.mp3 in Resources */,
 				4C66E6F42E8A89E8003200DA /* 鈴木瑛美子 - フロントメモリー.mp3 in Resources */,
-				4C66E6F52E8A89E8003200DA /* 初音ミク,CosMo@暴走P - 初音未来的消失.mp3 in Resources */,
 				4C6548B52EA0E643006DD8DD /* 福禄寿FloruitShow - 我用什么把你留住.ncm in Resources */,
 				4C66E6F62E8A89E8003200DA /* 陈致逸,HOYO-MiX - Symphony of Boreal Wind 冰封交响曲.mp3 in Resources */,
 				4C77CD0A2E98DB75008EA7C6 /* Jonah Kagen - God Needs The Devil.mp3 in Resources */,
@@ -1091,41 +955,9 @@
 				4C65487C2EA0C500006DD8DD /* test_qqmusic_lyrics.sh in Resources */,
 				4C65487D2EA0C500006DD8DD /* check_mp3_lyrics.py in Resources */,
 				4C6548802EA0C500006DD8DD /* unlock_qq_music.py in Resources */,
-				4C6548DF2EA0ECE0006DD8DD /* 华晨宇 - 向阳而生.lrc in Resources */,
-				4C6548E02EA0ECE0006DD8DD /* A公馆 - 与时间赛跑的人.lrc in Resources */,
-				4C6548E12EA0ECE0006DD8DD /* DOUDOU - 南三环东路.lrc in Resources */,
-				4C6548E22EA0ECE0006DD8DD /* LOVE PSYCHEDELICO - Last Smile.lrc in Resources */,
-				4C6548E32EA0ECE0006DD8DD /* DOUDOU - 春夏秋冬（Live in 昆明 20231210）.lrc in Resources */,
 				4C5E4BC02EA10DA5009B5708 /* 赵雷 - 吉姆餐厅.ncm in Resources */,
 				4C5E4BC12EA10DA5009B5708 /* Jessie J - Thunder.ncm in Resources */,
 				4C5E4BC22EA10DA5009B5708 /* G.E.M.邓紫棋 - 句号.ncm in Resources */,
-				4C6548E42EA0ECE0006DD8DD /* 痛仰乐队 - 为你唱首歌.lrc in Resources */,
-				4C6548E52EA0ECE0006DD8DD /* Jessie J - Earth Song (Live).lrc in Resources */,
-				4C6548E62EA0ECE0006DD8DD /* Lenka - Crystal Ball.lrc in Resources */,
-				4C6548E72EA0ECE0006DD8DD /* Jessie J,Luke James - I'll Be There (Live).lrc in Resources */,
-				4C6548E82EA0ECE0006DD8DD /* Jessie J - Killing Me Softly With His Song (Live).lrc in Resources */,
-				4C6548E92EA0ECE0006DD8DD /* Little Mix,Steve Void - Break Up Song (Steve Void Remix).lrc in Resources */,
-				4C6548EA2EA0ECE0006DD8DD /* Jonah Kagen - God Needs The Devil.lrc in Resources */,
-				4C6548EB2EA0ECE0006DD8DD /* Jessie J - Domino (Live).lrc in Resources */,
-				4C6548EC2EA0ECE0006DD8DD /* Imagine Dragons,JID,英雄联盟 - Enemy (from the series Arcane League of Legends).lrc in Resources */,
-				4C6548ED2EA0ECE0006DD8DD /* 周深 - 光亮 (Live版).lrc in Resources */,
-				4C6548EE2EA0ECE0006DD8DD /* Jessie J - Purple Rain (Live).lrc in Resources */,
-				4C6548EF2EA0ECE0006DD8DD /* Jessie J - Ain't No Mountain High Enough (Live).lrc in Resources */,
-				4C6548F02EA0ECE0006DD8DD /* Imagine Dragons - Warriors.lrc in Resources */,
-				4C6548F12EA0ECE0006DD8DD /* 梁博 - 出现又离开 (Live).lrc in Resources */,
-				4C6548F22EA0ECE0006DD8DD /* DOUDOU - 拂过沙的光.lrc in Resources */,
-				4C6548F32EA0ECE0006DD8DD /* Jessie J - Ain't Nobody (Live).lrc in Resources */,
-				4C6548F42EA0ECE0006DD8DD /* 吴垚滔,DOUDOU - 暮野荒原.lrc in Resources */,
-				4C6548F52EA0ECE0006DD8DD /* Jessie J - My Heart Will Go On (Live).lrc in Resources */,
-				4C6548F62EA0ECE0006DD8DD /* Missio - I See You.lrc in Resources */,
-				4C6548F72EA0ECE0006DD8DD /* Elektronomia - Vision.lrc in Resources */,
-				4C6548F82EA0ECE0006DD8DD /* Jessie J - I Will Always Love You (Live).lrc in Resources */,
-				4C6548F92EA0ECE0006DD8DD /* Zedd - Ignite.lrc in Resources */,
-				4C6548FA2EA0ECE0006DD8DD /* Jessie J,李玟,KZ Tandingan - Bang Bang + 龙拳 (Live).lrc in Resources */,
-				4C6548FB2EA0ECE0006DD8DD /* ILLENIUM,Nevve - Fractures.lrc in Resources */,
-				4C6548FC2EA0ECE0006DD8DD /* A公馆 - 放漾.lrc in Resources */,
-				4C6548FD2EA0ECE0006DD8DD /* 黑豹乐队 - 散，作鸟兽.lrc in Resources */,
-				4C6548FE2EA0ECE0006DD8DD /* 周深 - Rubia.lrc in Resources */,
 				4C5E4BAD2EA10825009B5708 /* Jessie J - I Will Always Love You (Live).mp3 in Resources */,
 				4C5E4BAE2EA10825009B5708 /* Jessie J,Luke James - I'll Be There (Live).mp3 in Resources */,
 				4C5E4BAF2EA10825009B5708 /* Jessie J - Never Too Much (Live).mp3 in Resources */,
@@ -1144,15 +976,7 @@
 				4C2C69F12EA216AF00D18118 /* 小霞,海洋Bo - 向云端.ncm in Resources */,
 				4C2C69F22EA216AF00D18118 /* 郭顶 - 凄美地.ncm in Resources */,
 				4C2C69F32EA216AF00D18118 /* 黄绮珊 - 离不开你 (Live).ncm in Resources */,
-				4C5E4BBB2EA10825009B5708 /* Jessie J,李玟,KZ Tandingan - Bang Bang + 龙拳 (Live).mp3 in Resources */,
 				4C5E4BBC2EA10825009B5708 /* Jessie J - Purple Rain (Live).mp3 in Resources */,
-				4C6548FF2EA0ECE0006DD8DD /* Jessie J - Reflection (Live).lrc in Resources */,
-				4C6549002EA0ECE0006DD8DD /* Jessie J - Never Too Much (Live).lrc in Resources */,
-				4C6549012EA0ECE0006DD8DD /* A公馆 - 海浪回潮.lrc in Resources */,
-				4C6549022EA0ECE0006DD8DD /* 八仙 8Immortals - 单身旅记 (Live).lrc in Resources */,
-				4C6549032EA0ECE0006DD8DD /* Alida - Feathers.lrc in Resources */,
-				4C6549042EA0ECE0006DD8DD /* Jessie J - I Have Nothing (Live).lrc in Resources */,
-				4C6549052EA0ECE0006DD8DD /* Imagine Dragons - Shots.lrc in Resources */,
 				4C6548822EA0C500006DD8DD /* ncm_enhanced_lyrics_checker.py in Resources */,
 				4C6548B32EA0D302006DD8DD /* 吴青峰,Robin Guthrie - 哥伦布的蛋.mp3 in Resources */,
 				4C6548832EA0C500006DD8DD /* batch_extract_lyrics.sh in Resources */,
@@ -1186,6 +1010,7 @@
 				4C699F8C2E9F951A009090AB /* InterpolateShannon.cpp in Sources */,
 				4C699F8D2E9F951A009090AB /* cpu_detect_x86.cpp in Sources */,
 				4C699F8E2E9F951A009090AB /* SoundTouchBridge.cpp in Sources */,
+				4C110D512EAA365E00D59E12 /* LuminousMistCoreShader.metal in Sources */,
 				4C699F8F2E9F951A009090AB /* AAFilter.cpp in Sources */,
 				4C2C6A422EA236ED00D18118 /* KugouMusicDownloader.m in Sources */,
 				4C66E7162E8A9255003200DA /* EffectSelectorView.m in Sources */,
@@ -1241,7 +1066,6 @@
 				4C110D4A2EA9CD5100D59E12 /* CircularWaveShader.metal in Sources */,
 				4C110D4B2EA9CD5100D59E12 /* FractalPatternShader.metal in Sources */,
 				4C110D4C2EA9CD5100D59E12 /* LiquidMetalShader.metal in Sources */,
-				4C110D4E2EA9CD5100D59E12 /* FireworksShader.metal in Sources */,
 				4C110D502EA9DA7F00D59E12 /* ParticleFlowShader.metal in Sources */,
 				64C5448B28C83A7700C23393 /* AudioSpectrumRecorder.m in Sources */,
 				4C66E71D2E8A98FB003200DA /* GalaxyControlPanel.m in Sources */,
