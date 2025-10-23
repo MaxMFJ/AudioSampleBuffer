@@ -84,6 +84,12 @@
 // 歌词特效控制
 @property (nonatomic, strong) LyricsEffectControlPanel *lyricsEffectPanel;
 @property (nonatomic, strong) UIButton *lyricsEffectButton;
+
+// UI控制
+@property (nonatomic, strong) UIButton *toggleUIButton;  // 一键显示/隐藏UI按钮
+@property (nonatomic, assign) BOOL isUIHidden;  // UI是否隐藏
+@property (nonatomic, strong) NSMutableArray<UIButton *> *controlButtons;  // 所有控制按钮数组
+@property (nonatomic, strong) UIButton *cloudButton;  // 云端按钮
 @end
 
 @implementation ViewController
@@ -92,8 +98,26 @@
     enterBackground =  YES;
     [self.animationCoordinator applicationDidEnterBackground];
     
-    // 🔋 关键修复：进入后台时立即暂停Metal渲染，避免持续发热和耗电
+    // 🔋 关键修复：进入后台时完全停止Metal渲染，避免持续发热和耗电
     [self.visualEffectManager pauseRendering];
+    
+    // 暂停Metal视图的更新
+    if (self.visualEffectManager.metalView) {
+        self.visualEffectManager.metalView.paused = YES;
+        NSLog(@"✅ Metal视图已暂停");
+    }
+    
+    // 停止FPS监控以节省资源
+    if (self.fpsDisplayLink) {
+        self.fpsDisplayLink.paused = YES;
+        NSLog(@"✅ FPS监控已暂停");
+    }
+    
+    // 暂停频谱视图
+    if (self.spectrumView) {
+        [self.spectrumView pauseRendering];
+        NSLog(@"✅ 频谱视图已暂停");
+    }
 }
 
 - (void)hadEnterForeGround{
@@ -101,6 +125,24 @@
     enterBackground = NO;
     [self.animationCoordinator applicationDidBecomeActive];
     [self.visualEffectManager resumeRendering];
+    
+    // 恢复Metal视图的更新
+    if (self.visualEffectManager.metalView) {
+        self.visualEffectManager.metalView.paused = NO;
+        NSLog(@"✅ Metal视图已恢复");
+    }
+    
+    // 恢复FPS监控
+    if (self.fpsDisplayLink) {
+        self.fpsDisplayLink.paused = NO;
+        NSLog(@"✅ FPS监控已恢复");
+    }
+    
+    // 恢复频谱视图
+    if (self.spectrumView) {
+        [self.spectrumView resumeRendering];
+        NSLog(@"✅ 频谱视图已恢复");
+    }
 }
 
 - (void)karaokeModeDidStart {
@@ -117,11 +159,26 @@
     [self.visualEffectManager resumeRendering];
     // 可以选择恢复播放当前选中的歌曲
     if (self.displayedMusicItems.count > 0 && index < self.displayedMusicItems.count) {
-        // 🆕 自动处理 NCM 文件解密
+        // 🆕 自动处理 NCM 文件解密，优先使用已解密文件
         MusicItem *musicItem = self.displayedMusicItems[index];
-        NSString *fileName = musicItem.fileName;
-        NSString *playableFileName = [AudioFileFormats prepareAudioFileForPlayback:fileName];
-        [self.player playWithFileName:playableFileName];
+        NSString *playPath = nil;
+        
+        // 优先使用已解密文件
+        if (musicItem.decryptedPath && [[NSFileManager defaultManager] fileExistsAtPath:musicItem.decryptedPath]) {
+            playPath = musicItem.decryptedPath;
+        } 
+        // 检查是否是NCM文件，需要先解密
+        else if ([AudioFileFormats needsDecryption:musicItem.fileName]) {
+            playPath = [AudioFileFormats prepareAudioFileForPlayback:musicItem.fileName];
+            // 如果解密成功，更新状态
+            if (playPath && [playPath hasPrefix:@"/"] && [[NSFileManager defaultManager] fileExistsAtPath:playPath]) {
+                [self.musicLibrary updateNCMDecryptionStatus:musicItem decryptedPath:playPath];
+            }
+        } else {
+            playPath = [AudioFileFormats prepareAudioFileForPlayback:musicItem.fileName];
+        }
+        
+        [self.player playWithFileName:playPath];
     }
 }
 
@@ -154,6 +211,10 @@
 }
 
 - (void)setupEffectControls {
+    // 初始化控制按钮数组
+    self.controlButtons = [NSMutableArray array];
+    self.isUIHidden = NO;
+    
     // 🔧 修复导航栏遮挡问题：考虑安全区域和导航栏高度
     CGFloat safeTop = 0;
     if (@available(iOS 11.0, *)) {
@@ -165,7 +226,10 @@
     CGFloat statusBarHeight = [[UIApplication sharedApplication] statusBarFrame].size.height;
     CGFloat topOffset = MAX(safeTop, statusBarHeight + navigationBarHeight) + 10; // 额外10px间距
     
-    // 创建性能配置按钮（放在左上角第一个位置）
+    // 👁️ 创建UI切换按钮（放在最左上角）
+    [self createToggleUIButton:topOffset];
+    
+    // 创建性能配置按钮（放在左上角第二个位置）
     self.performanceControlButton = [UIButton buttonWithType:UIButtonTypeSystem];
     [self.performanceControlButton setTitle:@"⚙️" forState:UIControlStateNormal];
     [self.performanceControlButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
@@ -174,7 +238,7 @@
     self.performanceControlButton.layer.cornerRadius = 25;
     self.performanceControlButton.layer.borderWidth = 2.0;
     self.performanceControlButton.layer.borderColor = [UIColor colorWithRed:0.5 green:0.9 blue:0.3 alpha:1.0].CGColor;
-    self.performanceControlButton.frame = CGRectMake(20, topOffset, 50, 50);
+    self.performanceControlButton.frame = CGRectMake(80, topOffset, 50, 50);
     
     // 添加阴影效果
     self.performanceControlButton.layer.shadowColor = [UIColor greenColor].CGColor;
@@ -187,6 +251,7 @@
                             forControlEvents:UIControlEventTouchUpInside];
     
     [self.view addSubview:self.performanceControlButton];
+    [self.controlButtons addObject:self.performanceControlButton];
     
     // 添加FPS监控显示
     [self setupFPSMonitor];
@@ -200,7 +265,7 @@
     self.effectSelectorButton.layer.cornerRadius = 25;
     self.effectSelectorButton.layer.borderWidth = 1.0;
     self.effectSelectorButton.layer.borderColor = [UIColor whiteColor].CGColor;
-    self.effectSelectorButton.frame = CGRectMake(80, topOffset, 80, 50);
+    self.effectSelectorButton.frame = CGRectMake(140, topOffset, 80, 50);
     
     // 添加阴影效果，增强可见性
     self.effectSelectorButton.layer.shadowColor = [UIColor blackColor].CGColor;
@@ -213,6 +278,7 @@
                         forControlEvents:UIControlEventTouchUpInside];
     
     [self.view addSubview:self.effectSelectorButton];
+    [self.controlButtons addObject:self.effectSelectorButton];
     
     // 添加卡拉OK按钮
     [self createKaraokeButton];
@@ -273,6 +339,7 @@
          forControlEvents:UIControlEventTouchUpInside];
         
         [self.view addSubview:button];
+        [self.controlButtons addObject:button];
     }
     
     // 添加星系控制按钮
@@ -299,7 +366,7 @@
     self.galaxyControlButton.layer.cornerRadius = 25;
     self.galaxyControlButton.layer.borderWidth = 1.0;
     self.galaxyControlButton.layer.borderColor = [UIColor whiteColor].CGColor;
-    self.galaxyControlButton.frame = CGRectMake(170, topOffset, 80, 50);
+    self.galaxyControlButton.frame = CGRectMake(230, topOffset, 80, 50);
     
     // 添加阴影效果，增强可见性
     self.galaxyControlButton.layer.shadowColor = [UIColor blackColor].CGColor;
@@ -312,6 +379,7 @@
                        forControlEvents:UIControlEventTouchUpInside];
     
     [self.view addSubview:self.galaxyControlButton];
+    [self.controlButtons addObject:self.galaxyControlButton];
 }
 
 - (void)createCyberpunkControlButton {
@@ -331,7 +399,7 @@
     self.cyberpunkControlButton.layer.cornerRadius = 25;
     self.cyberpunkControlButton.layer.borderWidth = 1.0;
     self.cyberpunkControlButton.layer.borderColor = [UIColor colorWithRed:0.0 green:0.8 blue:1.0 alpha:1.0].CGColor;
-    self.cyberpunkControlButton.frame = CGRectMake(260, topOffset, 80, 50);
+    self.cyberpunkControlButton.frame = CGRectMake(320, topOffset, 80, 50);
     
     // 添加阴影效果，增强可见性
     self.cyberpunkControlButton.layer.shadowColor = [UIColor cyanColor].CGColor;
@@ -344,6 +412,7 @@
                           forControlEvents:UIControlEventTouchUpInside];
     
     [self.view addSubview:self.cyberpunkControlButton];
+    [self.controlButtons addObject:self.cyberpunkControlButton];
 }
 
 - (void)createKaraokeButton {
@@ -377,6 +446,7 @@
                  forControlEvents:UIControlEventTouchUpInside];
     
     [self.view addSubview:self.karaokeButton];
+    [self.controlButtons addObject:self.karaokeButton];
     
     // 🎭 添加歌词特效按钮
     [self createLyricsEffectButton];
@@ -413,9 +483,94 @@
                       forControlEvents:UIControlEventTouchUpInside];
     
     [self.view addSubview:self.lyricsEffectButton];
+    [self.controlButtons addObject:self.lyricsEffectButton];
+}
+
+- (void)createToggleUIButton:(CGFloat)topOffset {
+    // 创建UI显示/隐藏切换按钮
+    self.toggleUIButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    [self.toggleUIButton setTitle:@"👁️" forState:UIControlStateNormal];
+    self.toggleUIButton.titleLabel.font = [UIFont boldSystemFontOfSize:24];
+    self.toggleUIButton.backgroundColor = [UIColor colorWithRed:0.2 green:0.2 blue:0.2 alpha:0.9];
+    self.toggleUIButton.layer.cornerRadius = 25;
+    self.toggleUIButton.layer.borderWidth = 2.0;
+    self.toggleUIButton.layer.borderColor = [UIColor whiteColor].CGColor;
+    self.toggleUIButton.frame = CGRectMake(20, topOffset, 50, 50);
+    
+    // 添加阴影效果
+    self.toggleUIButton.layer.shadowColor = [UIColor whiteColor].CGColor;
+    self.toggleUIButton.layer.shadowOffset = CGSizeMake(0, 2);
+    self.toggleUIButton.layer.shadowOpacity = 0.8;
+    self.toggleUIButton.layer.shadowRadius = 4;
+    
+    [self.toggleUIButton addTarget:self
+                            action:@selector(toggleUIButtonTapped:)
+                  forControlEvents:UIControlEventTouchUpInside];
+    
+    [self.view addSubview:self.toggleUIButton];
+    // 注意：这个按钮不加入controlButtons数组，因为它本身就是控制按钮
+}
+
+- (void)toggleUIButtonTapped:(UIButton *)sender {
+    self.isUIHidden = !self.isUIHidden;
+    
+    NSLog(@"👁️ UI切换: %@", self.isUIHidden ? @"隐藏" : @"显示");
+    
+    // 切换按钮图标
+    [self.toggleUIButton setTitle:self.isUIHidden ? @"🙈" : @"👁️" forState:UIControlStateNormal];
+    
+    // 切换所有控制按钮的显示/隐藏状态
+    [UIView animateWithDuration:0.3 animations:^{
+        for (UIButton *button in self.controlButtons) {
+            button.alpha = self.isUIHidden ? 0.0 : 1.0;
+            button.userInteractionEnabled = !self.isUIHidden;
+        }
+        
+        // 隐藏FPS显示器
+        if (self.fpsLabel) {
+            self.fpsLabel.alpha = self.isUIHidden ? 0.0 : 1.0;
+        }
+        
+        // 🎵 隐藏歌曲列表相关的UI控件
+        // 分类按钮
+        for (UIButton *categoryBtn in self.categoryButtons) {
+            categoryBtn.alpha = self.isUIHidden ? 0.0 : 1.0;
+            categoryBtn.userInteractionEnabled = !self.isUIHidden;
+        }
+        
+        // 排序按钮
+        if (self.sortButton) {
+            self.sortButton.alpha = self.isUIHidden ? 0.0 : 1.0;
+            self.sortButton.userInteractionEnabled = !self.isUIHidden;
+        }
+        
+        // 重新扫描按钮
+        if (self.reloadButton) {
+            self.reloadButton.alpha = self.isUIHidden ? 0.0 : 1.0;
+            self.reloadButton.userInteractionEnabled = !self.isUIHidden;
+        }
+        
+        // 搜索框
+        if (self.searchBar) {
+            self.searchBar.alpha = self.isUIHidden ? 0.0 : 1.0;
+            self.searchBar.userInteractionEnabled = !self.isUIHidden;
+            if (self.isUIHidden) {
+                [self.searchBar resignFirstResponder]; // 隐藏键盘
+            }
+        }
+        
+        // 云端按钮
+        if (self.cloudButton) {
+            self.cloudButton.alpha = self.isUIHidden ? 0.0 : 1.0;
+            self.cloudButton.userInteractionEnabled = !self.isUIHidden;
+        }
+    }];
 }
 
 - (void)bringControlButtonsToFront {
+    // 将UI切换按钮提到最前面（始终可见）
+    [self.view bringSubviewToFront:self.toggleUIButton];
+    
     // 将所有控制按钮提到最前面
     [self.view bringSubviewToFront:self.performanceControlButton];
     [self.view bringSubviewToFront:self.effectSelectorButton];
@@ -427,6 +582,7 @@
     // 将所有快捷按钮也提到前面
     for (UIView *subview in self.view.subviews) {
         if ([subview isKindOfClass:[UIButton class]] && 
+            subview != self.toggleUIButton &&
             subview != self.performanceControlButton &&
             subview != self.effectSelectorButton && 
             subview != self.galaxyControlButton &&
@@ -808,9 +964,24 @@
         if (isPlaying) {
             [weakSelf.player stop];
         } else {
-            NSString *fileName = musicItem.fileName;
-            NSString *playableFileName = [AudioFileFormats prepareAudioFileForPlayback:fileName];
-            [weakSelf.player playWithFileName:playableFileName];
+            NSString *playPath = nil;
+            
+            // 优先使用已解密文件
+            if (musicItem.decryptedPath && [[NSFileManager defaultManager] fileExistsAtPath:musicItem.decryptedPath]) {
+                playPath = musicItem.decryptedPath;
+            } 
+            // 检查是否是NCM文件，需要先解密
+            else if ([AudioFileFormats needsDecryption:musicItem.fileName]) {
+                playPath = [AudioFileFormats prepareAudioFileForPlayback:musicItem.fileName];
+                // 如果解密成功，更新状态
+                if (playPath && [playPath hasPrefix:@"/"] && [[NSFileManager defaultManager] fileExistsAtPath:playPath]) {
+                    [weakSelf.musicLibrary updateNCMDecryptionStatus:musicItem decryptedPath:playPath];
+                }
+            } else {
+                playPath = [AudioFileFormats prepareAudioFileForPlayback:musicItem.fileName];
+            }
+            
+            [weakSelf.player playWithFileName:playPath];
         }
     };
     
@@ -847,13 +1018,29 @@
     
     [self updateAudioSelection];
     
-    // 🔧 优先使用完整路径，支持云下载的文件
+    // 🔧 优先使用完整路径，支持云下载的文件和已解密的 NCM 文件
     NSString *playPath = nil;
     
-    NSLog(@"🎵 准备播放: fileName=%@, filePath=%@", musicItem.fileName, musicItem.filePath);
+    NSLog(@"🎵 准备播放: fileName=%@, filePath=%@, decryptedPath=%@", musicItem.fileName, musicItem.filePath, musicItem.decryptedPath);
     
-    // 检查是否有完整路径（云下载的文件或已解密的 NCM 文件）
-    if (musicItem.filePath && [musicItem.filePath hasPrefix:@"/"]) {
+    // 🆕 优先检查是否已有解密后的文件（NCM 转 MP3）
+    if (musicItem.decryptedPath && [[NSFileManager defaultManager] fileExistsAtPath:musicItem.decryptedPath]) {
+        playPath = musicItem.decryptedPath;
+        NSLog(@"✅ 使用已解密文件播放: %@", playPath);
+    }
+    // 🔧 检查是否是NCM文件，如果是则需要先解密
+    else if ([AudioFileFormats needsDecryption:musicItem.fileName]) {
+        NSLog(@"🔓 检测到NCM文件，开始自动解密...");
+        playPath = [AudioFileFormats prepareAudioFileForPlayback:musicItem.fileName];
+        
+        // 如果解密成功，更新 MusicItem 的解密路径
+        if (playPath && [playPath hasPrefix:@"/"] && [[NSFileManager defaultManager] fileExistsAtPath:playPath]) {
+            [self.musicLibrary updateNCMDecryptionStatus:musicItem decryptedPath:playPath];
+            NSLog(@"✅ 自动解密成功: %@", playPath);
+        }
+    }
+    // 检查是否有完整路径（云下载的文件）
+    else if (musicItem.filePath && [musicItem.filePath hasPrefix:@"/"]) {
         // 使用完整路径（云下载文件或已存在的文件）
         playPath = musicItem.filePath;
         
@@ -867,8 +1054,7 @@
         }
     } else {
         // 使用文件名（Bundle 中的文件）
-        NSString *fileName = musicItem.fileName;
-        playPath = [AudioFileFormats prepareAudioFileForPlayback:fileName];
+        playPath = [AudioFileFormats prepareAudioFileForPlayback:musicItem.fileName];
         NSLog(@"🎵 从 Bundle 播放: %@", playPath);
     }
     
@@ -926,8 +1112,12 @@
                     // 刷新 cell
                     [self.tableView reloadRowsAtIndexPaths:@[indexPath] withRowAnimation:UITableViewRowAnimationAutomatic];
                     
+                    // 🆕 自动播放解密后的文件
+                    NSLog(@"🎵 开始播放解密后的文件: %@", result);
+                    [self.player playWithFileName:result];
+                    
                     // 显示成功提示
-                    [self showAlert:@"✅ 转换成功" message:[NSString stringWithFormat:@"已成功转换: %@\n现在可以播放了！", musicItem.displayName ?: musicItem.fileName]];
+                    [self showAlert:@"✅ 转换成功" message:[NSString stringWithFormat:@"已成功转换并开始播放: %@", musicItem.displayName ?: musicItem.fileName]];
                 } else {
                     NSLog(@"❌ NCM 转换失败: %@", error.localizedDescription);
                     
@@ -1016,13 +1206,31 @@
     
     [self updateAudioSelection];
     
-    // 🆕 自动处理 NCM 文件解密
+    // 🆕 自动处理 NCM 文件解密，优先使用已解密文件
     if (index < self.displayedMusicItems.count) {
         MusicItem *musicItem = self.displayedMusicItems[index];
-        NSString *fileName = musicItem.fileName;
-        NSString *playableFileName = [AudioFileFormats prepareAudioFileForPlayback:fileName];
+        NSString *playPath = nil;
         
-        [self.player playWithFileName:playableFileName];
+        // 优先使用已解密文件
+        if (musicItem.decryptedPath && [[NSFileManager defaultManager] fileExistsAtPath:musicItem.decryptedPath]) {
+            playPath = musicItem.decryptedPath;
+            NSLog(@"🎵 自动播放已解密文件: %@", playPath);
+        } 
+        // 检查是否是NCM文件，需要先解密
+        else if ([AudioFileFormats needsDecryption:musicItem.fileName]) {
+            NSLog(@"🔓 自动解密NCM文件: %@", musicItem.fileName);
+            playPath = [AudioFileFormats prepareAudioFileForPlayback:musicItem.fileName];
+            // 如果解密成功，更新状态
+            if (playPath && [playPath hasPrefix:@"/"] && [[NSFileManager defaultManager] fileExistsAtPath:playPath]) {
+                [self.musicLibrary updateNCMDecryptionStatus:musicItem decryptedPath:playPath];
+                NSLog(@"✅ 自动解密成功: %@", playPath);
+            }
+        } else {
+            playPath = [AudioFileFormats prepareAudioFileForPlayback:musicItem.fileName];
+            NSLog(@"🎵 自动播放: %@", playPath);
+        }
+        
+        [self.player playWithFileName:playPath];
     }
 }
 

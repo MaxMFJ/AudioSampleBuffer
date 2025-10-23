@@ -64,6 +64,18 @@ static inline float2 aspectCorrect(float2 uv, float4 resolution) {
     return pos + 0.5;
 }
 
+// 通用顶点输入结构（用于全屏四边形）
+struct VertexIn {
+    float2 position;
+    float2 texCoord;
+};
+
+// 通用顶点输出结构
+struct VertexOut {
+    float4 position [[position]];
+    float2 texCoord;
+};
+
 // 噪声函数
 static inline float noise(float2 uv) {
     return fract(sin(dot(uv, float2(12.9898, 78.233))) * 43758.5453);
@@ -81,6 +93,39 @@ static inline float fractalNoise(float2 uv, int octaves) {
     }
     
     return value;
+}
+
+// HSV 转 RGB
+static inline float3 hsv2rgb(float3 hsv) {
+    float h = hsv.x;
+    float s = hsv.y;
+    float v = hsv.z;
+    
+    float c = v * s;
+    float x = c * (1.0 - abs(fmod(h * 6.0, 2.0) - 1.0));
+    float m = v - c;
+    
+    float3 rgb;
+    if (h < 0.166667) {
+        rgb = float3(c, x, 0.0);
+    } else if (h < 0.333333) {
+        rgb = float3(x, c, 0.0);
+    } else if (h < 0.5) {
+        rgb = float3(0.0, c, x);
+    } else if (h < 0.666667) {
+        rgb = float3(0.0, x, c);
+    } else if (h < 0.833333) {
+        rgb = float3(x, 0.0, c);
+    } else {
+        rgb = float3(c, 0.0, x);
+    }
+    
+    return rgb + m;
+}
+
+// 角度转弧度
+static inline float radians(float degrees) {
+    return degrees * M_PI_F / 180.0;
 }
 
 #endif /* ShaderCommon_metal */

@@ -770,6 +770,414 @@ typedef struct {
 
 @end
 
+#pragma mark - 新增渲染器实现
+
+@implementation CircularWaveRenderer
+
+- (void)setupPipeline {
+    // 创建环形波浪效果的渲染管线
+    MTLRenderPipelineDescriptor *pipelineDescriptor = [[MTLRenderPipelineDescriptor alloc] init];
+    pipelineDescriptor.label = @"CircularWave";
+    pipelineDescriptor.vertexFunction = [self.defaultLibrary newFunctionWithName:@"neon_vertex"];
+    pipelineDescriptor.fragmentFunction = [self.defaultLibrary newFunctionWithName:@"circularWaveFragment"];
+    pipelineDescriptor.colorAttachments[0].pixelFormat = self.metalView.colorPixelFormat;
+    
+    // 配置MSAA采样
+    pipelineDescriptor.sampleCount = self.metalView.sampleCount;
+    pipelineDescriptor.depthAttachmentPixelFormat = self.metalView.depthStencilPixelFormat;
+    
+    // 启用混合
+    pipelineDescriptor.colorAttachments[0].blendingEnabled = YES;
+    pipelineDescriptor.colorAttachments[0].rgbBlendOperation = MTLBlendOperationAdd;
+    pipelineDescriptor.colorAttachments[0].sourceRGBBlendFactor = MTLBlendFactorSourceAlpha;
+    pipelineDescriptor.colorAttachments[0].destinationRGBBlendFactor = MTLBlendFactorOneMinusSourceAlpha;
+    
+    NSError *error;
+    self.pipelineState = [self.device newRenderPipelineStateWithDescriptor:pipelineDescriptor error:&error];
+    
+    if (!self.pipelineState) {
+        NSLog(@"❌ 创建环形波浪管线失败: %@", error);
+        NSLog(@"❌ 顶点函数: %@", pipelineDescriptor.vertexFunction);
+        NSLog(@"❌ 片段函数: %@", pipelineDescriptor.fragmentFunction);
+        return;
+    }
+    
+    NSLog(@"✅ 环形波浪管线创建成功");
+    
+    // 设置性能优化参数
+    [self setupPerformanceOptimizations];
+}
+
+- (void)setupPerformanceOptimizations {
+    NSString *deviceName = self.device.name;
+    NSMutableDictionary *params = [self.renderParameters mutableCopy] ?: [NSMutableDictionary dictionary];
+    
+    if ([deviceName containsString:@"A17"] || [deviceName containsString:@"A16"]) {
+        // 高端设备 - 高质量设置
+        params[@"waveCount"] = @(7);
+        params[@"waveQuality"] = @(1.0);
+        params[@"detailLevel"] = @(1.0);
+        NSLog(@"🌊 环形波浪: 高端设备，使用高质量设置");
+        
+    } else if ([deviceName containsString:@"A15"] || [deviceName containsString:@"A14"]) {
+        // 中端设备 - 平衡设置
+        params[@"waveCount"] = @(5);
+        params[@"waveQuality"] = @(0.8);
+        params[@"detailLevel"] = @(0.8);
+        NSLog(@"🌊 环形波浪: 中端设备，使用平衡设置");
+        
+    } else {
+        // 低端设备 - 性能优先
+        params[@"waveCount"] = @(3);
+        params[@"waveQuality"] = @(0.6);
+        params[@"detailLevel"] = @(0.6);
+        NSLog(@"🌊 环形波浪: 低端设备，使用性能优化设置");
+    }
+    
+    [self setRenderParameters:params];
+}
+
+- (void)encodeRenderCommands:(id<MTLRenderCommandEncoder>)encoder {
+    if (!self.pipelineState) return;
+    
+    [encoder setRenderPipelineState:self.pipelineState];
+    [encoder setVertexBuffer:self.uniformBuffer offset:0 atIndex:0];
+    [encoder setFragmentBuffer:self.uniformBuffer offset:0 atIndex:0];
+    [encoder drawPrimitives:MTLPrimitiveTypeTriangleStrip vertexStart:0 vertexCount:4];
+}
+
+@end
+
+@implementation ParticleFlowRenderer
+
+- (void)setupPipeline {
+    // 创建粒子流效果的渲染管线
+    MTLRenderPipelineDescriptor *pipelineDescriptor = [[MTLRenderPipelineDescriptor alloc] init];
+    pipelineDescriptor.label = @"ParticleFlow";
+    pipelineDescriptor.vertexFunction = [self.defaultLibrary newFunctionWithName:@"neon_vertex"];
+    pipelineDescriptor.fragmentFunction = [self.defaultLibrary newFunctionWithName:@"particleFlowFragment"];
+    pipelineDescriptor.colorAttachments[0].pixelFormat = self.metalView.colorPixelFormat;
+    
+    pipelineDescriptor.sampleCount = self.metalView.sampleCount;
+    pipelineDescriptor.depthAttachmentPixelFormat = self.metalView.depthStencilPixelFormat;
+    
+    pipelineDescriptor.colorAttachments[0].blendingEnabled = YES;
+    pipelineDescriptor.colorAttachments[0].rgbBlendOperation = MTLBlendOperationAdd;
+    pipelineDescriptor.colorAttachments[0].sourceRGBBlendFactor = MTLBlendFactorSourceAlpha;
+    pipelineDescriptor.colorAttachments[0].destinationRGBBlendFactor = MTLBlendFactorOneMinusSourceAlpha;
+    
+    NSError *error;
+    self.pipelineState = [self.device newRenderPipelineStateWithDescriptor:pipelineDescriptor error:&error];
+    
+    if (!self.pipelineState) {
+        NSLog(@"❌ 创建粒子流管线失败: %@", error);
+        NSLog(@"❌ 顶点函数: %@", pipelineDescriptor.vertexFunction);
+        NSLog(@"❌ 片段函数: %@", pipelineDescriptor.fragmentFunction);
+        return;
+    }
+    
+    NSLog(@"✅ 粒子流管线创建成功");
+    [self setupPerformanceOptimizations];
+}
+
+- (void)setupPerformanceOptimizations {
+    NSString *deviceName = self.device.name;
+    NSMutableDictionary *params = [self.renderParameters mutableCopy] ?: [NSMutableDictionary dictionary];
+    
+    if ([deviceName containsString:@"A17"] || [deviceName containsString:@"A16"]) {
+        params[@"particleCount"] = @(50);
+        params[@"particleQuality"] = @(1.0);
+        params[@"flowComplexity"] = @(1.0);
+        NSLog(@"🌊 粒子流: 高端设备，使用高质量设置");
+    } else if ([deviceName containsString:@"A15"] || [deviceName containsString:@"A14"]) {
+        params[@"particleCount"] = @(40);
+        params[@"particleQuality"] = @(0.8);
+        params[@"flowComplexity"] = @(0.8);
+        NSLog(@"🌊 粒子流: 中端设备，使用平衡设置");
+    } else {
+        params[@"particleCount"] = @(25);
+        params[@"particleQuality"] = @(0.6);
+        params[@"flowComplexity"] = @(0.6);
+        NSLog(@"🌊 粒子流: 低端设备，使用性能优化设置");
+    }
+    [self setRenderParameters:params];
+}
+
+- (void)encodeRenderCommands:(id<MTLRenderCommandEncoder>)encoder {
+    if (!self.pipelineState) {
+        NSLog(@"❌ ParticleFlow: pipelineState为空，无法渲染！");
+        return;
+    }
+    
+    static int frameCount = 0;
+    if (frameCount < 3) {
+        NSLog(@"🎬 ParticleFlow: 正在渲染第 %d 帧", frameCount);
+        frameCount++;
+    }
+    
+    [encoder setRenderPipelineState:self.pipelineState];
+    [encoder setVertexBuffer:self.uniformBuffer offset:0 atIndex:0];
+    [encoder setFragmentBuffer:self.uniformBuffer offset:0 atIndex:0];
+    [encoder drawPrimitives:MTLPrimitiveTypeTriangleStrip vertexStart:0 vertexCount:4];
+}
+
+@end
+
+@implementation AudioReactive3DRenderer
+
+- (void)setupPipeline {
+    // 创建音频响应3D效果的渲染管线
+    MTLRenderPipelineDescriptor *pipelineDescriptor = [[MTLRenderPipelineDescriptor alloc] init];
+    pipelineDescriptor.label = @"AudioReactive3D";
+    pipelineDescriptor.vertexFunction = [self.defaultLibrary newFunctionWithName:@"neon_vertex"];
+    pipelineDescriptor.fragmentFunction = [self.defaultLibrary newFunctionWithName:@"audioReactive3DFragment"];
+    pipelineDescriptor.colorAttachments[0].pixelFormat = self.metalView.colorPixelFormat;
+    
+    pipelineDescriptor.sampleCount = self.metalView.sampleCount;
+    pipelineDescriptor.depthAttachmentPixelFormat = self.metalView.depthStencilPixelFormat;
+    
+    pipelineDescriptor.colorAttachments[0].blendingEnabled = YES;
+    pipelineDescriptor.colorAttachments[0].rgbBlendOperation = MTLBlendOperationAdd;
+    pipelineDescriptor.colorAttachments[0].sourceRGBBlendFactor = MTLBlendFactorSourceAlpha;
+    pipelineDescriptor.colorAttachments[0].destinationRGBBlendFactor = MTLBlendFactorOneMinusSourceAlpha;
+    
+    NSError *error;
+    self.pipelineState = [self.device newRenderPipelineStateWithDescriptor:pipelineDescriptor error:&error];
+    
+    if (!self.pipelineState) {
+        NSLog(@"❌ 创建音频响应3D管线失败: %@", error);
+        NSLog(@"❌ 顶点函数: %@", pipelineDescriptor.vertexFunction);
+        NSLog(@"❌ 片段函数: %@", pipelineDescriptor.fragmentFunction);
+        return;
+    }
+    
+    NSLog(@"✅ 音频响应3D管线创建成功");
+    [self setupPerformanceOptimizations];
+}
+
+- (void)setupPerformanceOptimizations {
+    NSString *deviceName = self.device.name;
+    NSMutableDictionary *params = [self.renderParameters mutableCopy] ?: [NSMutableDictionary dictionary];
+    
+    if ([deviceName containsString:@"A17"] || [deviceName containsString:@"A16"]) {
+        params[@"geometryComplexity"] = @(1.0);
+        params[@"renderQuality"] = @(1.0);
+        NSLog(@"🎨 音频响应3D: 高端设备，使用高质量设置");
+    } else if ([deviceName containsString:@"A15"] || [deviceName containsString:@"A14"]) {
+        params[@"geometryComplexity"] = @(0.8);
+        params[@"renderQuality"] = @(0.8);
+        NSLog(@"🎨 音频响应3D: 中端设备，使用平衡设置");
+    } else {
+        params[@"geometryComplexity"] = @(0.6);
+        params[@"renderQuality"] = @(0.6);
+        NSLog(@"🎨 音频响应3D: 低端设备，使用性能优化设置");
+    }
+    [self setRenderParameters:params];
+}
+
+- (void)encodeRenderCommands:(id<MTLRenderCommandEncoder>)encoder {
+    if (!self.pipelineState) return;
+    
+    [encoder setRenderPipelineState:self.pipelineState];
+    [encoder setVertexBuffer:self.uniformBuffer offset:0 atIndex:0];
+    [encoder setFragmentBuffer:self.uniformBuffer offset:0 atIndex:0];
+    [encoder drawPrimitives:MTLPrimitiveTypeTriangleStrip vertexStart:0 vertexCount:4];
+}
+
+@end
+
+@implementation FireworksRenderer
+
+- (void)setupPipeline {
+    // 创建烟花效果的渲染管线
+    MTLRenderPipelineDescriptor *pipelineDescriptor = [[MTLRenderPipelineDescriptor alloc] init];
+    pipelineDescriptor.label = @"Fireworks";
+    pipelineDescriptor.vertexFunction = [self.defaultLibrary newFunctionWithName:@"neon_vertex"];
+    pipelineDescriptor.fragmentFunction = [self.defaultLibrary newFunctionWithName:@"fireworksFragment"];
+    pipelineDescriptor.colorAttachments[0].pixelFormat = self.metalView.colorPixelFormat;
+    
+    pipelineDescriptor.sampleCount = self.metalView.sampleCount;
+    pipelineDescriptor.depthAttachmentPixelFormat = self.metalView.depthStencilPixelFormat;
+    
+    pipelineDescriptor.colorAttachments[0].blendingEnabled = YES;
+    pipelineDescriptor.colorAttachments[0].rgbBlendOperation = MTLBlendOperationAdd;
+    pipelineDescriptor.colorAttachments[0].sourceRGBBlendFactor = MTLBlendFactorSourceAlpha;
+    pipelineDescriptor.colorAttachments[0].destinationRGBBlendFactor = MTLBlendFactorOneMinusSourceAlpha;
+    
+    NSError *error;
+    self.pipelineState = [self.device newRenderPipelineStateWithDescriptor:pipelineDescriptor error:&error];
+    
+    if (!self.pipelineState) {
+        NSLog(@"❌ 创建烟花管线失败: %@", error);
+        NSLog(@"❌ 顶点函数: %@", pipelineDescriptor.vertexFunction);
+        NSLog(@"❌ 片段函数: %@", pipelineDescriptor.fragmentFunction);
+        return;
+    }
+    
+    NSLog(@"✅ 烟花管线创建成功");
+    [self setupPerformanceOptimizations];
+}
+
+- (void)setupPerformanceOptimizations {
+    NSString *deviceName = self.device.name;
+    NSMutableDictionary *params = [self.renderParameters mutableCopy] ?: [NSMutableDictionary dictionary];
+    
+    if ([deviceName containsString:@"A17"] || [deviceName containsString:@"A16"]) {
+        params[@"maxFireworks"] = @(5);
+        params[@"particlesPerFirework"] = @(25);
+        params[@"fireworkQuality"] = @(1.0);
+        NSLog(@"🎆 烟花: 高端设备，使用高质量设置");
+    } else if ([deviceName containsString:@"A15"] || [deviceName containsString:@"A14"]) {
+        params[@"maxFireworks"] = @(3);
+        params[@"particlesPerFirework"] = @(20);
+        params[@"fireworkQuality"] = @(0.8);
+        NSLog(@"🎆 烟花: 中端设备，使用平衡设置");
+    } else {
+        params[@"maxFireworks"] = @(2);
+        params[@"particlesPerFirework"] = @(15);
+        params[@"fireworkQuality"] = @(0.6);
+        NSLog(@"🎆 烟花: 低端设备，使用性能优化设置");
+    }
+    [self setRenderParameters:params];
+}
+
+- (void)encodeRenderCommands:(id<MTLRenderCommandEncoder>)encoder {
+    if (!self.pipelineState) return;
+    
+    [encoder setRenderPipelineState:self.pipelineState];
+    [encoder setVertexBuffer:self.uniformBuffer offset:0 atIndex:0];
+    [encoder setFragmentBuffer:self.uniformBuffer offset:0 atIndex:0];
+    [encoder drawPrimitives:MTLPrimitiveTypeTriangleStrip vertexStart:0 vertexCount:4];
+}
+
+@end
+
+@implementation GeometricMorphRenderer
+
+- (void)setupPipeline {
+    // 创建几何变形效果的渲染管线
+    MTLRenderPipelineDescriptor *pipelineDescriptor = [[MTLRenderPipelineDescriptor alloc] init];
+    pipelineDescriptor.label = @"GeometricMorph";
+    pipelineDescriptor.vertexFunction = [self.defaultLibrary newFunctionWithName:@"neon_vertex"];
+    pipelineDescriptor.fragmentFunction = [self.defaultLibrary newFunctionWithName:@"geometricMorphFragment"];
+    pipelineDescriptor.colorAttachments[0].pixelFormat = self.metalView.colorPixelFormat;
+    
+    pipelineDescriptor.sampleCount = self.metalView.sampleCount;
+    pipelineDescriptor.depthAttachmentPixelFormat = self.metalView.depthStencilPixelFormat;
+    
+    pipelineDescriptor.colorAttachments[0].blendingEnabled = YES;
+    pipelineDescriptor.colorAttachments[0].rgbBlendOperation = MTLBlendOperationAdd;
+    pipelineDescriptor.colorAttachments[0].sourceRGBBlendFactor = MTLBlendFactorSourceAlpha;
+    pipelineDescriptor.colorAttachments[0].destinationRGBBlendFactor = MTLBlendFactorOneMinusSourceAlpha;
+    
+    NSError *error;
+    self.pipelineState = [self.device newRenderPipelineStateWithDescriptor:pipelineDescriptor error:&error];
+    
+    if (!self.pipelineState) {
+        NSLog(@"❌ 创建几何变形管线失败: %@", error);
+        NSLog(@"❌ 顶点函数: %@", pipelineDescriptor.vertexFunction);
+        NSLog(@"❌ 片段函数: %@", pipelineDescriptor.fragmentFunction);
+        return;
+    }
+    
+    NSLog(@"✅ 几何变形管线创建成功");
+    [self setupPerformanceOptimizations];
+}
+
+- (void)setupPerformanceOptimizations {
+    NSString *deviceName = self.device.name;
+    NSMutableDictionary *params = [self.renderParameters mutableCopy] ?: [NSMutableDictionary dictionary];
+    
+    if ([deviceName containsString:@"A17"] || [deviceName containsString:@"A16"]) {
+        params[@"shapeComplexity"] = @(8);
+        params[@"edgeQuality"] = @(1.0);
+        NSLog(@"🔷 几何变形: 高端设备，使用高质量设置");
+    } else if ([deviceName containsString:@"A15"] || [deviceName containsString:@"A14"]) {
+        params[@"shapeComplexity"] = @(6);
+        params[@"edgeQuality"] = @(0.8);
+        NSLog(@"🔷 几何变形: 中端设备，使用平衡设置");
+    } else {
+        params[@"shapeComplexity"] = @(4);
+        params[@"edgeQuality"] = @(0.6);
+        NSLog(@"🔷 几何变形: 低端设备，使用性能优化设置");
+    }
+    [self setRenderParameters:params];
+}
+
+- (void)encodeRenderCommands:(id<MTLRenderCommandEncoder>)encoder {
+    if (!self.pipelineState) return;
+    
+    [encoder setRenderPipelineState:self.pipelineState];
+    [encoder setVertexBuffer:self.uniformBuffer offset:0 atIndex:0];
+    [encoder setFragmentBuffer:self.uniformBuffer offset:0 atIndex:0];
+    [encoder drawPrimitives:MTLPrimitiveTypeTriangleStrip vertexStart:0 vertexCount:4];
+}
+
+@end
+
+@implementation FractalPatternRenderer
+
+- (void)setupPipeline {
+    // 创建分形图案效果的渲染管线
+    MTLRenderPipelineDescriptor *pipelineDescriptor = [[MTLRenderPipelineDescriptor alloc] init];
+    pipelineDescriptor.label = @"FractalPattern";
+    pipelineDescriptor.vertexFunction = [self.defaultLibrary newFunctionWithName:@"neon_vertex"];
+    pipelineDescriptor.fragmentFunction = [self.defaultLibrary newFunctionWithName:@"fractalPatternFragment"];
+    pipelineDescriptor.colorAttachments[0].pixelFormat = self.metalView.colorPixelFormat;
+    
+    pipelineDescriptor.sampleCount = self.metalView.sampleCount;
+    pipelineDescriptor.depthAttachmentPixelFormat = self.metalView.depthStencilPixelFormat;
+    
+    pipelineDescriptor.colorAttachments[0].blendingEnabled = YES;
+    pipelineDescriptor.colorAttachments[0].rgbBlendOperation = MTLBlendOperationAdd;
+    pipelineDescriptor.colorAttachments[0].sourceRGBBlendFactor = MTLBlendFactorSourceAlpha;
+    pipelineDescriptor.colorAttachments[0].destinationRGBBlendFactor = MTLBlendFactorOneMinusSourceAlpha;
+    
+    NSError *error;
+    self.pipelineState = [self.device newRenderPipelineStateWithDescriptor:pipelineDescriptor error:&error];
+    
+    if (!self.pipelineState) {
+        NSLog(@"❌ 创建分形图案管线失败: %@", error);
+        NSLog(@"❌ 顶点函数: %@", pipelineDescriptor.vertexFunction);
+        NSLog(@"❌ 片段函数: %@", pipelineDescriptor.fragmentFunction);
+        return;
+    }
+    
+    NSLog(@"✅ 分形图案管线创建成功");
+    [self setupPerformanceOptimizations];
+}
+
+- (void)setupPerformanceOptimizations {
+    NSString *deviceName = self.device.name;
+    NSMutableDictionary *params = [self.renderParameters mutableCopy] ?: [NSMutableDictionary dictionary];
+    
+    if ([deviceName containsString:@"A17"] || [deviceName containsString:@"A16"]) {
+        params[@"maxIterations"] = @(40);
+        params[@"fractalQuality"] = @(1.0);
+        NSLog(@"🌀 分形图案: 高端设备，使用高质量设置");
+    } else if ([deviceName containsString:@"A15"] || [deviceName containsString:@"A14"]) {
+        params[@"maxIterations"] = @(30);
+        params[@"fractalQuality"] = @(0.8);
+        NSLog(@"🌀 分形图案: 中端设备，使用平衡设置");
+    } else {
+        params[@"maxIterations"] = @(20);
+        params[@"fractalQuality"] = @(0.6);
+        NSLog(@"🌀 分形图案: 低端设备，使用性能优化设置");
+    }
+    [self setRenderParameters:params];
+}
+
+- (void)encodeRenderCommands:(id<MTLRenderCommandEncoder>)encoder {
+    if (!self.pipelineState) return;
+    
+    [encoder setRenderPipelineState:self.pipelineState];
+    [encoder setVertexBuffer:self.uniformBuffer offset:0 atIndex:0];
+    [encoder setFragmentBuffer:self.uniformBuffer offset:0 atIndex:0];
+    [encoder drawPrimitives:MTLPrimitiveTypeTriangleStrip vertexStart:0 vertexCount:4];
+}
+
+@end
+
 @implementation DefaultEffectRenderer
 
 - (void)setupPipeline {
@@ -832,6 +1240,14 @@ typedef struct {
 - (id<MetalRenderer>)createRendererForEffect:(VisualEffectType)effectType 
                                    metalView:(MTKView *)metalView {
     switch (effectType) {
+        // 基础效果
+        case VisualEffectTypeCircularWave:
+            return [[CircularWaveRenderer alloc] initWithMetalView:metalView];
+            
+        case VisualEffectTypeParticleFlow:
+            return [[ParticleFlowRenderer alloc] initWithMetalView:metalView];
+            
+        // Metal高端效果
         case VisualEffectTypeNeonGlow:
             return [[NeonGlowRenderer alloc] initWithMetalView:metalView];
             
@@ -850,14 +1266,27 @@ typedef struct {
         case VisualEffectTypeCyberPunk:
             return [[CyberPunkRenderer alloc] initWithMetalView:metalView];
             
+        case VisualEffectTypeAudioReactive3D:
+            return [[AudioReactive3DRenderer alloc] initWithMetalView:metalView];
+            
+        // 创意效果
         case VisualEffectTypeGalaxy:
             return [[GalaxyRenderer alloc] initWithMetalView:metalView];
+            
+        case VisualEffectTypeLightning:
+            return [[LightningRenderer alloc] initWithMetalView:metalView];
+            
+        case VisualEffectTypeFireworks:
+            return [[FireworksRenderer alloc] initWithMetalView:metalView];
             
         case VisualEffectTypeLiquidMetal:
             return [[LiquidMetalRenderer alloc] initWithMetalView:metalView];
             
-        case VisualEffectTypeLightning:
-            return [[LightningRenderer alloc] initWithMetalView:metalView];
+        case VisualEffectTypeGeometricMorph:
+            return [[GeometricMorphRenderer alloc] initWithMetalView:metalView];
+            
+        case VisualEffectTypeFractalPattern:
+            return [[FractalPatternRenderer alloc] initWithMetalView:metalView];
             
         default:
             return [[DefaultEffectRenderer alloc] initWithMetalView:metalView];

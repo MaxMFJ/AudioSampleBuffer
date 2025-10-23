@@ -314,8 +314,23 @@
                 _currentEffectType = effectType;
                 
                 // 开始渲染（仅对Metal特效）
-                if (_isEffectActive && isMetalEffect) {
+                if (isMetalEffect) {
+                    // 🔧 修复：切换Metal特效后总是启动渲染
                     [_currentRenderer startRendering];
+                    _isEffectActive = YES;  // 确保标志被设置
+                    NSLog(@"▶️ ParticleFlow: 已启动渲染，isEffectActive=%d", _isEffectActive);
+                    
+                    // 🔍 调试：检查MTKView的状态
+                    NSLog(@"🔍 MTKView状态:");
+                    NSLog(@"   hidden: %d", _metalView.hidden);
+                    NSLog(@"   alpha: %.2f", _metalView.alpha);
+                    NSLog(@"   frame: %@", NSStringFromCGRect(_metalView.frame));
+                    NSLog(@"   superview: %@", _metalView.superview);
+                    NSLog(@"   paused: %d", _metalView.paused);
+                    NSLog(@"   device: %@", _metalView.device.name);
+                    NSLog(@"   clearColor: (%.2f, %.2f, %.2f, %.2f)", 
+                          _metalView.clearColor.red, _metalView.clearColor.green, 
+                          _metalView.clearColor.blue, _metalView.clearColor.alpha);
                 }
                 
                 // 通知代理
@@ -538,6 +553,7 @@
 - (BOOL)isMetalEffect:(VisualEffectType)effectType {
     // 判断是否为需要Metal渲染的特效
     switch (effectType) {
+        // 旧Metal特效
         case VisualEffectTypeNeonGlow:
         case VisualEffectType3DWaveform:
         case VisualEffectTypeFluidSimulation:
@@ -547,11 +563,16 @@
         case VisualEffectTypeGalaxy:
         case VisualEffectTypeLiquidMetal:
         case VisualEffectTypeLightning:
+        // 新Metal特效
+        case VisualEffectTypeCircularWave:
+        case VisualEffectTypeParticleFlow:
+        case VisualEffectTypeAudioReactive3D:
+        case VisualEffectTypeFireworks:
+        case VisualEffectTypeGeometricMorph:
+        case VisualEffectTypeFractalPattern:
             return YES;
             
         case VisualEffectTypeClassicSpectrum:
-        case VisualEffectTypeCircularWave:
-        case VisualEffectTypeParticleFlow:
         default:
             return NO;
     }

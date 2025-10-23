@@ -151,6 +151,42 @@ NS_ASSUME_NONNULL_BEGIN
 @end
 
 /**
+ * 环形波浪渲染器
+ */
+@interface CircularWaveRenderer : BaseMetalRenderer
+@end
+
+/**
+ * 粒子流渲染器
+ */
+@interface ParticleFlowRenderer : BaseMetalRenderer
+@end
+
+/**
+ * 音频响应3D渲染器
+ */
+@interface AudioReactive3DRenderer : BaseMetalRenderer
+@end
+
+/**
+ * 烟花效果渲染器
+ */
+@interface FireworksRenderer : BaseMetalRenderer
+@end
+
+/**
+ * 几何变形渲染器
+ */
+@interface GeometricMorphRenderer : BaseMetalRenderer
+@end
+
+/**
+ * 分形图案渲染器
+ */
+@interface FractalPatternRenderer : BaseMetalRenderer
+@end
+
+/**
  * 默认效果渲染器
  */
 @interface DefaultEffectRenderer : BaseMetalRenderer

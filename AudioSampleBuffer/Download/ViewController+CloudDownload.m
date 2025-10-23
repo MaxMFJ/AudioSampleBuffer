@@ -46,6 +46,9 @@
     
     [self.view addSubview:cloudButton];
     
+    // 🔑 保存按钮引用到ViewController属性中，以便在UI切换时可以隐藏/显示
+    [self setValue:cloudButton forKey:@"cloudButton"];
+    
     NSLog(@"☁️ [云端下载] 功能已启用");
 }
 

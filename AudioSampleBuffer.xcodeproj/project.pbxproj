@@ -7,6 +7,13 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		4C110D482EA9CD5100D59E12 /* AudioReactive3DShader.metal in Sources */ = {isa = PBXBuildFile; fileRef = 4C110D412EA9CD5100D59E12 /* AudioReactive3DShader.metal */; };
+		4C110D492EA9CD5100D59E12 /* GeometricMorphShader.metal in Sources */ = {isa = PBXBuildFile; fileRef = 4C110D452EA9CD5100D59E12 /* GeometricMorphShader.metal */; };
+		4C110D4A2EA9CD5100D59E12 /* CircularWaveShader.metal in Sources */ = {isa = PBXBuildFile; fileRef = 4C110D422EA9CD5100D59E12 /* CircularWaveShader.metal */; };
+		4C110D4B2EA9CD5100D59E12 /* FractalPatternShader.metal in Sources */ = {isa = PBXBuildFile; fileRef = 4C110D442EA9CD5100D59E12 /* FractalPatternShader.metal */; };
+		4C110D4C2EA9CD5100D59E12 /* LiquidMetalShader.metal in Sources */ = {isa = PBXBuildFile; fileRef = 4C110D462EA9CD5100D59E12 /* LiquidMetalShader.metal */; };
+		4C110D4E2EA9CD5100D59E12 /* FireworksShader.metal in Sources */ = {isa = PBXBuildFile; fileRef = 4C110D432EA9CD5100D59E12 /* FireworksShader.metal */; };
+		4C110D502EA9DA7F00D59E12 /* ParticleFlowShader.metal in Sources */ = {isa = PBXBuildFile; fileRef = 4C110D4F2EA9DA7F00D59E12 /* ParticleFlowShader.metal */; };
 		4C2C69F02EA216AF00D18118 /* 队长 - 楼顶上的小斑鸠.ncm in Resources */ = {isa = PBXBuildFile; fileRef = 4C2C69EC2EA216AF00D18118 /* 队长 - 楼顶上的小斑鸠.ncm */; };
 		4C2C69F12EA216AF00D18118 /* 小霞,海洋Bo - 向云端.ncm in Resources */ = {isa = PBXBuildFile; fileRef = 4C2C69EF2EA216AF00D18118 /* 小霞,海洋Bo - 向云端.ncm */; };
 		4C2C69F22EA216AF00D18118 /* 郭顶 - 凄美地.ncm in Resources */ = {isa = PBXBuildFile; fileRef = 4C2C69ED2EA216AF00D18118 /* 郭顶 - 凄美地.ncm */; };
@@ -219,6 +226,13 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		4C110D412EA9CD5100D59E12 /* AudioReactive3DShader.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = AudioReactive3DShader.metal; sourceTree = "<group>"; };
+		4C110D422EA9CD5100D59E12 /* CircularWaveShader.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = CircularWaveShader.metal; sourceTree = "<group>"; };
+		4C110D432EA9CD5100D59E12 /* FireworksShader.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = FireworksShader.metal; sourceTree = "<group>"; };
+		4C110D442EA9CD5100D59E12 /* FractalPatternShader.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = FractalPatternShader.metal; sourceTree = "<group>"; };
+		4C110D452EA9CD5100D59E12 /* GeometricMorphShader.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = GeometricMorphShader.metal; sourceTree = "<group>"; };
+		4C110D462EA9CD5100D59E12 /* LiquidMetalShader.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = LiquidMetalShader.metal; sourceTree = "<group>"; };
+		4C110D4F2EA9DA7F00D59E12 /* ParticleFlowShader.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = ParticleFlowShader.metal; sourceTree = "<group>"; };
 		4C2C69EC2EA216AF00D18118 /* 队长 - 楼顶上的小斑鸠.ncm */ = {isa = PBXFileReference; lastKnownFileType = file; path = "队长 - 楼顶上的小斑鸠.ncm"; sourceTree = "<group>"; };
 		4C2C69ED2EA216AF00D18118 /* 郭顶 - 凄美地.ncm */ = {isa = PBXFileReference; lastKnownFileType = file; path = "郭顶 - 凄美地.ncm"; sourceTree = "<group>"; };
 		4C2C69EE2EA216AF00D18118 /* 黄绮珊 - 离不开你 (Live).ncm */ = {isa = PBXFileReference; lastKnownFileType = file; path = "黄绮珊 - 离不开你 (Live).ncm"; sourceTree = "<group>"; };
@@ -795,6 +809,13 @@
 		4C66E7152E8A9255003200DA /* VisualEffects */ = {
 			isa = PBXGroup;
 			children = (
+				4C110D412EA9CD5100D59E12 /* AudioReactive3DShader.metal */,
+				4C110D422EA9CD5100D59E12 /* CircularWaveShader.metal */,
+				4C110D432EA9CD5100D59E12 /* FireworksShader.metal */,
+				4C110D442EA9CD5100D59E12 /* FractalPatternShader.metal */,
+				4C110D452EA9CD5100D59E12 /* GeometricMorphShader.metal */,
+				4C110D462EA9CD5100D59E12 /* LiquidMetalShader.metal */,
+				4C110D4F2EA9DA7F00D59E12 /* ParticleFlowShader.metal */,
 				4C77CD192E990F61008EA7C6 /* CyberpunkControlPanel.h */,
 				4C77CD1A2E990F61008EA7C6 /* CyberpunkControlPanel.m */,
 				4C66E71B2E8A98FB003200DA /* GalaxyControlPanel.h */,
@@ -1215,6 +1236,13 @@
 				4C5168832E9E5FD500853960 /* LyricsView.m in Sources */,
 				4C5168842E9E5FD500853960 /* LRCParser.m in Sources */,
 				64C5447F28C8395200C23393 /* AudioPlayCell.m in Sources */,
+				4C110D482EA9CD5100D59E12 /* AudioReactive3DShader.metal in Sources */,
+				4C110D492EA9CD5100D59E12 /* GeometricMorphShader.metal in Sources */,
+				4C110D4A2EA9CD5100D59E12 /* CircularWaveShader.metal in Sources */,
+				4C110D4B2EA9CD5100D59E12 /* FractalPatternShader.metal in Sources */,
+				4C110D4C2EA9CD5100D59E12 /* LiquidMetalShader.metal in Sources */,
+				4C110D4E2EA9CD5100D59E12 /* FireworksShader.metal in Sources */,
+				4C110D502EA9DA7F00D59E12 /* ParticleFlowShader.metal in Sources */,
 				64C5448B28C83A7700C23393 /* AudioSpectrumRecorder.m in Sources */,
 				4C66E71D2E8A98FB003200DA /* GalaxyControlPanel.m in Sources */,
 				64C5446228C838D100C23393 /* AppDelegate.m in Sources */,
