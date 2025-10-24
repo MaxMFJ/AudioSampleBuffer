@@ -30,6 +30,10 @@
 
 @synthesize duration = _duration;
 
+- (BOOL)isPlaying {
+    return self.player.isPlaying;
+}
+
 - (instancetype)init {
     if (self = [super init]) {
         [self configInit];
@@ -46,30 +50,16 @@
     // 🎵 初始化音高/速率参数
     _pitchShift = 0.0f;      // 默认原调
     _playbackRate = 1.0f;    // 默认原速
+    
+    // 🔊 默认不允许与其他应用混音
+    _allowMixWithOthers = NO;
 }
 
 - (void)setupPlayer {
     // 🔧 关键修复：配置音频会话
-    NSError *sessionError = nil;
-    AVAudioSession *audioSession = [AVAudioSession sharedInstance];
+    [self configureAudioSession];
     
-    // 设置音频会话类别为播放
-    [audioSession setCategory:AVAudioSessionCategoryPlayback 
-                  withOptions:AVAudioSessionCategoryOptionMixWithOthers 
-                        error:&sessionError];
-    if (sessionError) {
-        NSLog(@"⚠️ 音频会话配置失败: %@", sessionError);
-        sessionError = nil;
-    }
-    
-    // 激活音频会话
-    [audioSession setActive:YES error:&sessionError];
-    if (sessionError) {
-        NSLog(@"⚠️ 音频会话激活失败: %@", sessionError);
-        sessionError = nil;
-    } else {
-        NSLog(@"✅ 音频会话已激活: 类别=%@, 采样率=%.0fHz", audioSession.category, audioSession.sampleRate);
-    }
+    NSLog(@"✅ 音频会话已配置");
     
     [self.engine attachNode:self.player];
     [self.engine attachNode:self.timePitchNode];
@@ -135,6 +125,9 @@
 //    }
 //}
 - (void)playWithFileName:(NSString *)fileName {
+    // 🔊 关键修复：每次播放前重新配置音频会话，确保设置生效
+    [self configureAudioSession];
+    
     // 立即清空旧歌词，避免短暂显示上一首歌的歌词
     self.lyricsParser = nil;
     if ([self.delegate respondsToSelector:@selector(playerDidLoadLyrics:)]) {
@@ -173,14 +166,38 @@
     
     [self.player stop];
     [self.player scheduleFile:self.file atTime:nil completionHandler:nil];
+    
+    // 启动音频引擎并播放
     if (self.engine.isRunning == YES)
     {
         [self.player play];
+        NSLog(@"🎵 音频引擎已运行，直接播放");
     }else{
-        [self.engine startAndReturnError:nil];
+        NSError *engineError = nil;
+        BOOL started = [self.engine startAndReturnError:&engineError];
+        if (!started || engineError) {
+            NSLog(@"❌ 音频引擎启动失败: %@", engineError);
+            return;
+        }
         [self.player play];
-        
+        NSLog(@"🎵 音频引擎已启动并开始播放");
     }
+    
+    // 🔊 在开始播放后，再次确认音频会话状态
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.05 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        AVAudioSession *session = [AVAudioSession sharedInstance];
+        NSLog(@"🔍 [播放后验证] 音频会话状态:");
+        NSLog(@"   类别: %@", session.category);
+        NSLog(@"   选项: %lu", (unsigned long)session.categoryOptions);
+        NSLog(@"   混音: %@", (session.categoryOptions & AVAudioSessionCategoryOptionMixWithOthers) ? @"✅" : @"❌");
+    });
+    
+    // 🎵 通知代理播放已开始（延迟一点确保真正开始播放）
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        if ([self.delegate respondsToSelector:@selector(playerDidStartPlaying)]) {
+            [self.delegate playerDidStartPlaying];
+        }
+    });
   
     
 //    AVAudioTime *playerTime = [self.player playerTimeForNodeTime:self.player.lastRenderTime];
@@ -345,6 +362,67 @@
     self.timePitchNode.rate = _playbackRate;
     
     NSLog(@"🎵 [背景音乐] 速率调整: %.2fx", _playbackRate);
+}
+
+#pragma mark - 🔊 音频会话控制
+
+- (void)setAllowMixWithOthers:(BOOL)allowMixWithOthers {
+    if (_allowMixWithOthers != allowMixWithOthers) {
+        _allowMixWithOthers = allowMixWithOthers;
+        [self configureAudioSession];
+        NSLog(@"🔊 混音设置已更新: %@", _allowMixWithOthers ? @"允许与其他应用同时播放" : @"独占播放");
+    }
+}
+
+- (void)configureAudioSession {
+    NSError *sessionError = nil;
+    AVAudioSession *audioSession = [AVAudioSession sharedInstance];
+    
+    NSLog(@"🔊 [音频会话] 开始配置...");
+    NSLog(@"   混音开关状态: %@", self.allowMixWithOthers ? @"✅ 允许混音" : @"❌ 独占播放");
+    
+    // 根据 allowMixWithOthers 设置音频会话选项
+    AVAudioSessionCategoryOptions options = self.allowMixWithOthers ? AVAudioSessionCategoryOptionMixWithOthers : 0;
+    
+    // 设置音频会话类别和选项
+    BOOL categorySuccess = [audioSession setCategory:AVAudioSessionCategoryPlayback 
+                                          withOptions:options 
+                                                error:&sessionError];
+    if (!categorySuccess || sessionError) {
+        NSLog(@"❌ 音频会话类别配置失败: %@", sessionError);
+        sessionError = nil;
+    } else {
+        NSLog(@"✅ 音频会话类别已设置: %@", audioSession.category);
+        NSLog(@"   选项值: %lu (0=独占, 1=混音)", (unsigned long)audioSession.categoryOptions);
+    }
+    
+    // 激活音频会话（使用 WITH_OPTIONS 激活选项）
+    BOOL activateSuccess = [audioSession setActive:YES 
+                                       withOptions:AVAudioSessionSetActiveOptionNotifyOthersOnDeactivation 
+                                             error:&sessionError];
+    if (!activateSuccess || sessionError) {
+        NSLog(@"❌ 音频会话激活失败: %@", sessionError);
+        
+        // 如果失败，尝试不带选项激活
+        sessionError = nil;
+        activateSuccess = [audioSession setActive:YES error:&sessionError];
+        if (!activateSuccess || sessionError) {
+            NSLog(@"❌ 音频会话二次激活也失败: %@", sessionError);
+            sessionError = nil;
+        } else {
+            NSLog(@"✅ 音频会话已激活（二次尝试成功）");
+        }
+    } else {
+        NSLog(@"✅ 音频会话已激活");
+    }
+    
+    // 验证最终状态
+    NSLog(@"📋 [音频会话] 最终状态:");
+    NSLog(@"   类别: %@", audioSession.category);
+    NSLog(@"   模式: %@", audioSession.mode);
+    NSLog(@"   选项: %lu", (unsigned long)audioSession.categoryOptions);
+    NSLog(@"   采样率: %.0f Hz", audioSession.sampleRate);
+    NSLog(@"   混音状态: %@", (audioSession.categoryOptions & AVAudioSessionCategoryOptionMixWithOthers) ? @"✅ 允许" : @"❌ 禁止");
 }
 
 @end

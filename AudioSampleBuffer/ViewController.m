@@ -24,6 +24,7 @@
 #import "ViewController+CloudDownload.h"  // 🆕 云端下载功能
 #import <AVFoundation/AVFoundation.h>
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>  // 用于文件类型识别
+#import <MediaPlayer/MediaPlayer.h>  // 🎵 系统媒体控制
 
 @interface ViewController ()<CAAnimationDelegate,UITableViewDelegate, UITableViewDataSource, AudioSpectrumPlayerDelegate, VisualEffectManagerDelegate, GalaxyControlDelegate, CyberpunkControlDelegate, PerformanceControlDelegate, LyricsEffectControlDelegate, UISearchBarDelegate, UIDocumentPickerDelegate>
 {
@@ -48,6 +49,13 @@
 @property (nonatomic, strong) UIButton *importButton;  // 导入音乐按钮
 @property (nonatomic, assign) MusicSortType currentSortType;  // 当前排序方式
 @property (nonatomic, assign) BOOL sortAscending;  // 排序方向
+
+// 🎵 播放控制按钮
+@property (nonatomic, strong) UIButton *previousButton;  // 上一首按钮
+@property (nonatomic, strong) UIButton *playPauseButton;  // 播放/暂停按钮
+@property (nonatomic, strong) UIButton *nextButton;  // 下一首按钮
+@property (nonatomic, strong) UIButton *loopButton;  // 单曲循环按钮
+@property (nonatomic, assign) BOOL isSingleLoopMode;  // 是否单曲循环模式
 
 
 @property (nonatomic, strong) CAGradientLayer *gradientLayer;
@@ -92,6 +100,13 @@
 @property (nonatomic, assign) BOOL isUIHidden;  // UI是否隐藏
 @property (nonatomic, strong) NSMutableArray<UIButton *> *controlButtons;  // 所有控制按钮数组
 @property (nonatomic, strong) UIButton *cloudButton;  // 云端按钮
+
+// 🔊 混音控制
+@property (nonatomic, strong) UIView *mixAudioControlView;  // 混音控制容器视图
+@property (nonatomic, strong) UISwitch *mixAudioSwitch;  // 混音控制开关
+
+// 🎵 系统媒体控制
+@property (nonatomic, assign) NSTimeInterval lastNowPlayingUpdateTime;  // 上次更新系统媒体信息的时间
 @end
 
 @implementation ViewController
@@ -119,6 +134,27 @@
     if (self.spectrumView) {
         [self.spectrumView pauseRendering];
         NSLog(@"✅ 频谱视图已暂停");
+    }
+    
+    // 🎵 关键：进入后台时确保音频会话保持激活，更新播放信息
+    NSLog(@"🎵 检查播放状态: isPlaying=%@", self.player.isPlaying ? @"YES" : @"NO");
+    
+    if (self.player && self.player.isPlaying) {
+        NSLog(@"🎵 后台音乐播放: 保持音频会话激活");
+        
+        // 🔊 重要：不要在这里直接设置音频会话，避免覆盖混音设置
+        // 音频会话由 AudioSpectrumPlayer 管理，已经在播放时正确配置
+        
+        // 更新播放信息，确保控制中心显示
+        [self updateNowPlayingInfo];
+        
+        // 验证播放信息
+        NSDictionary *nowPlaying = [MPNowPlayingInfoCenter defaultCenter].nowPlayingInfo;
+        NSLog(@"✅ 后台播放信息已更新:");
+        NSLog(@"   - 标题: %@", nowPlaying[MPMediaItemPropertyTitle]);
+        NSLog(@"   - 播放速率: %@", nowPlaying[MPNowPlayingInfoPropertyPlaybackRate]);
+    } else {
+        NSLog(@"⚠️ 进入后台时没有音乐在播放");
     }
 }
 
@@ -489,6 +525,77 @@
     
     [self.view addSubview:self.lyricsEffectButton];
     [self.controlButtons addObject:self.lyricsEffectButton];
+    
+    // 🔊 添加混音控制开关
+    [self createMixAudioControl];
+}
+
+- (void)createMixAudioControl {
+    // 🔧 计算顶部偏移量
+    CGFloat safeTop = 0;
+    if (@available(iOS 11.0, *)) {
+        safeTop = self.view.safeAreaInsets.top;
+    }
+    CGFloat navigationBarHeight = self.navigationController.navigationBar.frame.size.height;
+    CGFloat statusBarHeight = [[UIApplication sharedApplication] statusBarFrame].size.height;
+    CGFloat topOffset = MAX(safeTop, statusBarHeight + navigationBarHeight) + 70; // 在第一行按钮下方
+    
+    // 创建容器视图
+    self.mixAudioControlView = [[UIView alloc] initWithFrame:CGRectMake(260, topOffset, 130, 50)];
+    self.mixAudioControlView.backgroundColor = [UIColor colorWithRed:0.2 green:0.4 blue:0.6 alpha:0.9];
+    self.mixAudioControlView.layer.cornerRadius = 25;
+    self.mixAudioControlView.layer.borderWidth = 2.0;
+    self.mixAudioControlView.layer.borderColor = [UIColor colorWithRed:0.4 green:0.6 blue:0.8 alpha:1.0].CGColor;
+    
+    // 添加阴影效果
+    self.mixAudioControlView.layer.shadowColor = [UIColor cyanColor].CGColor;
+    self.mixAudioControlView.layer.shadowOffset = CGSizeMake(0, 2);
+    self.mixAudioControlView.layer.shadowOpacity = 0.8;
+    self.mixAudioControlView.layer.shadowRadius = 4;
+    
+    // 创建图标标签
+    UILabel *iconLabel = [[UILabel alloc] initWithFrame:CGRectMake(10, 0, 40, 50)];
+    iconLabel.text = @"🔊";
+    iconLabel.font = [UIFont systemFontOfSize:24];
+    iconLabel.textAlignment = NSTextAlignmentCenter;
+    [self.mixAudioControlView addSubview:iconLabel];
+    
+    // 创建开关
+    self.mixAudioSwitch = [[UISwitch alloc] initWithFrame:CGRectMake(55, 10, 60, 30)];
+    self.mixAudioSwitch.on = NO;  // 默认关闭（不混音）
+    self.mixAudioSwitch.onTintColor = [UIColor colorWithRed:0.3 green:0.8 blue:0.5 alpha:1.0];
+    [self.mixAudioSwitch addTarget:self 
+                            action:@selector(mixAudioSwitchChanged:) 
+                  forControlEvents:UIControlEventValueChanged];
+    [self.mixAudioControlView addSubview:self.mixAudioSwitch];
+    
+    [self.view addSubview:self.mixAudioControlView];
+    [self.controlButtons addObject:self.mixAudioControlView];
+}
+
+- (void)mixAudioSwitchChanged:(UISwitch *)sender {
+    // 更新播放器的混音设置
+    self.player.allowMixWithOthers = sender.isOn;
+    
+    NSLog(@"🔊 混音控制已%@: %@", sender.isOn ? @"开启" : @"关闭", 
+          sender.isOn ? @"允许与其他应用同时播放" : @"独占音频播放");
+    
+    // 验证音频会话配置
+    AVAudioSession *session = [AVAudioSession sharedInstance];
+    NSLog(@"   当前音频会话类别: %@", session.category);
+    NSLog(@"   当前音频会话选项: %lu", (unsigned long)session.categoryOptions);
+    
+    // 显示提示
+    NSString *message = sender.isOn ? 
+        @"已开启：可与其他应用同时播放\n（如QQ音乐、网易云等）" : 
+        @"已关闭：独占音频播放\n（会暂停其他应用的音乐）";
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"🔊 混音设置"
+                                                                   message:message
+                                                            preferredStyle:UIAlertControllerStyleAlert];
+    [alert addAction:[UIAlertAction actionWithTitle:@"确定" 
+                                              style:UIAlertActionStyleDefault 
+                                            handler:nil]];
+    [self presentViewController:alert animated:YES completion:nil];
 }
 
 - (void)createToggleUIButton:(CGFloat)topOffset {
@@ -559,6 +666,24 @@
         if (self.importButton) {
             self.importButton.alpha = self.isUIHidden ? 0.0 : 1.0;
             self.importButton.userInteractionEnabled = !self.isUIHidden;
+        }
+        
+        // 🎵 播放控制按钮
+        if (self.previousButton) {
+            self.previousButton.alpha = self.isUIHidden ? 0.0 : 1.0;
+            self.previousButton.userInteractionEnabled = !self.isUIHidden;
+        }
+        if (self.playPauseButton) {
+            self.playPauseButton.alpha = self.isUIHidden ? 0.0 : 1.0;
+            self.playPauseButton.userInteractionEnabled = !self.isUIHidden;
+        }
+        if (self.nextButton) {
+            self.nextButton.alpha = self.isUIHidden ? 0.0 : 1.0;
+            self.nextButton.userInteractionEnabled = !self.isUIHidden;
+        }
+        if (self.loopButton) {
+            self.loopButton.alpha = self.isUIHidden ? 0.0 : 1.0;
+            self.loopButton.userInteractionEnabled = !self.isUIHidden;
         }
         
         // 搜索框
@@ -649,8 +774,14 @@
     // 添加歌词视图
     [self setupLyricsView];
     
-    // 🆕 启用云端下载功能
-    [self setupCloudDownloadFeature];
+    // 🆕 启用云端下载功能（暂时隐藏）
+    // [self setupCloudDownloadFeature];
+    
+    // 🎵 初始化播放器（确保在配置远程控制之前）
+    [self player]; // 触发懒加载
+    
+    // 🎵 配置系统媒体控制（控制中心、锁屏等）
+    [self setupRemoteCommandCenter];
 }
 
 - (void)setupBackgroundLayers {
@@ -747,7 +878,17 @@
     // 🆕 使用当前显示的音乐项获取封面
     if (self.displayedMusicItems.count > 0 && index < self.displayedMusicItems.count) {
         MusicItem *musicItem = self.displayedMusicItems[index];
-        NSURL *fileUrl = [[NSBundle mainBundle] URLForResource:musicItem.fileName withExtension:nil];
+        
+        // 🔧 修复：优先使用 filePath（导入的文件），否则从 Bundle 查找
+        NSURL *fileUrl = nil;
+        if (musicItem.filePath && [musicItem.filePath hasPrefix:@"/"]) {
+            fileUrl = [NSURL fileURLWithPath:musicItem.filePath];
+            NSLog(@"🖼️ 使用导入文件封面: %@", musicItem.filePath);
+        } else {
+            fileUrl = [[NSBundle mainBundle] URLForResource:musicItem.fileName withExtension:nil];
+            NSLog(@"🖼️ 使用Bundle文件封面: %@", musicItem.fileName);
+        }
+        
         imageView.image = [self musicImageWithMusicURL:fileUrl];
     }
     
@@ -785,9 +926,18 @@
     [self.animationCoordinator.particleManager setEmitterPosition:self.view.center];
     [self.animationCoordinator.particleManager setEmitterSize:self.view.bounds.size];
     
-    // 设置当前音频的粒子图像
-    if (self.audioArray.count > 0) {
-        NSURL *fileUrl = [[NSBundle mainBundle] URLForResource:self.audioArray[index] withExtension:nil];
+    // 🔧 修复：设置当前音频的粒子图像（使用 displayedMusicItems）
+    if (self.displayedMusicItems.count > 0 && index < self.displayedMusicItems.count) {
+        MusicItem *musicItem = self.displayedMusicItems[index];
+        
+        // 优先使用 filePath（导入的文件），否则从 Bundle 查找
+        NSURL *fileUrl = nil;
+        if (musicItem.filePath && [musicItem.filePath hasPrefix:@"/"]) {
+            fileUrl = [NSURL fileURLWithPath:musicItem.filePath];
+        } else {
+            fileUrl = [[NSBundle mainBundle] URLForResource:musicItem.fileName withExtension:nil];
+        }
+        
         UIImage *image = [self musicImageWithMusicURL:fileUrl];
         if (image) {
             [self.animationCoordinator updateParticleImage:image];
@@ -917,6 +1067,84 @@
     self.importButton.frame = CGRectMake(leftX, importButtonY, buttonWidth, buttonHeight);
     [self.importButton addTarget:self action:@selector(importMusicButtonTapped:) forControlEvents:UIControlEventTouchUpInside];
     [self.view addSubview:self.importButton];
+    
+    // 🎵 播放控制按钮 - 放在导入按钮下方，纵向排列4个按钮
+    CGFloat controlButtonsY = importButtonY + buttonHeight + spacing;
+    CGFloat controlButtonWidth = buttonWidth;  // 使用完整宽度
+    CGFloat controlButtonHeight = 32;  // 按钮高度
+    CGFloat controlSpacing = 4;  // 按钮之间的间距
+    
+    // 上一首按钮
+    self.previousButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    [self.previousButton setTitle:@"⏮️" forState:UIControlStateNormal];
+    self.previousButton.titleLabel.font = [UIFont systemFontOfSize:20];
+    [self.previousButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+    self.previousButton.backgroundColor = [UIColor colorWithRed:0.3 green:0.5 blue:0.7 alpha:0.85];
+    self.previousButton.layer.cornerRadius = 6;
+    self.previousButton.layer.borderWidth = 1.0;
+    self.previousButton.layer.borderColor = [UIColor colorWithRed:0.4 green:0.6 blue:0.8 alpha:0.8].CGColor;
+    self.previousButton.frame = CGRectMake(leftX, controlButtonsY, controlButtonWidth, controlButtonHeight);
+    [self.previousButton addTarget:self action:@selector(previousButtonTapped:) forControlEvents:UIControlEventTouchUpInside];
+    [self.view addSubview:self.previousButton];
+    
+    // 播放/暂停按钮
+    CGFloat playButtonY = controlButtonsY + controlButtonHeight + controlSpacing;
+    self.playPauseButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    [self.playPauseButton setTitle:@"▶️" forState:UIControlStateNormal];
+    self.playPauseButton.titleLabel.font = [UIFont systemFontOfSize:20];
+    [self.playPauseButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+    self.playPauseButton.backgroundColor = [UIColor colorWithRed:0.2 green:0.7 blue:0.3 alpha:0.85];
+    self.playPauseButton.layer.cornerRadius = 6;
+    self.playPauseButton.layer.borderWidth = 1.0;
+    self.playPauseButton.layer.borderColor = [UIColor colorWithRed:0.3 green:0.8 blue:0.4 alpha:0.8].CGColor;
+    self.playPauseButton.frame = CGRectMake(leftX, playButtonY, controlButtonWidth, controlButtonHeight);
+    [self.playPauseButton addTarget:self action:@selector(playPauseButtonTapped:) forControlEvents:UIControlEventTouchUpInside];
+    [self.view addSubview:self.playPauseButton];
+    
+    // 下一首按钮
+    CGFloat nextButtonY = playButtonY + controlButtonHeight + controlSpacing;
+    self.nextButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    [self.nextButton setTitle:@"⏭️" forState:UIControlStateNormal];
+    self.nextButton.titleLabel.font = [UIFont systemFontOfSize:20];
+    [self.nextButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+    self.nextButton.backgroundColor = [UIColor colorWithRed:0.3 green:0.5 blue:0.7 alpha:0.85];
+    self.nextButton.layer.cornerRadius = 6;
+    self.nextButton.layer.borderWidth = 1.0;
+    self.nextButton.layer.borderColor = [UIColor colorWithRed:0.4 green:0.6 blue:0.8 alpha:0.8].CGColor;
+    self.nextButton.frame = CGRectMake(leftX, nextButtonY, controlButtonWidth, controlButtonHeight);
+    [self.nextButton addTarget:self action:@selector(nextButtonTapped:) forControlEvents:UIControlEventTouchUpInside];
+    [self.view addSubview:self.nextButton];
+    
+    // 单曲循环按钮
+    CGFloat loopButtonY = nextButtonY + controlButtonHeight + controlSpacing;
+    self.loopButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    [self.loopButton setTitle:@"🔁" forState:UIControlStateNormal];
+    self.loopButton.titleLabel.font = [UIFont systemFontOfSize:20];
+    [self.loopButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+    self.loopButton.backgroundColor = [UIColor colorWithRed:0.6 green:0.4 blue:0.7 alpha:0.85];
+    self.loopButton.layer.cornerRadius = 6;
+    self.loopButton.layer.borderWidth = 1.0;
+    self.loopButton.layer.borderColor = [UIColor colorWithRed:0.7 green:0.5 blue:0.8 alpha:0.8].CGColor;
+    self.loopButton.frame = CGRectMake(leftX, loopButtonY, controlButtonWidth, controlButtonHeight);
+    [self.loopButton addTarget:self action:@selector(loopButtonTapped:) forControlEvents:UIControlEventTouchUpInside];
+    [self.view addSubview:self.loopButton];
+    
+    // 初始化循环模式
+    self.isSingleLoopMode = NO;
+    
+    // 云端下载按钮
+    CGFloat cloudButtonY = loopButtonY + controlButtonHeight + controlSpacing;
+    self.cloudButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    [self.cloudButton setTitle:@"☁️" forState:UIControlStateNormal];
+    self.cloudButton.titleLabel.font = [UIFont systemFontOfSize:20];
+    [self.cloudButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+    self.cloudButton.backgroundColor = [UIColor colorWithRed:0.2 green:0.6 blue:0.9 alpha:0.85];
+    self.cloudButton.layer.cornerRadius = 6;
+    self.cloudButton.layer.borderWidth = 1.0;
+    self.cloudButton.layer.borderColor = [UIColor colorWithRed:0.3 green:0.7 blue:1.0 alpha:0.8].CGColor;
+    self.cloudButton.frame = CGRectMake(leftX, cloudButtonY, controlButtonWidth, controlButtonHeight);
+    [self.cloudButton addTarget:self action:@selector(cloudDownloadButtonTapped:) forControlEvents:UIControlEventTouchUpInside];
+    [self.view addSubview:self.cloudButton];
     
     // 🆕 添加搜索栏 - 放在右侧
     CGFloat searchBarX = leftX + buttonWidth + 15;
@@ -1089,7 +1317,12 @@
         NSLog(@"🎵 从 Bundle 播放: %@", playPath);
     }
     
+    // 🎵 先设置基本的播放信息（立即设置，让控制中心显示）
+    [self updateNowPlayingInfoImmediate];
+    
     [self.player playWithFileName:playPath];
+    
+    // 🎵 注意：完整的播放信息将在 playerDidStartPlaying 回调中更新
 }
 
 // 🆕 转换NCM文件
@@ -1216,8 +1449,16 @@
     if (index < self.displayedMusicItems.count) {
         MusicItem *musicItem = self.displayedMusicItems[index];
         
-        // 更新封面图像
-        NSURL *fileUrl = [[NSBundle mainBundle] URLForResource:musicItem.fileName withExtension:nil];
+        // 🔧 修复：优先使用 filePath（导入的文件），否则从 Bundle 查找
+        NSURL *fileUrl = nil;
+        if (musicItem.filePath && [musicItem.filePath hasPrefix:@"/"]) {
+            fileUrl = [NSURL fileURLWithPath:musicItem.filePath];
+            NSLog(@"🖼️ 更新导入文件封面: %@", musicItem.filePath);
+        } else {
+            fileUrl = [[NSBundle mainBundle] URLForResource:musicItem.fileName withExtension:nil];
+            NSLog(@"🖼️ 更新Bundle文件封面: %@", musicItem.fileName);
+        }
+        
         UIImage *image = [self musicImageWithMusicURL:fileUrl];
         if (image) {
             imageView.image = image;
@@ -1251,6 +1492,14 @@
 }
 -(void)didFinishPlay
 {
+    // 🔂 单曲循环模式：重新播放当前歌曲
+    if (self.isSingleLoopMode) {
+        NSLog(@"🔂 单曲循环：重新播放当前歌曲");
+        [self playCurrentTrack];
+        return;
+    }
+    
+    // 🔁 列表循环模式：播放下一首
     index++;
     if (index >= self.displayedMusicItems.count)
     {
@@ -1265,36 +1514,8 @@
     
     [self updateAudioSelection];
     
-    // 🆕 自动处理 NCM 文件解密，优先使用已解密文件
-    if (index < self.displayedMusicItems.count) {
-        MusicItem *musicItem = self.displayedMusicItems[index];
-        NSString *playPath = nil;
-        
-        // 优先使用已解密文件
-        if (musicItem.decryptedPath && [[NSFileManager defaultManager] fileExistsAtPath:musicItem.decryptedPath]) {
-            playPath = musicItem.decryptedPath;
-            NSLog(@"🎵 自动播放已解密文件: %@", playPath);
-        } 
-        // 检查是否是NCM文件，需要先解密
-        else if ([AudioFileFormats needsDecryption:musicItem.fileName]) {
-            NSLog(@"🔓 自动解密NCM文件: %@", musicItem.fileName);
-            
-            // 🔧 优先传递完整路径
-            NSString *fileToDecrypt = (musicItem.filePath && [musicItem.filePath hasPrefix:@"/"]) ? musicItem.filePath : musicItem.fileName;
-            playPath = [AudioFileFormats prepareAudioFileForPlayback:fileToDecrypt];
-            
-            // 如果解密成功，更新状态
-            if (playPath && [playPath hasPrefix:@"/"] && [[NSFileManager defaultManager] fileExistsAtPath:playPath]) {
-                [self.musicLibrary updateNCMDecryptionStatus:musicItem decryptedPath:playPath];
-                NSLog(@"✅ 自动解密成功: %@", playPath);
-            }
-        } else {
-            playPath = [AudioFileFormats prepareAudioFileForPlayback:musicItem.fileName];
-            NSLog(@"🎵 自动播放: %@", playPath);
-        }
-        
-        [self.player playWithFileName:playPath];
-    }
+    // 使用统一的播放方法
+    [self playCurrentTrack];
 }
 
 #pragma mark - 歌词代理方法
@@ -1321,9 +1542,43 @@
     });
 }
 
+- (void)playerDidStartPlaying {
+    // 🎵 关键：播放真正开始后才设置完整的播放信息
+    NSLog(@"🎵 播放器已开始播放，更新系统媒体信息");
+    
+    // 🎵 更新播放/暂停按钮状态
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [self.playPauseButton setTitle:@"⏸️" forState:UIControlStateNormal];
+        self.playPauseButton.backgroundColor = [UIColor colorWithRed:0.8 green:0.3 blue:0.2 alpha:0.85];
+    });
+    
+    // 延迟一点让播放器获取完整的时长信息
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.3 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        [self updateNowPlayingInfo];
+        NSLog(@"✅ 播放开始后已更新完整媒体信息");
+        
+        // 🔍 运行诊断测试（已禁用，不需要覆盖真实歌曲信息）
+        // [self forceUpdateNowPlayingInfo];
+    });
+}
+
 - (void)playerDidUpdateTime:(NSTimeInterval)currentTime {
     // 更新歌词显示
     [self.lyricsView updateWithTime:currentTime];
+    
+    // 🎵 定期更新系统播放进度（每5秒更新一次，避免频繁更新）
+    NSTimeInterval now = [[NSDate date] timeIntervalSince1970];
+    if (now - self.lastNowPlayingUpdateTime >= 5.0) {
+        self.lastNowPlayingUpdateTime = now;
+        
+        // 更新当前播放时间
+        NSMutableDictionary *nowPlayingInfo = [[MPNowPlayingInfoCenter defaultCenter].nowPlayingInfo mutableCopy];
+        if (nowPlayingInfo) {
+            nowPlayingInfo[MPNowPlayingInfoPropertyElapsedPlaybackTime] = @(currentTime);
+            nowPlayingInfo[MPNowPlayingInfoPropertyPlaybackRate] = @(self.player.isPlaying ? 1.0 : 0.0);
+            [MPNowPlayingInfoCenter defaultCenter].nowPlayingInfo = nowPlayingInfo;
+        }
+    }
 }
 - (NSMutableArray *)audioArray {
     if (!_audioArray) {
@@ -1341,6 +1596,21 @@
 }
 #pragma mark- 文件处理
 - (UIImage*)musicImageWithMusicURL:(NSURL*)url {
+    
+    // 🔧 添加nil检查
+    if (!url) {
+        NSLog(@"⚠️ 无法获取封面：URL为空");
+        return nil;
+    }
+    
+    // 检查文件是否存在
+    if ([url isFileURL]) {
+        NSFileManager *fileManager = [NSFileManager defaultManager];
+        if (![fileManager fileExistsAtPath:url.path]) {
+            NSLog(@"⚠️ 无法获取封面：文件不存在: %@", url.path);
+            return nil;
+        }
+    }
     
     NSData*data =nil;
     
@@ -1365,10 +1635,12 @@
     }
     if(!data) {
         // 如果音乐没有图片，就返回默认图片
+        NSLog(@"⚠️ 无法获取封面：文件中没有封面数据: %@", url.path.lastPathComponent);
         return nil;//[UIImage imageNamed:@"default"];
         
     }
     
+    NSLog(@"✅ 成功提取封面数据 (%.0f KB): %@", (CGFloat)data.length / 1024.0, url.path.lastPathComponent);
     return[UIImage imageWithData:data];
     
 }
@@ -1395,7 +1667,16 @@
         leafCell.emissionRange = M_PI;//粒子发射角度范围
         
         //        leafCell.contents = (id)[[UIImage imageNamed:imageName] CGImage];//粒子图片
-        NSURL *fileUrl = [[NSBundle mainBundle] URLForResource:self.audioArray[index] withExtension:nil];
+        // 🔧 修复：使用 displayedMusicItems 并支持导入的文件
+        NSURL *fileUrl = nil;
+        if (index < self.displayedMusicItems.count) {
+            MusicItem *musicItem = self.displayedMusicItems[index];
+            if (musicItem.filePath && [musicItem.filePath hasPrefix:@"/"]) {
+                fileUrl = [NSURL fileURLWithPath:musicItem.filePath];
+            } else {
+                fileUrl = [[NSBundle mainBundle] URLForResource:musicItem.fileName withExtension:nil];
+            }
+        }
         leafCell.contents = (id)[[self musicImageWithMusicURL:fileUrl] CGImage];//粒子图片
         leafCell.color = [UIColor whiteColor].CGColor;
         leafCell.scale = 0.03;//缩放比例
@@ -1966,6 +2247,57 @@
     [self presentViewController:documentPicker animated:YES completion:nil];
 }
 
+#pragma mark - 🎵 播放控制按钮事件处理
+
+/// 上一首按钮点击
+- (void)previousButtonTapped:(UIButton *)sender {
+    NSLog(@"⏮️ 点击上一首按钮");
+    [self playPrevious];
+}
+
+/// 下一首按钮点击
+- (void)nextButtonTapped:(UIButton *)sender {
+    NSLog(@"⏭️ 点击下一首按钮");
+    [self playNext];
+}
+
+/// 播放/暂停按钮点击
+- (void)playPauseButtonTapped:(UIButton *)sender {
+    if (self.player.isPlaying) {
+        NSLog(@"⏸️ 暂停播放");
+        [self stopPlayback];
+        [self.playPauseButton setTitle:@"▶️" forState:UIControlStateNormal];
+        self.playPauseButton.backgroundColor = [UIColor colorWithRed:0.2 green:0.7 blue:0.3 alpha:0.85];
+    } else {
+        NSLog(@"▶️ 开始播放");
+        if (self.displayedMusicItems.count > 0) {
+            // 如果有选中的歌曲，播放当前选中的歌曲
+            [self playCurrentTrack];
+            [self.playPauseButton setTitle:@"⏸️" forState:UIControlStateNormal];
+            self.playPauseButton.backgroundColor = [UIColor colorWithRed:0.8 green:0.3 blue:0.2 alpha:0.85];
+        } else {
+            NSLog(@"⚠️ 播放列表为空");
+        }
+    }
+}
+
+/// 单曲循环按钮点击
+- (void)loopButtonTapped:(UIButton *)sender {
+    self.isSingleLoopMode = !self.isSingleLoopMode;
+    
+    if (self.isSingleLoopMode) {
+        NSLog(@"🔂 切换为单曲循环模式");
+        [self.loopButton setTitle:@"🔂" forState:UIControlStateNormal];
+        self.loopButton.backgroundColor = [UIColor colorWithRed:0.8 green:0.2 blue:0.5 alpha:0.85];
+        self.loopButton.layer.borderColor = [UIColor colorWithRed:0.9 green:0.3 blue:0.6 alpha:0.8].CGColor;
+    } else {
+        NSLog(@"🔁 切换为列表循环模式");
+        [self.loopButton setTitle:@"🔁" forState:UIControlStateNormal];
+        self.loopButton.backgroundColor = [UIColor colorWithRed:0.6 green:0.4 blue:0.7 alpha:0.85];
+        self.loopButton.layer.borderColor = [UIColor colorWithRed:0.7 green:0.5 blue:0.8 alpha:0.8].CGColor;
+    }
+}
+
 - (void)sortButtonTapped:(UIButton *)sender {
     // 🔧 隐藏键盘
     [self.searchBar resignFirstResponder];
@@ -2213,6 +2545,415 @@
 
 - (void)documentPickerWasCancelled:(UIDocumentPickerViewController *)controller {
     NSLog(@"📥 用户取消了文件选择");
+}
+
+#pragma mark - 🎵 系统媒体控制（控制中心、锁屏等）
+
+/// 配置远程控制命令中心（iOS 16+ 优化版）
+- (void)setupRemoteCommandCenter {
+    NSLog(@"🎵 开始配置系统媒体控制（iOS 16+ 优化）...");
+    
+    // ========== 步骤 1：音频会话由 AudioSpectrumPlayer 管理 ==========
+    // 注意：音频会话的配置已由 AudioSpectrumPlayer 管理，包括混音选项
+    // 这里不再重复配置，避免覆盖用户的混音设置
+    AVAudioSession *audioSession = [AVAudioSession sharedInstance];
+    NSLog(@"✅ Step 1: 音频会话由 AudioSpectrumPlayer 管理");
+    NSLog(@"   当前类别: %@", audioSession.category);
+    NSLog(@"   混音模式: %@", self.player.allowMixWithOthers ? @"开启" : @"关闭");
+    
+    // ========== 步骤 2：启用远程控制事件接收 ==========
+    [[UIApplication sharedApplication] beginReceivingRemoteControlEvents];
+    [self becomeFirstResponder];
+    NSLog(@"✅ Step 2: 已启用远程控制事件接收");
+    
+    // ========== 步骤 3：注册远程命令（在激活之后）==========
+    MPRemoteCommandCenter *commandCenter = [MPRemoteCommandCenter sharedCommandCenter];
+    
+    // 3.1 先移除所有旧的 target（避免重复注册）
+    [commandCenter.playCommand removeTarget:nil];
+    [commandCenter.pauseCommand removeTarget:nil];
+    [commandCenter.nextTrackCommand removeTarget:nil];
+    [commandCenter.previousTrackCommand removeTarget:nil];
+    [commandCenter.togglePlayPauseCommand removeTarget:nil]; // iOS 16+: 禁用这个
+    
+    // 3.2 禁用 togglePlayPauseCommand（iOS 16+ 建议使用单独的 play/pause）
+    commandCenter.togglePlayPauseCommand.enabled = NO;
+    
+    // 3.3 注册播放命令
+    [commandCenter.playCommand addTargetWithHandler:^MPRemoteCommandHandlerStatus(MPRemoteCommandEvent * _Nonnull event) {
+        NSLog(@"🎵 系统控制: 播放");
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (!self.player.isPlaying) {
+                [self playCurrentTrack];
+            }
+        });
+        return MPRemoteCommandHandlerStatusSuccess;
+    }];
+    
+    // 3.4 注册暂停命令
+    [commandCenter.pauseCommand addTargetWithHandler:^MPRemoteCommandHandlerStatus(MPRemoteCommandEvent * _Nonnull event) {
+        NSLog(@"🎵 系统控制: 暂停");
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [self stopPlayback];
+        });
+        return MPRemoteCommandHandlerStatusSuccess;
+    }];
+    
+    // 3.5 注册下一首命令
+    [commandCenter.nextTrackCommand addTargetWithHandler:^MPRemoteCommandHandlerStatus(MPRemoteCommandEvent * _Nonnull event) {
+        NSLog(@"🎵 系统控制: 下一首");
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [self playNext];
+        });
+        return MPRemoteCommandHandlerStatusSuccess;
+    }];
+    
+    // 3.6 注册上一首命令
+    [commandCenter.previousTrackCommand addTargetWithHandler:^MPRemoteCommandHandlerStatus(MPRemoteCommandEvent * _Nonnull event) {
+        NSLog(@"🎵 系统控制: 上一首");
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [self playPrevious];
+        });
+        return MPRemoteCommandHandlerStatusSuccess;
+    }];
+    
+    // 3.7 显式启用所需命令
+    commandCenter.playCommand.enabled = YES;
+    commandCenter.pauseCommand.enabled = YES;
+    commandCenter.nextTrackCommand.enabled = YES;
+    commandCenter.previousTrackCommand.enabled = YES;
+    
+    NSLog(@"✅ Step 3: 远程命令已注册并启用");
+    
+    // ========== 验证配置 ==========
+    NSLog(@"📋 最终配置状态:");
+    NSLog(@"   • 音频会话类别: %@", audioSession.category);
+    NSLog(@"   • 音频会话模式: %@", audioSession.mode);
+    NSLog(@"   • 混音模式: %@", self.player.allowMixWithOthers ? @"✅ 允许混音" : @"❌ 独占播放");
+    NSLog(@"   • 播放命令: %@", commandCenter.playCommand.isEnabled ? @"✅" : @"❌");
+    NSLog(@"   • 暂停命令: %@", commandCenter.pauseCommand.isEnabled ? @"✅" : @"❌");
+    NSLog(@"   • 下一首命令: %@", commandCenter.nextTrackCommand.isEnabled ? @"✅" : @"❌");
+    NSLog(@"   • 上一首命令: %@", commandCenter.previousTrackCommand.isEnabled ? @"✅" : @"❌");
+    NSLog(@"   • 切换播放命令: %@ (应该禁用)", commandCenter.togglePlayPauseCommand.isEnabled ? @"❌ 启用了" : @"✅ 已禁用");
+    
+    NSLog(@"✅ 系统媒体控制配置完成（iOS 16+ 优化）");
+}
+
+// 支持成为第一响应者以接收远程控制事件
+- (BOOL)canBecomeFirstResponder {
+    return YES;
+}
+
+/// 🔍 诊断：测试强制设置播放信息（临时测试方法）
+- (void)forceUpdateNowPlayingInfo {
+    NSLog(@"🔍 强制设置播放信息测试...");
+    
+    // 强制设置最简单的播放信息
+    NSMutableDictionary *info = [NSMutableDictionary dictionary];
+    info[MPMediaItemPropertyTitle] = @"测试歌曲";
+    info[MPMediaItemPropertyArtist] = @"测试艺术家";
+    info[MPMediaItemPropertyPlaybackDuration] = @(180.0); // 3分钟
+    info[MPNowPlayingInfoPropertyElapsedPlaybackTime] = @(0.0);
+    info[MPNowPlayingInfoPropertyPlaybackRate] = @(1.0);
+    
+    // 🎵 iOS 16+ 关键：添加封面图
+    UIImage *testArtwork = [self createDefaultArtworkImage];
+    if (testArtwork) {
+        MPMediaItemArtwork *artwork = [[MPMediaItemArtwork alloc] initWithBoundsSize:testArtwork.size requestHandler:^UIImage * _Nonnull(CGSize size) {
+            return testArtwork;
+        }];
+        info[MPMediaItemPropertyArtwork] = artwork;
+    }
+    
+    [MPNowPlayingInfoCenter defaultCenter].nowPlayingInfo = info;
+    
+    NSLog(@"✅ 强制设置完成");
+    NSLog(@"   当前播放信息: %@", [MPNowPlayingInfoCenter defaultCenter].nowPlayingInfo);
+    
+    // 验证音频会话
+    AVAudioSession *session = [AVAudioSession sharedInstance];
+    NSLog(@"   音频会话类别: %@", session.category);
+    NSLog(@"   音频会话选项: %lu", (unsigned long)session.categoryOptions);
+    NSLog(@"   其他音频播放中: %@", @([session isOtherAudioPlaying]));
+    NSLog(@"   音频会话激活: ✅ (已设置)");
+    
+    // 验证远程控制
+    MPRemoteCommandCenter *cc = [MPRemoteCommandCenter sharedCommandCenter];
+    NSLog(@"   播放命令启用: %@", @(cc.playCommand.isEnabled));
+    NSLog(@"   暂停命令启用: %@", @(cc.pauseCommand.isEnabled));
+}
+
+/// 立即更新基本播放信息（在播放开始前调用，确保控制中心立即显示）
+- (void)updateNowPlayingInfoImmediate {
+    if (index >= self.displayedMusicItems.count) {
+        NSLog(@"⚠️ 无法更新播放信息: 索引超出范围");
+        return;
+    }
+    
+    MusicItem *musicItem = self.displayedMusicItems[index];
+    
+    // 🎵 关键：创建新字典，不要修改现有字典
+    NSMutableDictionary *nowPlayingInfo = [NSMutableDictionary dictionary];
+    
+    // 歌曲标题（必须）
+    NSString *title = @"正在播放";
+    if (musicItem.displayName) {
+        title = musicItem.displayName;
+    } else if (musicItem.fileName) {
+        title = [musicItem.fileName stringByDeletingPathExtension];
+    }
+    nowPlayingInfo[MPMediaItemPropertyTitle] = title;
+    
+    // 艺术家（必须）
+    nowPlayingInfo[MPMediaItemPropertyArtist] = @"AudioSampleBuffer";
+    
+    // 专辑
+    nowPlayingInfo[MPMediaItemPropertyAlbumTitle] = @"本地音乐";
+    
+    // 🎵 iOS 16+ 关键：必须设置封面图片！否则控制中心不显示
+    UIImage *defaultArtwork = [self createDefaultArtworkImage];
+    if (defaultArtwork) {
+        MPMediaItemArtwork *artwork = [[MPMediaItemArtwork alloc] initWithBoundsSize:defaultArtwork.size requestHandler:^UIImage * _Nonnull(CGSize size) {
+            return defaultArtwork;
+        }];
+        nowPlayingInfo[MPMediaItemPropertyArtwork] = artwork;
+        NSLog(@"   - 封面图片: ✅ 已设置 (%.0fx%.0f)", defaultArtwork.size.width, defaultArtwork.size.height);
+    }
+    
+    // 🎵 关键：播放速率必须大于0才会显示播放状态
+    nowPlayingInfo[MPNowPlayingInfoPropertyPlaybackRate] = @(1.0);
+    
+    // 当前时间（初始为0）
+    nowPlayingInfo[MPNowPlayingInfoPropertyElapsedPlaybackTime] = @(0.0);
+    
+    // 🎵 关键：立即更新到系统
+    MPNowPlayingInfoCenter *center = [MPNowPlayingInfoCenter defaultCenter];
+    center.nowPlayingInfo = nowPlayingInfo;
+    
+    NSLog(@"✅ 立即设置播放信息成功:");
+    NSLog(@"   - 标题: %@", title);
+    NSLog(@"   - 艺术家: %@", nowPlayingInfo[MPMediaItemPropertyArtist]);
+    NSLog(@"   - 播放速率: %@", nowPlayingInfo[MPNowPlayingInfoPropertyPlaybackRate]);
+    
+    // 验证音频会话状态
+    AVAudioSession *session = [AVAudioSession sharedInstance];
+    NSLog(@"   - 音频会话类别: %@", session.category);
+    NSLog(@"   - 音频会话选项: %lu (0=独占, 1=混音)", (unsigned long)session.categoryOptions);
+    NSLog(@"   - 其他音频播放中: %@", @(session.isOtherAudioPlaying));
+    
+    // 🎵 强制触发系统更新
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        // 再次设置确保系统接收
+        center.nowPlayingInfo = nowPlayingInfo;
+        NSLog(@"🔄 二次确认播放信息已设置");
+    });
+}
+
+/// 创建默认封面图片（iOS 16+ 必须）
+- (UIImage *)createDefaultArtworkImage {
+    // 🎵 优先使用项目中的 none_image 图片
+    UIImage *noneImage = [UIImage imageNamed:@"none_image"];
+    if (noneImage) {
+        NSLog(@"✅ 使用默认封面图片: none_image (%.0fx%.0f)", noneImage.size.width, noneImage.size.height);
+        return noneImage;
+    }
+    
+    NSLog(@"⚠️ none_image 图片未找到，使用程序生成的默认封面");
+    
+    // 如果 none_image 不存在，创建一个简单的渐变色封面
+    CGSize size = CGSizeMake(512, 512);
+    UIGraphicsBeginImageContextWithOptions(size, NO, 0.0);
+    CGContextRef context = UIGraphicsGetCurrentContext();
+    
+    // 渐变背景
+    CGColorSpaceRef colorSpace = CGColorSpaceCreateDeviceRGB();
+    NSArray *colors = @[
+        (id)[UIColor colorWithRed:0.2 green:0.4 blue:0.8 alpha:1.0].CGColor,
+        (id)[UIColor colorWithRed:0.6 green:0.2 blue:0.8 alpha:1.0].CGColor
+    ];
+    CGGradientRef gradient = CGGradientCreateWithColors(colorSpace, (__bridge CFArrayRef)colors, NULL);
+    CGContextDrawLinearGradient(context, gradient, CGPointMake(0, 0), CGPointMake(size.width, size.height), 0);
+    
+    // 添加音乐图标
+    UIBezierPath *musicNote = [UIBezierPath bezierPath];
+    CGFloat centerX = size.width / 2;
+    CGFloat centerY = size.height / 2;
+    [musicNote moveToPoint:CGPointMake(centerX - 30, centerY + 40)];
+    [musicNote addLineToPoint:CGPointMake(centerX - 30, centerY - 40)];
+    [musicNote addLineToPoint:CGPointMake(centerX + 30, centerY - 50)];
+    [musicNote addLineToPoint:CGPointMake(centerX + 30, centerY + 30)];
+    [[UIColor whiteColor] setStroke];
+    musicNote.lineWidth = 8;
+    [musicNote stroke];
+    
+    UIImage *image = UIGraphicsGetImageFromCurrentImageContext();
+    UIGraphicsEndImageContext();
+    
+    CGGradientRelease(gradient);
+    CGColorSpaceRelease(colorSpace);
+    
+    return image;
+}
+
+/// 更新正在播放的信息（显示在控制中心和锁屏界面）
+- (void)updateNowPlayingInfo {
+    if (index >= self.displayedMusicItems.count) {
+        return;
+    }
+    
+    MusicItem *musicItem = self.displayedMusicItems[index];
+    
+    NSMutableDictionary *nowPlayingInfo = [NSMutableDictionary dictionary];
+    
+    // 歌曲标题
+    if (musicItem.displayName) {
+        nowPlayingInfo[MPMediaItemPropertyTitle] = musicItem.displayName;
+    } else if (musicItem.fileName) {
+        nowPlayingInfo[MPMediaItemPropertyTitle] = [musicItem.fileName stringByDeletingPathExtension];
+    }
+    
+    // 艺术家（从歌词解析器获取，如果有的话）
+    if (self.player.lyricsParser && self.player.lyricsParser.artist) {
+        nowPlayingInfo[MPMediaItemPropertyArtist] = self.player.lyricsParser.artist;
+    } else {
+        nowPlayingInfo[MPMediaItemPropertyArtist] = @"未知艺术家";
+    }
+    
+    // 专辑（从歌词解析器获取，如果有的话）
+    if (self.player.lyricsParser && self.player.lyricsParser.album) {
+        nowPlayingInfo[MPMediaItemPropertyAlbumTitle] = self.player.lyricsParser.album;
+    }
+    
+    // 🎵 iOS 16+ 关键：封面图片（必须）
+    UIImage *artwork = [self createDefaultArtworkImage];
+    if (artwork) {
+        MPMediaItemArtwork *artworkItem = [[MPMediaItemArtwork alloc] initWithBoundsSize:artwork.size requestHandler:^UIImage * _Nonnull(CGSize size) {
+            return artwork;
+        }];
+        nowPlayingInfo[MPMediaItemPropertyArtwork] = artworkItem;
+    }
+    
+    // 播放时长
+    nowPlayingInfo[MPMediaItemPropertyPlaybackDuration] = @(self.player.duration);
+    
+    // 当前播放时间
+    nowPlayingInfo[MPNowPlayingInfoPropertyElapsedPlaybackTime] = @(self.player.currentTime);
+    
+    // 播放速率（1.0 = 正常播放）
+    nowPlayingInfo[MPNowPlayingInfoPropertyPlaybackRate] = @(self.player.isPlaying ? 1.0 : 0.0);
+    
+    // 更新到系统
+    [MPNowPlayingInfoCenter defaultCenter].nowPlayingInfo = nowPlayingInfo;
+    
+    NSLog(@"🎵 已更新系统播放信息: %@", nowPlayingInfo[MPMediaItemPropertyTitle]);
+}
+
+#pragma mark - 🎮 外部播放控制接口
+
+/// 停止当前播放
+- (void)stopPlayback {
+    NSLog(@"⏹️ 外部控制: 停止播放");
+    [self.player stop];
+    
+    // 🎵 iOS 16+: 更新播放状态为暂停（不清除信息）
+    NSMutableDictionary *nowPlayingInfo = [[MPNowPlayingInfoCenter defaultCenter].nowPlayingInfo mutableCopy];
+    if (nowPlayingInfo) {
+        // 关键：将播放速率设置为 0.0 表示暂停状态
+        nowPlayingInfo[MPNowPlayingInfoPropertyPlaybackRate] = @(0.0);
+        // 保持当前播放时间
+        nowPlayingInfo[MPNowPlayingInfoPropertyElapsedPlaybackTime] = @(self.player.currentTime);
+        [MPNowPlayingInfoCenter defaultCenter].nowPlayingInfo = nowPlayingInfo;
+        NSLog(@"✅ 播放状态已更新为暂停 (playbackRate = 0.0)");
+    }
+}
+
+/// 播放下一首
+- (void)playNext {
+    NSLog(@"⏭️ 外部控制: 播放下一首");
+    
+    if (self.displayedMusicItems.count == 0) {
+        NSLog(@"⚠️ 播放列表为空");
+        return;
+    }
+    
+    index++;
+    if (index >= self.displayedMusicItems.count) {
+        index = 0; // 循环播放
+    }
+    
+    // 记录播放
+    MusicItem *musicItem = self.displayedMusicItems[index];
+    [self.musicLibrary recordPlayForMusic:musicItem];
+    
+    [self updateAudioSelection];
+    
+    // 播放音频
+    [self playCurrentTrack];
+}
+
+/// 播放上一首
+- (void)playPrevious {
+    NSLog(@"⏮️ 外部控制: 播放上一首");
+    
+    if (self.displayedMusicItems.count == 0) {
+        NSLog(@"⚠️ 播放列表为空");
+        return;
+    }
+    
+    index--;
+    if (index < 0) {
+        index = self.displayedMusicItems.count - 1; // 循环到最后一首
+    }
+    
+    // 记录播放
+    MusicItem *musicItem = self.displayedMusicItems[index];
+    [self.musicLibrary recordPlayForMusic:musicItem];
+    
+    [self updateAudioSelection];
+    
+    // 播放音频
+    [self playCurrentTrack];
+}
+
+/// 播放当前曲目（复用播放逻辑）
+- (void)playCurrentTrack {
+    if (index >= self.displayedMusicItems.count) {
+        NSLog(@"⚠️ 索引超出范围: %ld / %lu", (long)index, (unsigned long)self.displayedMusicItems.count);
+        return;
+    }
+    
+    MusicItem *musicItem = self.displayedMusicItems[index];
+    NSString *playPath = nil;
+    
+    // 优先使用已解密文件
+    if (musicItem.decryptedPath && [[NSFileManager defaultManager] fileExistsAtPath:musicItem.decryptedPath]) {
+        playPath = musicItem.decryptedPath;
+        NSLog(@"🎵 播放已解密文件: %@", playPath);
+    }
+    // 检查是否是NCM文件，需要先解密
+    else if ([AudioFileFormats needsDecryption:musicItem.fileName]) {
+        NSLog(@"🔓 解密NCM文件: %@", musicItem.fileName);
+        
+        // 优先传递完整路径
+        NSString *fileToDecrypt = (musicItem.filePath && [musicItem.filePath hasPrefix:@"/"]) ? musicItem.filePath : musicItem.fileName;
+        playPath = [AudioFileFormats prepareAudioFileForPlayback:fileToDecrypt];
+        
+        // 如果解密成功，更新状态
+        if (playPath && [playPath hasPrefix:@"/"] && [[NSFileManager defaultManager] fileExistsAtPath:playPath]) {
+            [self.musicLibrary updateNCMDecryptionStatus:musicItem decryptedPath:playPath];
+            NSLog(@"✅ 解密成功: %@", playPath);
+        }
+    } else {
+        playPath = [AudioFileFormats prepareAudioFileForPlayback:musicItem.fileName];
+        NSLog(@"🎵 播放: %@", playPath);
+    }
+    
+    // 🎵 先设置基本的播放信息（立即设置，让控制中心显示）
+    [self updateNowPlayingInfoImmediate];
+    
+    [self.player playWithFileName:playPath];
+    
+    // 🎵 注意：完整的播放信息将在 playerDidStartPlaying 回调中更新
 }
 
 @end

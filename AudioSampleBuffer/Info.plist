@@ -6,20 +6,24 @@
 	<array>
 		<string>audio</string>
 	</array>
-	<key>NSMicrophoneUsageDescription</key>
-	<string>此应用需要访问麦克风以支持卡拉OK录音功能，让您可以录制自己的歌声。</string>
-	<key>NSCameraUsageDescription</key>
-	<string>此应用可能需要访问相机以支持某些视觉效果功能。</string>
-	<key>NSPhotoLibraryUsageDescription</key>
-	<string>此应用可能需要访问相册以支持某些功能。</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSExceptionDomains</key>
 		<dict>
+			<key>fs.mv.web.kugou.com</key>
+			<dict>
+				<key>NSTemporaryExceptionAllowsInsecureHTTPLoads</key>
+				<true/>
+			</dict>
 			<key>kugou.com</key>
 			<dict>
 				<key>NSIncludesSubdomains</key>
 				<true/>
+				<key>NSTemporaryExceptionAllowsInsecureHTTPLoads</key>
+				<true/>
+			</dict>
+			<key>m.kugou.com</key>
+			<dict>
 				<key>NSTemporaryExceptionAllowsInsecureHTTPLoads</key>
 				<true/>
 			</dict>
@@ -29,16 +33,6 @@
 				<true/>
 			</dict>
 			<key>trackercdn.kugou.com</key>
-			<dict>
-				<key>NSTemporaryExceptionAllowsInsecureHTTPLoads</key>
-				<true/>
-			</dict>
-			<key>m.kugou.com</key>
-			<dict>
-				<key>NSTemporaryExceptionAllowsInsecureHTTPLoads</key>
-				<true/>
-			</dict>
-			<key>fs.mv.web.kugou.com</key>
 			<dict>
 				<key>NSTemporaryExceptionAllowsInsecureHTTPLoads</key>
 				<true/>

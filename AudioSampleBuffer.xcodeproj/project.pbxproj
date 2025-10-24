@@ -32,6 +32,7 @@
 		4C2C6A3B2EA22A1C00D18118 /* MusicDownloadManager.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C2C6A362EA22A1C00D18118 /* MusicDownloadManager.m */; };
 		4C2C6A3C2EA22A1C00D18118 /* ViewController+CloudDownload.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C2C6A392EA22A1C00D18118 /* ViewController+CloudDownload.m */; };
 		4C2C6A422EA236ED00D18118 /* KugouMusicDownloader.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C2C6A412EA236ED00D18118 /* KugouMusicDownloader.m */; };
+		4c4e68e181504d63bdcceeb4 /* QQMusicAPIService.m in Sources */ = {isa = PBXBuildFile; fileRef = 8f06cadb652e4fd8b81f19fb /* QQMusicAPIService.m */; };
 		4C2C6A822EA24E4D00D18118 /* 周杰伦-最伟大的作品.mp3 in Resources */ = {isa = PBXBuildFile; fileRef = 4C2C6A7F2EA24E4D00D18118 /* 周杰伦-最伟大的作品.mp3 */; };
 		4C2C6A832EA24E4D00D18118 /* 周杰伦-错过的烟火.mp3 in Resources */ = {isa = PBXBuildFile; fileRef = 4C2C6A772EA24E4D00D18118 /* 周杰伦-错过的烟火.mp3 */; };
 		4C2C6A842EA24E4D00D18118 /* 周杰伦-Intro.mp3 in Resources */ = {isa = PBXBuildFile; fileRef = 4C2C6A802EA24E4D00D18118 /* 周杰伦-Intro.mp3 */; };
@@ -232,6 +233,8 @@
 		4C2C6A392EA22A1C00D18118 /* ViewController+CloudDownload.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = "ViewController+CloudDownload.m"; sourceTree = "<group>"; };
 		4C2C6A402EA236ED00D18118 /* KugouMusicDownloader.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = KugouMusicDownloader.h; sourceTree = "<group>"; };
 		4C2C6A412EA236ED00D18118 /* KugouMusicDownloader.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = KugouMusicDownloader.m; sourceTree = "<group>"; };
+		c51b7ee3f029482798b1302c /* QQMusicAPIService.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = QQMusicAPIService.h; sourceTree = "<group>"; };
+		8f06cadb652e4fd8b81f19fb /* QQMusicAPIService.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = QQMusicAPIService.m; sourceTree = "<group>"; };
 		4C2C6A762EA24E4D00D18118 /* 周杰伦-不爱我就拉倒.mp3 */ = {isa = PBXFileReference; lastKnownFileType = audio.mp3; path = "周杰伦-不爱我就拉倒.mp3"; sourceTree = "<group>"; };
 		4C2C6A772EA24E4D00D18118 /* 周杰伦-错过的烟火.mp3 */ = {isa = PBXFileReference; lastKnownFileType = audio.mp3; path = "周杰伦-错过的烟火.mp3"; sourceTree = "<group>"; };
 		4C2C6A782EA24E4D00D18118 /* 周杰伦-倒影.mp3 */ = {isa = PBXFileReference; lastKnownFileType = audio.mp3; path = "周杰伦-倒影.mp3"; sourceTree = "<group>"; };
@@ -501,6 +504,8 @@
 				4C2C6A392EA22A1C00D18118 /* ViewController+CloudDownload.m */,
 				4C2C6A402EA236ED00D18118 /* KugouMusicDownloader.h */,
 				4C2C6A412EA236ED00D18118 /* KugouMusicDownloader.m */,
+				c51b7ee3f029482798b1302c /* QQMusicAPIService.h */,
+				8f06cadb652e4fd8b81f19fb /* QQMusicAPIService.m */,
 			);
 			path = Download;
 			sourceTree = "<group>";
@@ -1013,6 +1018,7 @@
 				4C110D512EAA365E00D59E12 /* LuminousMistCoreShader.metal in Sources */,
 				4C699F8F2E9F951A009090AB /* AAFilter.cpp in Sources */,
 				4C2C6A422EA236ED00D18118 /* KugouMusicDownloader.m in Sources */,
+				4c4e68e181504d63bdcceeb4 /* QQMusicAPIService.m in Sources */,
 				4C66E7162E8A9255003200DA /* EffectSelectorView.m in Sources */,
 				4C66E7172E8A9255003200DA /* VisualEffectType.m in Sources */,
 				4C5167F92E9E032E00853960 /* PCMAudioPlayer.m in Sources */,
@@ -1228,9 +1234,13 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 4R3F9TA3GA;
+				ENABLE_APP_SANDBOX = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = AudioSampleBuffer/Info.plist;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.music";
+				INFOPLIST_KEY_NSCameraUsageDescription = "此应用可能需要访问相机以支持某些视觉效果功能。";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "此应用需要访问麦克风以支持卡拉OK录音功能，让您可以录制自己的歌声。";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "此应用可能需要访问相册以支持某些功能。";
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchStoryboardName = LaunchScreen;
 				INFOPLIST_KEY_UIMainStoryboardFile = Main;
@@ -1259,9 +1269,13 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 4R3F9TA3GA;
+				ENABLE_APP_SANDBOX = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = AudioSampleBuffer/Info.plist;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.music";
+				INFOPLIST_KEY_NSCameraUsageDescription = "此应用可能需要访问相机以支持某些视觉效果功能。";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "此应用需要访问麦克风以支持卡拉OK录音功能，让您可以录制自己的歌声。";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "此应用可能需要访问相册以支持某些功能。";
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchStoryboardName = LaunchScreen;
 				INFOPLIST_KEY_UIMainStoryboardFile = Main;

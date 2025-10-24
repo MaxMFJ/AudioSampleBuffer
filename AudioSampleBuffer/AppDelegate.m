@@ -15,7 +15,29 @@
 
 
 - (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)launchOptions {
-    // Override point for customization after application launch.
+    // 🎵 配置全局音频会话（初始设置）
+    NSError *error = nil;
+    AVAudioSession *audioSession = [AVAudioSession sharedInstance];
+    
+    // 设置为播放类别（不带混音选项，让 AudioSpectrumPlayer 根据开关动态控制）
+    BOOL success = [audioSession setCategory:AVAudioSessionCategoryPlayback 
+                                  withOptions:0 
+                                        error:&error];
+    if (!success || error) {
+        NSLog(@"❌ AppDelegate: 音频会话初始配置失败: %@", error);
+    } else {
+        NSLog(@"✅ AppDelegate: 音频会话初始配置成功");
+    }
+    
+    // 激活音频会话
+    error = nil;
+    success = [audioSession setActive:YES error:&error];
+    if (!success || error) {
+        NSLog(@"❌ AppDelegate: 音频会话激活失败: %@", error);
+    } else {
+        NSLog(@"✅ AppDelegate: 音频会话已激活");
+    }
+    
     return YES;
 }
 
@@ -38,12 +60,10 @@
     // Called when the application is about to terminate. Save data if appropriate. See also applicationDidEnterBackground:.
 }
 - (void)applicationWillResignActive:(UIApplication *)application {
-
-    [[AVAudioSession sharedInstance] setCategory:AVAudioSessionCategoryPlayback
-                                     withOptions:AVAudioSessionCategoryOptionMixWithOthers
-                                           error:nil];
-
-
+    // 🔊 重要：不要在这里设置音频会话，这会覆盖用户的混音开关设置
+    // 音频会话由 AudioSpectrumPlayer 管理，根据用户的混音开关动态配置
+    
+    NSLog(@"📱 应用即将失去焦点 (applicationWillResignActive)");
 }
 
 @end

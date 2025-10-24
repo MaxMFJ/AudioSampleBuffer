@@ -11,6 +11,8 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)didFinishPlay;
 
 @optional
+/// 播放开始（用于更新系统媒体控制）
+- (void)playerDidStartPlaying;
 /// 播放时间更新（用于歌词同步）
 - (void)playerDidUpdateTime:(NSTimeInterval)currentTime;
 /// 歌词加载完成（parser为nil表示没有找到歌词文件）
@@ -38,6 +40,9 @@ NS_ASSUME_NONNULL_BEGIN
 /// 🎵 速率调整（范围 0.5 到 2.0）
 /// 1.0 = 原速
 @property (nonatomic, assign) float playbackRate;
+
+/// 🔊 是否允许与其他应用同时播放（默认NO）
+@property (nonatomic, assign) BOOL allowMixWithOthers;
 
 - (void)playWithFileName:(NSString *)fileName;
 - (void)stop;
