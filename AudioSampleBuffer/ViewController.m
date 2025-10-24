@@ -1610,29 +1610,42 @@
             NSLog(@"⚠️ 无法获取封面：文件不存在: %@", url.path);
             return nil;
         }
+        
+        // 🆕 优先尝试从同目录加载独立的封面图片文件（云端下载的封面）
+        UIImage *externalCover = [self loadExternalCoverForMusicFile:url.path];
+        if (externalCover) {
+            NSLog(@"✅ 使用外部封面文件: %@", url.path.lastPathComponent);
+            return externalCover;
+        }
     }
     
     NSData*data =nil;
     
     // 初始化媒体文件
-    
     AVURLAsset*mp3Asset = [AVURLAsset URLAssetWithURL:url options:nil];
+    
+    NSLog(@"🔍 [封面读取] 文件: %@", url.path.lastPathComponent);
+    NSLog(@"   可用格式数: %lu", (unsigned long)[mp3Asset availableMetadataFormats].count);
 
     // 读取文件中的数据
-    
     for(NSString*format in [mp3Asset availableMetadataFormats]) {
+        NSLog(@"   扫描格式: %@", format);
         
         for(AVMetadataItem*metadataItem in[mp3Asset metadataForFormat:format]) {
             //artwork这个key对应的value里面存的就是封面缩略图，其它key可以取出其它摘要信息，例如title - 标题
             
             if([metadataItem.commonKey isEqualToString:@"artwork"]) {
-                
                 data = [metadataItem.value copyWithZone:nil];
-                
+                NSLog(@"   ✅ 找到封面 metadata (格式: %@)", format);
                 break;
             }
         }
+        
+        if (data) {
+            break; // 已找到封面，退出外层循环
+        }
     }
+    
     if(!data) {
         // 如果音乐没有图片，就返回默认图片
         NSLog(@"⚠️ 无法获取封面：文件中没有封面数据: %@", url.path.lastPathComponent);
@@ -1641,8 +1654,43 @@
     }
     
     NSLog(@"✅ 成功提取封面数据 (%.0f KB): %@", (CGFloat)data.length / 1024.0, url.path.lastPathComponent);
-    return[UIImage imageWithData:data];
     
+    UIImage *image = [UIImage imageWithData:data];
+    if (!image) {
+        NSLog(@"⚠️ 警告：封面数据无法转换为UIImage");
+        return nil;
+    }
+    
+    NSLog(@"✅ 封面图片创建成功 (%.0fx%.0f)", image.size.width, image.size.height);
+    return image;
+    
+}
+
+/// 🆕 从音乐文件所在目录加载外部封面文件（用于云端下载的封面）
+- (UIImage *)loadExternalCoverForMusicFile:(NSString *)musicFilePath {
+    if (!musicFilePath || musicFilePath.length == 0) {
+        return nil;
+    }
+    
+    // 获取音乐文件名（不含扩展名）
+    NSString *baseFileName = [[musicFilePath lastPathComponent] stringByDeletingPathExtension];
+    NSString *directory = [musicFilePath stringByDeletingLastPathComponent];
+    
+    // 支持的图片扩展名
+    NSArray *imageExtensions = @[@"jpg", @"jpeg", @"png", @"webp"];
+    
+    for (NSString *ext in imageExtensions) {
+        NSString *coverPath = [[directory stringByAppendingPathComponent:baseFileName] stringByAppendingPathExtension:ext];
+        if ([[NSFileManager defaultManager] fileExistsAtPath:coverPath]) {
+            UIImage *image = [UIImage imageWithContentsOfFile:coverPath];
+            if (image) {
+                NSLog(@"🖼️ 找到外部封面: %@", [coverPath lastPathComponent]);
+                return image;
+            }
+        }
+    }
+    
+    return nil;
 }
 
 -(void)setImageAudio
@@ -2751,7 +2799,28 @@
 
 /// 创建默认封面图片（iOS 16+ 必须）
 - (UIImage *)createDefaultArtworkImage {
-    // 🎵 优先使用项目中的 none_image 图片
+    // 🆕 优先尝试获取当前播放音乐的真实封面
+    if (index < self.displayedMusicItems.count) {
+        MusicItem *musicItem = self.displayedMusicItems[index];
+        
+        // 获取音乐文件URL
+        NSURL *fileUrl = nil;
+        if (musicItem.filePath && [musicItem.filePath hasPrefix:@"/"]) {
+            fileUrl = [NSURL fileURLWithPath:musicItem.filePath];
+        } else {
+            fileUrl = [[NSBundle mainBundle] URLForResource:musicItem.fileName withExtension:nil];
+        }
+        
+        if (fileUrl) {
+            UIImage *musicCover = [self musicImageWithMusicURL:fileUrl];
+            if (musicCover) {
+                NSLog(@"✅ 使用音乐真实封面 (%.0fx%.0f): %@", musicCover.size.width, musicCover.size.height, musicItem.fileName);
+                return musicCover;
+            }
+        }
+    }
+    
+    // 🎵 如果没有真实封面，使用项目中的 none_image 图片
     UIImage *noneImage = [UIImage imageNamed:@"none_image"];
     if (noneImage) {
         NSLog(@"✅ 使用默认封面图片: none_image (%.0fx%.0f)", noneImage.size.width, noneImage.size.height);

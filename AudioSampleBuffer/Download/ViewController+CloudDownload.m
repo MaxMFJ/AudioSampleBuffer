@@ -9,6 +9,7 @@
 #import "MusicLibraryManager.h"
 #import "QQMusicAPIService.h"
 #import <objc/runtime.h>
+#import <AVFoundation/AVFoundation.h>
 
 @implementation ViewController (CloudDownload)
 
@@ -245,8 +246,8 @@
     UIAlertAction *playAction = [UIAlertAction actionWithTitle:@"▶️ 立即播放"
                                                          style:UIAlertActionStyleDefault
                                                        handler:^(UIAlertAction *action) {
-        // 播放新下载的音乐
-        [self playDownloadedMusic:fileName];
+        // 🔧 修复：传递完整路径而不是文件名
+        [self playDownloadedMusic:filePath];
     }];
     
     // 稍后播放
@@ -260,8 +261,8 @@
     [self presentViewController:successAlert animated:YES completion:nil];
 }
 
-- (void)playDownloadedMusic:(NSString *)fileName {
-    NSLog(@"▶️ [播放下载] 准备播放: %@", fileName);
+- (void)playDownloadedMusic:(NSString *)filePath {
+    NSLog(@"▶️ [播放下载] 准备播放: %@", [filePath lastPathComponent]);
     
     // 获取播放器
     if (![self respondsToSelector:@selector(player)]) {
@@ -275,9 +276,8 @@
         return;
     }
     
-    // 构建完整文件路径（使用统一的下载目录）
-    NSString *downloadDir = [MusicLibraryManager cloudDownloadDirectory];
-    NSString *filePath = [downloadDir stringByAppendingPathComponent:fileName];
+    // 🔧 修复：直接使用传入的完整路径
+    // filePath 已经是完整路径（可能是 .m4a 或 .mp3）
     
     // 检查文件是否存在
     if (![[NSFileManager defaultManager] fileExistsAtPath:filePath]) {
@@ -287,26 +287,55 @@
     
     NSLog(@"✅ [播放下载] 文件路径: %@", filePath);
     
-    // 使用完整路径播放（AudioSpectrumPlayer支持完整路径）
-    [player performSelector:@selector(playWithFileName:) withObject:filePath];
-    NSLog(@"▶️ [播放下载] 开始播放");
-    
-    // 更新当前播放索引到下载的歌曲
-    NSArray *allMusic = [[MusicLibraryManager sharedManager] allMusic];
-    for (NSInteger i = 0; i < allMusic.count; i++) {
-        MusicItem *item = allMusic[i];
-        if ([item.fileName isEqualToString:fileName] || [item.filePath isEqualToString:filePath]) {
+    // 🔧 修复：下载完成后延迟一点播放，确保音频会话准备就绪
+    // 下载过程中可能音频会话被影响，需要给系统一点时间恢复
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.3 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        NSLog(@"▶️ [播放下载] 开始播放（延迟后）");
+        
+        // 🔊 强制重新激活音频会话，解决下载后播放没声音的问题
+        NSError *error = nil;
+        AVAudioSession *session = [AVAudioSession sharedInstance];
+        [session setCategory:AVAudioSessionCategoryPlayback error:&error];
+        [session setActive:YES error:&error];
+        if (error) {
+            NSLog(@"⚠️ [播放下载] 音频会话激活警告: %@", error.localizedDescription);
+            error = nil;
+        } else {
+            NSLog(@"✅ [播放下载] 音频会话已重新激活");
+        }
+        
+        // 🔧 关键修复：先更新索引，再播放（确保封面和歌词正确）
+        NSArray *allMusic = [[MusicLibraryManager sharedManager] allMusic];
+        NSString *fileName = [filePath lastPathComponent];
+        NSInteger foundIndex = -1;
+        
+        for (NSInteger i = 0; i < allMusic.count; i++) {
+            MusicItem *item = allMusic[i];
+            // 🔧 修复：同时比较文件名和完整路径
+            if ([item.fileName isEqualToString:fileName] || [item.filePath isEqualToString:filePath]) {
+                foundIndex = i;
+                NSLog(@"✅ [播放下载] 找到歌曲索引: %ld", (long)i);
+                break;
+            }
+        }
+        
+        if (foundIndex >= 0) {
             // 更新 displayedMusicItems 和 index
             if ([self respondsToSelector:@selector(setDisplayedMusicItems:)]) {
                 [self setValue:allMusic forKey:@"displayedMusicItems"];
             }
             if ([self respondsToSelector:@selector(setIndex:)]) {
-                [self setValue:@(i) forKey:@"index"];
+                [self setValue:@(foundIndex) forKey:@"index"];
             }
-            NSLog(@"✅ [播放下载] 更新播放索引: %ld", (long)i);
-            break;
+            NSLog(@"✅ [播放下载] 索引已更新为: %ld（播放前）", (long)foundIndex);
+        } else {
+            NSLog(@"⚠️ [播放下载] 未在音乐库中找到该文件: %@", fileName);
         }
-    }
+        
+        // 现在播放（索引已正确）
+        [player performSelector:@selector(playWithFileName:) withObject:filePath];
+        NSLog(@"▶️ [播放下载] 播放命令已发送");
+    });
 }
 
 - (void)refreshMusicLibrary {
