@@ -1603,6 +1603,30 @@
         return nil;
     }
     
+    // 🔧 如果是NCM文件，尝试从解密后的MP3文件读取封面
+    if ([url isFileURL] && [[url.path.pathExtension lowercaseString] isEqualToString:@"ncm"]) {
+        NSString *ncmPath = url.path;
+        NSString *baseName = [ncmPath stringByDeletingPathExtension];
+        NSString *directory = [ncmPath stringByDeletingLastPathComponent];
+        
+        // 检查Documents目录中是否有解密后的文件
+        NSArray *paths = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES);
+        NSString *documentsDirectory = paths.firstObject;
+        NSString *fileName = [ncmPath lastPathComponent];
+        NSString *baseFileName = [fileName stringByDeletingPathExtension];
+        
+        // 尝试常见的音频格式
+        NSArray *extensions = @[@"mp3", @"flac", @"m4a"];
+        for (NSString *ext in extensions) {
+            NSString *decryptedPath = [[documentsDirectory stringByAppendingPathComponent:baseFileName] stringByAppendingPathExtension:ext];
+            if ([[NSFileManager defaultManager] fileExistsAtPath:decryptedPath]) {
+                NSLog(@"🔄 NCM文件，从解密文件读取封面: %@", [decryptedPath lastPathComponent]);
+                url = [NSURL fileURLWithPath:decryptedPath];
+                break;
+            }
+        }
+    }
+    
     // 检查文件是否存在
     if ([url isFileURL]) {
         NSFileManager *fileManager = [NSFileManager defaultManager];
@@ -1611,7 +1635,7 @@
             return nil;
         }
         
-        // 🆕 优先尝试从同目录加载独立的封面图片文件（云端下载的封面）
+        // 🆕 优先尝试从同目录加载独立的封面图片文件（云端下载的封面和NCM封面）
         UIImage *externalCover = [self loadExternalCoverForMusicFile:url.path];
         if (externalCover) {
             NSLog(@"✅ 使用外部封面文件: %@", url.path.lastPathComponent);
@@ -1666,7 +1690,7 @@
     
 }
 
-/// 🆕 从音乐文件所在目录加载外部封面文件（用于云端下载的封面）
+/// 🆕 从音乐文件所在目录加载外部封面文件（用于云端下载的封面和NCM封面）
 - (UIImage *)loadExternalCoverForMusicFile:(NSString *)musicFilePath {
     if (!musicFilePath || musicFilePath.length == 0) {
         return nil;
@@ -1679,13 +1703,21 @@
     // 支持的图片扩展名
     NSArray *imageExtensions = @[@"jpg", @"jpeg", @"png", @"webp"];
     
-    for (NSString *ext in imageExtensions) {
-        NSString *coverPath = [[directory stringByAppendingPathComponent:baseFileName] stringByAppendingPathExtension:ext];
-        if ([[NSFileManager defaultManager] fileExistsAtPath:coverPath]) {
-            UIImage *image = [UIImage imageWithContentsOfFile:coverPath];
-            if (image) {
-                NSLog(@"🖼️ 找到外部封面: %@", [coverPath lastPathComponent]);
-                return image;
+    // 🔧 修复：尝试两种命名方式
+    // 1. NCM解密生成的封面：歌曲名_cover.jpg
+    // 2. 云端下载的封面：歌曲名.jpg
+    NSArray *namingPatterns = @[@"%@_cover", @"%@"];
+    
+    for (NSString *pattern in namingPatterns) {
+        NSString *fileName = [NSString stringWithFormat:pattern, baseFileName];
+        for (NSString *ext in imageExtensions) {
+            NSString *coverPath = [[directory stringByAppendingPathComponent:fileName] stringByAppendingPathExtension:ext];
+            if ([[NSFileManager defaultManager] fileExistsAtPath:coverPath]) {
+                UIImage *image = [UIImage imageWithContentsOfFile:coverPath];
+                if (image) {
+                    NSLog(@"🖼️ 找到外部封面: %@", [coverPath lastPathComponent]);
+                    return image;
+                }
             }
         }
     }
@@ -2986,12 +3018,19 @@
 
 /// 播放当前曲目（复用播放逻辑）
 - (void)playCurrentTrack {
+    NSLog(@"🎵 [playCurrentTrack] 开始...");
+    NSLog(@"   当前索引: %ld", (long)index);
+    NSLog(@"   列表总数: %lu", (unsigned long)self.displayedMusicItems.count);
+    
     if (index >= self.displayedMusicItems.count) {
         NSLog(@"⚠️ 索引超出范围: %ld / %lu", (long)index, (unsigned long)self.displayedMusicItems.count);
         return;
     }
     
     MusicItem *musicItem = self.displayedMusicItems[index];
+    NSLog(@"   歌曲: %@", musicItem.fileName);
+    NSLog(@"   路径: %@", musicItem.filePath);
+    
     NSString *playPath = nil;
     
     // 优先使用已解密文件
@@ -3013,9 +3052,23 @@
             NSLog(@"✅ 解密成功: %@", playPath);
         }
     } else {
-        playPath = [AudioFileFormats prepareAudioFileForPlayback:musicItem.fileName];
-        NSLog(@"🎵 播放: %@", playPath);
+        // 🔧 优先使用完整路径（云下载的文件）
+        if (musicItem.filePath && [musicItem.filePath hasPrefix:@"/"]) {
+            playPath = musicItem.filePath;
+            NSLog(@"🎵 播放云下载文件（完整路径）: %@", playPath);
+        } else {
+            playPath = [AudioFileFormats prepareAudioFileForPlayback:musicItem.fileName];
+            NSLog(@"🎵 播放Bundle文件: %@", playPath);
+        }
     }
+    
+    // 🔧 最终验证 playPath
+    if (!playPath || playPath.length == 0) {
+        NSLog(@"❌ [playCurrentTrack] playPath 为空！");
+        return;
+    }
+    
+    NSLog(@"🎵 [playCurrentTrack] 最终播放路径: %@", playPath);
     
     // 🎵 先设置基本的播放信息（立即设置，让控制中心显示）
     [self updateNowPlayingInfoImmediate];

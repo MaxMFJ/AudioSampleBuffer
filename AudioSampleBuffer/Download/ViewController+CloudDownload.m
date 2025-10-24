@@ -334,11 +334,23 @@
         if (foundIndex >= 0) {
             // 🔧 使用 runtime 直接修改实例变量 index
             Ivar indexIvar = class_getInstanceVariable([self class], "index");
+            ptrdiff_t offset = 0;
+            
             if (indexIvar) {
-                // 直接设置 NSInteger 值
-                ptrdiff_t offset = ivar_getOffset(indexIvar);
-                NSInteger *indexPtr = (NSInteger *)((void *)self + offset);
+                // 🔧 正确的方式：获取 ivar 地址并设置值
+                void *selfPtr = (__bridge void *)self;
+                offset = ivar_getOffset(indexIvar);
+                NSInteger *indexPtr = (NSInteger *)(selfPtr + offset);
+                
+                NSLog(@"🔍 [索引设置] 准备设置索引...");
+                NSLog(@"   self 指针: %p", self);
+                NSLog(@"   offset: %td", offset);
+                NSLog(@"   index 地址: %p", indexPtr);
+                NSLog(@"   旧值: %ld", (long)*indexPtr);
+                
                 *indexPtr = foundIndex;
+                
+                NSLog(@"   新值: %ld", (long)*indexPtr);
                 NSLog(@"✅ [播放下载] 索引已设置: %ld", (long)foundIndex);
             }
             
@@ -353,10 +365,25 @@
                 NSLog(@"✅ [播放下载] 已调用 updateAudioSelection 更新封面");
             }
             
+            // 🔧 先停止当前播放，避免冲突
+            if ([player respondsToSelector:@selector(stop)]) {
+                [player performSelector:@selector(stop)];
+                NSLog(@"⏹️ [播放下载] 已停止当前播放");
+            }
+            
             // 🎯 使用标准播放方法（包含封面、歌词等完整流程）
             if ([self respondsToSelector:@selector(playCurrentTrack)]) {
+                NSLog(@"▶️ [播放下载] 准备调用 playCurrentTrack...");
+                
+                // 再次验证索引值
+                if (indexIvar && offset > 0) {
+                    void *selfPtr = (__bridge void *)self;
+                    NSInteger *indexPtr = (NSInteger *)(selfPtr + offset);
+                    NSLog(@"🔍 [播放前验证] 索引值: %ld", (long)*indexPtr);
+                }
+                
                 [self performSelector:@selector(playCurrentTrack)];
-                NSLog(@"▶️ [播放下载] 已调用 playCurrentTrack 播放");
+                NSLog(@"✅ [播放下载] playCurrentTrack 已调用");
             } else {
                 // 备用：直接播放
                 [player performSelector:@selector(playWithFileName:) withObject:filePath];
