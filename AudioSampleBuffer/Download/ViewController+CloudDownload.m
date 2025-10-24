@@ -304,37 +304,79 @@
             NSLog(@"✅ [播放下载] 音频会话已重新激活");
         }
         
-        // 🔧 关键修复：先更新索引，再播放（确保封面和歌词正确）
+        // 🔧 关键修复：使用标准的播放流程（自动处理索引、封面、歌词）
         NSArray *allMusic = [[MusicLibraryManager sharedManager] allMusic];
         NSString *fileName = [filePath lastPathComponent];
         NSInteger foundIndex = -1;
         
+        NSLog(@"🔍 [索引查找] 开始查找...");
+        NSLog(@"   目标文件名: %@", fileName);
+        NSLog(@"   目标路径: %@", filePath);
+        NSLog(@"   音乐库总数: %ld", (long)allMusic.count);
+        
         for (NSInteger i = 0; i < allMusic.count; i++) {
             MusicItem *item = allMusic[i];
-            // 🔧 修复：同时比较文件名和完整路径
-            if ([item.fileName isEqualToString:fileName] || [item.filePath isEqualToString:filePath]) {
+            
+            // 🔧 增强比较逻辑
+            BOOL matchFileName = [item.fileName isEqualToString:fileName];
+            BOOL matchFilePath = [item.filePath isEqualToString:filePath];
+            
+            if (matchFileName || matchFilePath) {
                 foundIndex = i;
                 NSLog(@"✅ [播放下载] 找到歌曲索引: %ld", (long)i);
+                NSLog(@"   匹配方式: %@", matchFileName ? @"文件名" : @"完整路径");
+                NSLog(@"   item.fileName: %@", item.fileName);
+                NSLog(@"   item.filePath: %@", item.filePath);
                 break;
             }
         }
         
         if (foundIndex >= 0) {
-            // 更新 displayedMusicItems 和 index
+            // 🔧 使用 runtime 直接修改实例变量 index
+            Ivar indexIvar = class_getInstanceVariable([self class], "index");
+            if (indexIvar) {
+                // 直接设置 NSInteger 值
+                ptrdiff_t offset = ivar_getOffset(indexIvar);
+                NSInteger *indexPtr = (NSInteger *)((void *)self + offset);
+                *indexPtr = foundIndex;
+                NSLog(@"✅ [播放下载] 索引已设置: %ld", (long)foundIndex);
+            }
+            
+            // 更新 displayedMusicItems
             if ([self respondsToSelector:@selector(setDisplayedMusicItems:)]) {
                 [self setValue:allMusic forKey:@"displayedMusicItems"];
             }
-            if ([self respondsToSelector:@selector(setIndex:)]) {
-                [self setValue:@(foundIndex) forKey:@"index"];
+            
+            // 🎯 关键：调用 updateAudioSelection 更新封面UI
+            if ([self respondsToSelector:@selector(updateAudioSelection)]) {
+                [self performSelector:@selector(updateAudioSelection)];
+                NSLog(@"✅ [播放下载] 已调用 updateAudioSelection 更新封面");
             }
-            NSLog(@"✅ [播放下载] 索引已更新为: %ld（播放前）", (long)foundIndex);
+            
+            // 🎯 使用标准播放方法（包含封面、歌词等完整流程）
+            if ([self respondsToSelector:@selector(playCurrentTrack)]) {
+                [self performSelector:@selector(playCurrentTrack)];
+                NSLog(@"▶️ [播放下载] 已调用 playCurrentTrack 播放");
+            } else {
+                // 备用：直接播放
+                [player performSelector:@selector(playWithFileName:) withObject:filePath];
+                NSLog(@"▶️ [播放下载] 使用备用方式播放");
+            }
         } else {
-            NSLog(@"⚠️ [播放下载] 未在音乐库中找到该文件: %@", fileName);
+            NSLog(@"⚠️ [播放下载] 未在音乐库中找到该文件！");
+            NSLog(@"   尝试的文件名: %@", fileName);
+            NSLog(@"   尝试的路径: %@", filePath);
+            NSLog(@"   音乐库中的最后5首歌:");
+            NSInteger start = MAX(0, allMusic.count - 5);
+            for (NSInteger i = start; i < allMusic.count; i++) {
+                MusicItem *item = allMusic[i];
+                NSLog(@"     [%ld] %@ | %@", (long)i, item.fileName, item.filePath);
+            }
+            
+            // 即使找不到索引，也尝试直接播放
+            [player performSelector:@selector(playWithFileName:) withObject:filePath];
+            NSLog(@"▶️ [播放下载] 未找到索引，尝试直接播放");
         }
-        
-        // 现在播放（索引已正确）
-        [player performSelector:@selector(playWithFileName:) withObject:filePath];
-        NSLog(@"▶️ [播放下载] 播放命令已发送");
     });
 }
 

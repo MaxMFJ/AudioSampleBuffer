@@ -256,8 +256,25 @@ static NSString *const kAPIBaseURL = @"https://api.qqmp3.vip/api";
     NSLog(@"⬇️ [下载] 开始: %@ - %@", detail.artist ?: @"未知", detail.name ?: @"未知");
     NSLog(@"⬇️ [下载] URL: %@", detail.url);
     
-    // 创建下载目录
+    // 🔧 创建下载目录（如果不存在）
     NSString *downloadDir = [MusicLibraryManager cloudDownloadDirectory];
+    NSFileManager *fileManager = [NSFileManager defaultManager];
+    if (![fileManager fileExistsAtPath:downloadDir]) {
+        NSError *createError = nil;
+        [fileManager createDirectoryAtPath:downloadDir 
+               withIntermediateDirectories:YES 
+                                attributes:nil 
+                                     error:&createError];
+        if (createError) {
+            NSLog(@"❌ [下载] 创建下载目录失败: %@", createError.localizedDescription);
+            NSError *error = [NSError errorWithDomain:@"QQMusicAPIService"
+                                                 code:-1
+                                             userInfo:@{NSLocalizedDescriptionKey: @"无法创建下载目录"}];
+            completion(nil, error);
+            return;
+        }
+        NSLog(@"✅ [下载] 下载目录已创建: %@", downloadDir);
+    }
     
     // 生成文件名（艺术家 - 歌名）
     NSString *safeArtist = [self sanitizeFileName:detail.artist];
