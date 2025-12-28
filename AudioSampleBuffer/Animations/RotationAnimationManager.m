@@ -63,12 +63,43 @@
 
 - (void)pauseAnimation {
     [super pauseAnimation];
-    [self stopAnimation];
+    
+    // 使用 layer 的 speed 和 timeOffset 来暂停动画，保持当前位置
+    for (UIView *view in self.managedViews) {
+        [self pauseLayerAnimation:view.layer];
+    }
+    
+    for (CALayer *layer in self.managedLayers) {
+        [self pauseLayerAnimation:layer];
+    }
 }
 
 - (void)resumeAnimation {
     [super resumeAnimation];
-    [self startAnimation];
+    
+    // 恢复 layer 动画，从暂停位置继续
+    for (UIView *view in self.managedViews) {
+        [self resumeLayerAnimation:view.layer];
+    }
+    
+    for (CALayer *layer in self.managedLayers) {
+        [self resumeLayerAnimation:layer];
+    }
+}
+
+- (void)pauseLayerAnimation:(CALayer *)layer {
+    CFTimeInterval pausedTime = [layer convertTime:CACurrentMediaTime() fromLayer:nil];
+    layer.speed = 0.0;
+    layer.timeOffset = pausedTime;
+}
+
+- (void)resumeLayerAnimation:(CALayer *)layer {
+    CFTimeInterval pausedTime = layer.timeOffset;
+    layer.speed = 1.0;
+    layer.timeOffset = 0.0;
+    layer.beginTime = 0.0;
+    CFTimeInterval timeSincePause = [layer convertTime:CACurrentMediaTime() fromLayer:nil] - pausedTime;
+    layer.beginTime = timeSincePause;
 }
 
 - (void)setRotations:(CGFloat)rotations 
@@ -122,25 +153,35 @@
     CABasicAnimation *rotationAnimation = [CABasicAnimation animationWithKeyPath:@"transform.rotation.z"];
     rotationAnimation.fromValue = @(0);
     
-    // 计算最终的旋转值
-    CGFloat finalRotationValue;
-    CGFloat absRotations = fabs(rotations); // 取绝对值
+    // 🔧 修复：每次循环旋转一整圈 (2π)，这样循环时不会有跳跃感
+    // rotations 参数现在表示"每 duration 秒旋转多少圈"
+    // 为了实现无缝循环，我们让单次动画旋转一圈，并调整 duration 以达到期望的速度
+    CGFloat absRotations = fabs(rotations);
     
+    // 安全检查：防止除以零
+    if (absRotations < 0.001) {
+        absRotations = 1.0;
+    }
+    
+    // 计算每圈需要的时间
+    NSTimeInterval durationPerRotation = duration / absRotations;
+    
+    // 每次动画循环旋转一整圈 (2π)，方向由 rotationType 决定
+    CGFloat singleRotationValue;
     switch (rotationType) {
         case RotationTypeClockwise:
-            finalRotationValue = absRotations * M_PI; // 顺时针为正值
+            singleRotationValue = 2.0 * M_PI; // 顺时针一整圈
             break;
         case RotationTypeCounterClockwise:
-            finalRotationValue = -absRotations * M_PI; // 逆时针为负值
+            singleRotationValue = -2.0 * M_PI; // 逆时针一整圈
             break;
         case RotationTypeAlternating:
-            // 交替旋转逻辑：可以根据当前时间或其他条件决定方向
-            finalRotationValue = absRotations * M_PI;
+            singleRotationValue = 2.0 * M_PI; // 交替旋转逻辑保持顺时针
             break;
     }
     
-    rotationAnimation.toValue = @(finalRotationValue);
-    rotationAnimation.duration = duration;
+    rotationAnimation.toValue = @(singleRotationValue);
+    rotationAnimation.duration = durationPerRotation;
     rotationAnimation.repeatCount = MAXFLOAT;
     rotationAnimation.removedOnCompletion = NO;
     rotationAnimation.fillMode = kCAFillModeForwards;

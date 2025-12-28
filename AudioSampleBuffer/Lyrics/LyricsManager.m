@@ -410,6 +410,173 @@
     return lyricsDirectory;
 }
 
+#pragma mark - 导入歌词
+
+- (void)importLRCFile:(NSURL *)lrcURL
+         forAudioFile:(NSString *)audioPath
+           completion:(LyricsCompletionBlock)completion {
+    
+    // 开始安全访问
+    BOOL accessGranted = [lrcURL startAccessingSecurityScopedResource];
+    
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+        NSError *readError = nil;
+        NSString *lrcContent = [NSString stringWithContentsOfURL:lrcURL
+                                                        encoding:NSUTF8StringEncoding
+                                                           error:&readError];
+        
+        // 如果 UTF-8 读取失败，尝试 GBK 编码
+        if (!lrcContent) {
+            NSStringEncoding gbkEncoding = CFStringConvertEncodingToNSStringEncoding(kCFStringEncodingGB_18030_2000);
+            lrcContent = [NSString stringWithContentsOfURL:lrcURL
+                                                  encoding:gbkEncoding
+                                                     error:&readError];
+        }
+        
+        // 结束安全访问
+        if (accessGranted) {
+            [lrcURL stopAccessingSecurityScopedResource];
+        }
+        
+        if (!lrcContent || lrcContent.length == 0) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                NSError *error = [NSError errorWithDomain:@"LyricsManager"
+                                                     code:500
+                                                 userInfo:@{NSLocalizedDescriptionKey: @"无法读取LRC文件内容"}];
+                NSLog(@"❌ [歌词导入] 读取失败: %@", readError.localizedDescription);
+                if (completion) {
+                    completion(nil, error);
+                }
+            });
+            return;
+        }
+        
+        // 解析歌词
+        LRCParser *parser = [[LRCParser alloc] init];
+        BOOL parseSuccess = [parser parseFromString:lrcContent];
+        
+        if (!parseSuccess || parser.lyrics.count == 0) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                NSError *error = [NSError errorWithDomain:@"LyricsManager"
+                                                     code:500
+                                                 userInfo:@{NSLocalizedDescriptionKey: @"LRC文件解析失败或歌词为空"}];
+                NSLog(@"❌ [歌词导入] 解析失败");
+                if (completion) {
+                    completion(nil, error);
+                }
+            });
+            return;
+        }
+        
+        // 保存到沙盒
+        BOOL saveSuccess = [self saveLyrics:lrcContent forAudioFile:audioPath];
+        
+        if (saveSuccess) {
+            // 更新缓存
+            [self.lyricsCache setObject:parser forKey:audioPath];
+            NSLog(@"✅ [歌词导入] 成功导入歌词: %@ (共 %lu 行)", 
+                  [[audioPath lastPathComponent] stringByDeletingPathExtension],
+                  (unsigned long)parser.lyrics.count);
+        }
+        
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (completion) {
+                completion(parser, nil);
+            }
+        });
+    });
+}
+
+- (void)importLRCFile:(NSURL *)lrcURL
+           completion:(LyricsCompletionBlock)completion {
+    
+    // 从 LRC 文件名自动生成存储文件名
+    NSString *lrcFileName = [[lrcURL lastPathComponent] stringByDeletingPathExtension];
+    NSString *targetPath = [[self lyricsSandboxDirectory] stringByAppendingPathComponent:
+                           [NSString stringWithFormat:@"%@.lrc", lrcFileName]];
+    
+    // 开始安全访问
+    BOOL accessGranted = [lrcURL startAccessingSecurityScopedResource];
+    
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+        NSError *readError = nil;
+        NSString *lrcContent = [NSString stringWithContentsOfURL:lrcURL
+                                                        encoding:NSUTF8StringEncoding
+                                                           error:&readError];
+        
+        // 如果 UTF-8 读取失败，尝试 GBK 编码
+        if (!lrcContent) {
+            NSStringEncoding gbkEncoding = CFStringConvertEncodingToNSStringEncoding(kCFStringEncodingGB_18030_2000);
+            lrcContent = [NSString stringWithContentsOfURL:lrcURL
+                                                  encoding:gbkEncoding
+                                                     error:&readError];
+        }
+        
+        // 结束安全访问
+        if (accessGranted) {
+            [lrcURL stopAccessingSecurityScopedResource];
+        }
+        
+        if (!lrcContent || lrcContent.length == 0) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                NSError *error = [NSError errorWithDomain:@"LyricsManager"
+                                                     code:500
+                                                 userInfo:@{NSLocalizedDescriptionKey: @"无法读取LRC文件内容"}];
+                NSLog(@"❌ [歌词导入] 读取失败: %@", readError.localizedDescription);
+                if (completion) {
+                    completion(nil, error);
+                }
+            });
+            return;
+        }
+        
+        // 解析歌词
+        LRCParser *parser = [[LRCParser alloc] init];
+        BOOL parseSuccess = [parser parseFromString:lrcContent];
+        
+        if (!parseSuccess || parser.lyrics.count == 0) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                NSError *error = [NSError errorWithDomain:@"LyricsManager"
+                                                     code:500
+                                                 userInfo:@{NSLocalizedDescriptionKey: @"LRC文件解析失败或歌词为空"}];
+                NSLog(@"❌ [歌词导入] 解析失败");
+                if (completion) {
+                    completion(nil, error);
+                }
+            });
+            return;
+        }
+        
+        // 直接保存到目标路径
+        NSError *saveError = nil;
+        BOOL saveSuccess = [lrcContent writeToFile:targetPath
+                                        atomically:YES
+                                          encoding:NSUTF8StringEncoding
+                                             error:&saveError];
+        
+        if (saveSuccess) {
+            NSLog(@"✅ [歌词导入] 成功导入歌词: %@ (共 %lu 行)", 
+                  lrcFileName,
+                  (unsigned long)parser.lyrics.count);
+        } else {
+            NSLog(@"⚠️ [歌词导入] 保存失败: %@", saveError.localizedDescription);
+        }
+        
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (completion) {
+                completion(parser, nil);
+            }
+        });
+    });
+}
+
+- (void)clearLyricsCacheForAudioFile:(NSString *)audioPath {
+    if (audioPath) {
+        [self.lyricsCache removeObjectForKey:audioPath];
+        NSLog(@"🗑️ [歌词] 已清除缓存: %@", [audioPath lastPathComponent]);
+    }
+}
+
 #pragma mark - QQ音乐歌词获取
 
 - (void)fetchLyricsFromQQMusicForAudioFile:(NSString *)audioPath

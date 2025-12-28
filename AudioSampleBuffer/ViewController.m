@@ -18,15 +18,19 @@
 #import "LyricsView.h"
 #import "LRCParser.h"
 #import "LyricsEffectControlPanel.h"
+#import "LyricsManager.h"  // 📝 歌词管理器
 #import "AudioFileFormats.h"  // 🆕 音频格式工具
 #import "KaraokeViewController.h"
 #import "MusicLibraryManager.h"  // 🆕 音乐库管理器
 #import "ViewController+CloudDownload.h"  // 🆕 云端下载功能
+#import "ViewController+PlaybackProgress.h"  // 🆕 播放进度条功能
+#import "VinylRecordView.h"  // 🎵 黑胶唱片动画视图
+#import "LyricsEditorViewController.h"  // 🎼 歌词打轴编辑器
 #import <AVFoundation/AVFoundation.h>
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>  // 用于文件类型识别
 #import <MediaPlayer/MediaPlayer.h>  // 🎵 系统媒体控制
 
-@interface ViewController ()<CAAnimationDelegate,UITableViewDelegate, UITableViewDataSource, AudioSpectrumPlayerDelegate, VisualEffectManagerDelegate, GalaxyControlDelegate, CyberpunkControlDelegate, PerformanceControlDelegate, LyricsEffectControlDelegate, UISearchBarDelegate, UIDocumentPickerDelegate>
+@interface ViewController ()<CAAnimationDelegate,UITableViewDelegate, UITableViewDataSource, AudioSpectrumPlayerDelegate, VisualEffectManagerDelegate, GalaxyControlDelegate, CyberpunkControlDelegate, PerformanceControlDelegate, LyricsEffectControlDelegate, UISearchBarDelegate, UIDocumentPickerDelegate, LyricsEditorViewControllerDelegate>
 {
     BOOL enterBackground;
     NSInteger index;
@@ -94,6 +98,8 @@
 // 歌词特效控制
 @property (nonatomic, strong) LyricsEffectControlPanel *lyricsEffectPanel;
 @property (nonatomic, strong) UIButton *lyricsEffectButton;
+@property (nonatomic, strong) UIButton *importLyricsButton;  // 📝 导入歌词按钮
+@property (nonatomic, strong) UIButton *lyricsTimingButton;  // 🎼 歌词打轴按钮
 
 // UI控制
 @property (nonatomic, strong) UIButton *toggleUIButton;  // 一键显示/隐藏UI按钮
@@ -107,6 +113,14 @@
 
 // 🎵 系统媒体控制
 @property (nonatomic, assign) NSTimeInterval lastNowPlayingUpdateTime;  // 上次更新系统媒体信息的时间
+
+// 🎵 黑胶唱片视图（用于没有封面的歌曲）
+@property (nonatomic, strong) VinylRecordView *vinylRecordView;
+@property (nonatomic, assign) BOOL isShowingVinylRecord;  // 是否正在显示黑胶唱片
+
+// 🔧 播放状态跟踪（用于防止意外恢复播放）
+@property (nonatomic, assign) BOOL wasPlayingBeforeInterruption;  // 中断前是否正在播放
+@property (nonatomic, assign) BOOL shouldPreventAutoResume;  // 是否禁止自动恢复播放
 @end
 
 @implementation ViewController
@@ -156,6 +170,12 @@
     } else {
         NSLog(@"⚠️ 进入后台时没有音乐在播放");
     }
+    
+    // 🎵 暂停黑胶唱片动画以节省资源
+    if (self.isShowingVinylRecord) {
+        [self.vinylRecordView pauseSpinning];
+        NSLog(@"✅ 黑胶唱片动画已暂停");
+    }
 }
 
 - (void)hadEnterForeGround{
@@ -181,6 +201,12 @@
         [self.spectrumView resumeRendering];
         NSLog(@"✅ 频谱视图已恢复");
     }
+    
+    // 🎵 如果正在播放且显示黑胶唱片，恢复旋转动画
+    if (self.isShowingVinylRecord && self.player.isPlaying) {
+        [self.vinylRecordView resumeSpinning];
+        NSLog(@"✅ 黑胶唱片动画已恢复");
+    }
 }
 
 - (void)karaokeModeDidStart {
@@ -192,35 +218,15 @@
 }
 
 - (void)karaokeModeDidEnd {
-    NSLog(@"🎤 收到卡拉OK模式结束通知，恢复主界面音频播放");
+    NSLog(@"🎤 收到卡拉OK模式结束通知");
     // 恢复视觉效果渲染
     [self.visualEffectManager resumeRendering];
-    // 可以选择恢复播放当前选中的歌曲
-    if (self.displayedMusicItems.count > 0 && index < self.displayedMusicItems.count) {
-        // 🆕 自动处理 NCM 文件解密，优先使用已解密文件
-        MusicItem *musicItem = self.displayedMusicItems[index];
-        NSString *playPath = nil;
-        
-        // 优先使用已解密文件
-        if (musicItem.decryptedPath && [[NSFileManager defaultManager] fileExistsAtPath:musicItem.decryptedPath]) {
-            playPath = musicItem.decryptedPath;
-        } 
-        // 检查是否是NCM文件，需要先解密
-        else if ([AudioFileFormats needsDecryption:musicItem.fileName]) {
-            // 🔧 优先传递完整路径
-            NSString *fileToDecrypt = (musicItem.filePath && [musicItem.filePath hasPrefix:@"/"]) ? musicItem.filePath : musicItem.fileName;
-            playPath = [AudioFileFormats prepareAudioFileForPlayback:fileToDecrypt];
-            
-            // 如果解密成功，更新状态
-            if (playPath && [playPath hasPrefix:@"/"] && [[NSFileManager defaultManager] fileExistsAtPath:playPath]) {
-                [self.musicLibrary updateNCMDecryptionStatus:musicItem decryptedPath:playPath];
-            }
-        } else {
-            playPath = [AudioFileFormats prepareAudioFileForPlayback:musicItem.fileName];
-        }
-        
-        [self.player playWithFileName:playPath];
-    }
+    
+    // 🔧 不再自动恢复播放，由用户手动控制
+    // 清除禁止自动恢复标志
+    self.shouldPreventAutoResume = NO;
+    
+    NSLog(@"🎤 卡拉OK模式结束，等待用户手动播放");
 }
 
 - (void)ncmDecryptionCompleted:(NSNotification *)notification {
@@ -249,6 +255,42 @@
     
     // 设置默认效果
     [self.visualEffectManager setCurrentEffect:VisualEffectTypeNeonGlow animated:NO];
+    
+    // 🎨 监听特效配置按钮点击通知
+    [[NSNotificationCenter defaultCenter] addObserver:self 
+                                             selector:@selector(handleEffectSettingsButtonTapped:) 
+                                                 name:@"EffectSettingsButtonTapped" 
+                                               object:nil];
+}
+
+- (void)setupNavigationBar {
+    // 🎨 配置导航栏外观，确保标题可见
+    if (@available(iOS 13.0, *)) {
+        UINavigationBarAppearance *appearance = [[UINavigationBarAppearance alloc] init];
+        [appearance configureWithOpaqueBackground];
+        appearance.backgroundColor = [UIColor colorWithRed:0.1 green:0.1 blue:0.15 alpha:0.95];
+        appearance.titleTextAttributes = @{
+            NSForegroundColorAttributeName: [UIColor whiteColor],
+            NSFontAttributeName: [UIFont boldSystemFontOfSize:18]
+        };
+        
+        self.navigationController.navigationBar.standardAppearance = appearance;
+        self.navigationController.navigationBar.scrollEdgeAppearance = appearance;
+        self.navigationController.navigationBar.compactAppearance = appearance;
+    } else {
+        // iOS 13 以下的版本
+        self.navigationController.navigationBar.barTintColor = [UIColor colorWithRed:0.1 green:0.1 blue:0.15 alpha:0.95];
+        self.navigationController.navigationBar.titleTextAttributes = @{
+            NSForegroundColorAttributeName: [UIColor whiteColor],
+            NSFontAttributeName: [UIFont boldSystemFontOfSize:18]
+        };
+        self.navigationController.navigationBar.translucent = YES;
+    }
+    
+    // 隐藏导航栏，让视觉效果全屏显示
+    self.navigationController.navigationBarHidden = YES;
+    
+    NSLog(@"✅ 导航栏已隐藏");
 }
 
 - (void)setupEffectControls {
@@ -325,7 +367,8 @@
     [self createKaraokeButton];
     
     // 添加快捷切换按钮
-    [self createQuickEffectButtons];
+    // 🔇 已隐藏快捷视觉特效按钮
+    // [self createQuickEffectButtons];
     
     // 确保控制按钮在最上层
     [self bringControlButtonsToFront];
@@ -526,22 +569,52 @@
     [self.view addSubview:self.lyricsEffectButton];
     [self.controlButtons addObject:self.lyricsEffectButton];
     
+    // 📝 添加导入歌词按钮
+    [self createImportLyricsButton];
+    
     // 🔊 添加混音控制开关
     [self createMixAudioControl];
 }
 
-- (void)createMixAudioControl {
-    // 🔧 计算顶部偏移量
-    CGFloat safeTop = 0;
-    if (@available(iOS 11.0, *)) {
-        safeTop = self.view.safeAreaInsets.top;
-    }
-    CGFloat navigationBarHeight = self.navigationController.navigationBar.frame.size.height;
-    CGFloat statusBarHeight = [[UIApplication sharedApplication] statusBarFrame].size.height;
-    CGFloat topOffset = MAX(safeTop, statusBarHeight + navigationBarHeight) + 70; // 在第一行按钮下方
+- (void)createImportLyricsButton {
+    // 📝 导入歌词按钮放在歌词特效按钮右侧（同一行）
+    // 歌词特效按钮: x=150, width=100, 所以右边界是250
+    CGFloat lyricsButtonRightEdge = CGRectGetMaxX(self.lyricsEffectButton.frame);
+    CGFloat topOffset = CGRectGetMinY(self.lyricsEffectButton.frame);
     
-    // 创建容器视图
-    self.mixAudioControlView = [[UIView alloc] initWithFrame:CGRectMake(260, topOffset, 130, 50)];
+    self.importLyricsButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    [self.importLyricsButton setTitle:@"📝 导入" forState:UIControlStateNormal];
+    [self.importLyricsButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+    self.importLyricsButton.titleLabel.font = [UIFont boldSystemFontOfSize:14];
+    self.importLyricsButton.backgroundColor = [UIColor colorWithRed:0.2 green:0.5 blue:0.4 alpha:0.9];
+    self.importLyricsButton.layer.cornerRadius = 25;
+    self.importLyricsButton.layer.borderWidth = 1.5;
+    self.importLyricsButton.layer.borderColor = [UIColor colorWithRed:0.4 green:0.7 blue:0.6 alpha:1.0].CGColor;
+    // 放在歌词按钮右侧，间距5像素
+    self.importLyricsButton.frame = CGRectMake(lyricsButtonRightEdge + 5, topOffset, 70, 50);
+    
+    // 添加阴影效果
+    self.importLyricsButton.layer.shadowColor = [UIColor colorWithRed:0.2 green:0.6 blue:0.5 alpha:1.0].CGColor;
+    self.importLyricsButton.layer.shadowOffset = CGSizeMake(0, 2);
+    self.importLyricsButton.layer.shadowOpacity = 0.6;
+    self.importLyricsButton.layer.shadowRadius = 3;
+    
+    [self.importLyricsButton addTarget:self 
+                                action:@selector(importLyricsButtonTapped:) 
+                      forControlEvents:UIControlEventTouchUpInside];
+    
+    [self.view addSubview:self.importLyricsButton];
+    [self.controlButtons addObject:self.importLyricsButton];
+}
+
+- (void)createMixAudioControl {
+    // 🔊 混音控制放在导入歌词按钮右侧
+    CGFloat importButtonRightEdge = CGRectGetMaxX(self.importLyricsButton.frame);
+    CGFloat topOffset = CGRectGetMinY(self.importLyricsButton.frame);
+    
+    // 创建容器视图（放在导入歌词按钮右侧，间距5像素）
+    // 缩小容器尺寸，只保留开关
+    self.mixAudioControlView = [[UIView alloc] initWithFrame:CGRectMake(importButtonRightEdge + 5, topOffset, 60, 50)];
     self.mixAudioControlView.backgroundColor = [UIColor colorWithRed:0.2 green:0.4 blue:0.6 alpha:0.9];
     self.mixAudioControlView.layer.cornerRadius = 25;
     self.mixAudioControlView.layer.borderWidth = 2.0;
@@ -553,15 +626,10 @@
     self.mixAudioControlView.layer.shadowOpacity = 0.8;
     self.mixAudioControlView.layer.shadowRadius = 4;
     
-    // 创建图标标签
-    UILabel *iconLabel = [[UILabel alloc] initWithFrame:CGRectMake(10, 0, 40, 50)];
-    iconLabel.text = @"🔊";
-    iconLabel.font = [UIFont systemFontOfSize:24];
-    iconLabel.textAlignment = NSTextAlignmentCenter;
-    [self.mixAudioControlView addSubview:iconLabel];
-    
-    // 创建开关
-    self.mixAudioSwitch = [[UISwitch alloc] initWithFrame:CGRectMake(55, 10, 60, 30)];
+    // 创建开关（居中放置）
+    self.mixAudioSwitch = [[UISwitch alloc] initWithFrame:CGRectMake(8, 10, 44, 30)];
+    self.mixAudioSwitch.transform = CGAffineTransformMakeScale(0.75, 0.75);  // 缩小开关
+    self.mixAudioSwitch.center = CGPointMake(30, 25);  // 居中
     self.mixAudioSwitch.on = NO;  // 默认关闭（不混音）
     self.mixAudioSwitch.onTintColor = [UIColor colorWithRed:0.3 green:0.8 blue:0.5 alpha:1.0];
     [self.mixAudioSwitch addTarget:self 
@@ -633,6 +701,9 @@
     
     // 切换所有控制按钮的显示/隐藏状态
     [UIView animateWithDuration:0.3 animations:^{
+        // 调整隐藏UI按钮自身的透明度
+        self.toggleUIButton.alpha = self.isUIHidden ? 0.2 : 1.0;
+        
         for (UIButton *button in self.controlButtons) {
             button.alpha = self.isUIHidden ? 0.0 : 1.0;
             button.userInteractionEnabled = !self.isUIHidden;
@@ -668,6 +739,12 @@
             self.importButton.userInteractionEnabled = !self.isUIHidden;
         }
         
+        // 📝 导入歌词按钮
+        if (self.importLyricsButton) {
+            self.importLyricsButton.alpha = self.isUIHidden ? 0.0 : 1.0;
+            self.importLyricsButton.userInteractionEnabled = !self.isUIHidden;
+        }
+        
         // 🎵 播放控制按钮
         if (self.previousButton) {
             self.previousButton.alpha = self.isUIHidden ? 0.0 : 1.0;
@@ -700,6 +777,15 @@
             self.cloudButton.alpha = self.isUIHidden ? 0.0 : 1.0;
             self.cloudButton.userInteractionEnabled = !self.isUIHidden;
         }
+        
+        // 🎼 歌词打轴按钮
+        if (self.lyricsTimingButton) {
+            self.lyricsTimingButton.alpha = self.isUIHidden ? 0.0 : 1.0;
+            self.lyricsTimingButton.userInteractionEnabled = !self.isUIHidden;
+        }
+        
+        // 🎵 进度条
+        [self setProgressViewHidden:self.isUIHidden animated:NO];
     }];
 }
 
@@ -732,10 +818,19 @@
 }
 - (void)viewWillAppear:(BOOL)animated
 {
-    [super viewWillAppear:YES];
+    [super viewWillAppear:animated];
+    // 首页隐藏导航栏，让视觉效果全屏显示
+    [self.navigationController setNavigationBarHidden:YES animated:animated];
+    
+    // 🔧 清除禁止自动恢复标志（用户返回主界面时）
+    self.shouldPreventAutoResume = NO;
+    NSLog(@"📱 主界面出现，允许正常的音频操作");
 }
 - (void)viewDidLoad {
     [super viewDidLoad];
+    
+    // 🎨 配置导航栏外观
+    [self setupNavigationBar];
     
     // 🆕 初始化音乐库管理器（最先初始化）
     [self setupMusicLibrary];
@@ -756,6 +851,20 @@
     
     // 🆕 监听 NCM 解密完成通知
     [[NSNotificationCenter defaultCenter]addObserver:self selector:@selector(ncmDecryptionCompleted:) name:@"NCMDecryptionCompleted" object:nil];
+    
+    // 🎧 监听音频会话中断通知（耳机拔出/插入、来电等）
+    [[NSNotificationCenter defaultCenter] addObserver:self 
+                                             selector:@selector(handleAudioSessionInterruption:) 
+                                                 name:AVAudioSessionInterruptionNotification 
+                                               object:[AVAudioSession sharedInstance]];
+    
+    // 🎧 监听音频路由变化通知（耳机连接/断开）
+    [[NSNotificationCenter defaultCenter] addObserver:self 
+                                             selector:@selector(handleAudioSessionRouteChange:) 
+                                                 name:AVAudioSessionRouteChangeNotification 
+                                               object:[AVAudioSession sharedInstance]];
+    
+    NSLog(@"✅ 已注册音频会话中断和路由变化监听");
     
     self.view.backgroundColor = [UIColor blackColor];
     
@@ -782,6 +891,9 @@
     
     // 🎵 配置系统媒体控制（控制中心、锁屏等）
     [self setupRemoteCommandCenter];
+    
+    // 🎵 设置播放进度条
+    [self setupProgressView];
 }
 
 - (void)setupBackgroundLayers {
@@ -875,9 +987,21 @@
     imageView = [[UIImageView alloc]init];
     imageView.frame = CGRectMake(0, 0, 170, 170);
     
+    // 🎵 创建黑胶唱片视图（与 imageView 相同大小和位置）
+    self.vinylRecordView = [[VinylRecordView alloc] initWithFrame:CGRectMake(0, 0, 170, 170)];
+    self.vinylRecordView.center = self.view.center;
+    self.vinylRecordView.rotationsPerSecond = 0.5; // 2秒一圈
+    self.vinylRecordView.glossIntensity = 0.35;
+    self.vinylRecordView.hidden = YES; // 默认隐藏
+    [self.view addSubview:self.vinylRecordView];
+    
     // 🆕 使用当前显示的音乐项获取封面
+    UIImage *coverImage = nil;
+    NSString *songName = nil;
+    
     if (self.displayedMusicItems.count > 0 && index < self.displayedMusicItems.count) {
         MusicItem *musicItem = self.displayedMusicItems[index];
+        songName = musicItem.displayName ?: musicItem.fileName;
         
         // 🔧 修复：优先使用 filePath（导入的文件），否则从 Bundle 查找
         NSURL *fileUrl = nil;
@@ -889,7 +1013,27 @@
             NSLog(@"🖼️ 使用Bundle文件封面: %@", musicItem.fileName);
         }
         
-        imageView.image = [self musicImageWithMusicURL:fileUrl];
+        coverImage = [self musicImageWithMusicURL:fileUrl];
+    }
+    
+    // 🎵 根据是否有封面选择显示 imageView 或 vinylRecordView
+    if (coverImage) {
+        imageView.image = coverImage;
+        imageView.hidden = NO;
+        self.vinylRecordView.hidden = YES;
+        self.isShowingVinylRecord = NO;
+        NSLog(@"🖼️ 显示音乐封面");
+    } else {
+        // 没有封面，显示黑胶唱片动画
+        imageView.hidden = YES;
+        self.vinylRecordView.hidden = NO;
+        self.isShowingVinylRecord = YES;
+        
+        // 使用歌曲名称生成一致的随机外观
+        if (songName) {
+            [self.vinylRecordView regenerateAppearanceWithSongName:songName];
+        }
+        NSLog(@"🎵 显示黑胶唱片动画（无封面）");
     }
     
     imageView.layer.cornerRadius = imageView.frame.size.height/2.0;
@@ -898,11 +1042,13 @@
     imageView.center = self.view.center;
     [self.view addSubview:imageView];
     
-    // 使用动画管理器添加旋转动画
-    [self.animationCoordinator addRotationViews:@[imageView] 
-                                      rotations:@[@(6.0)] 
-                                      durations:@[@(120.0)] 
-                                  rotationTypes:@[@(RotationTypeCounterClockwise)]];
+    // 使用动画管理器添加旋转动画（只有当显示封面图片时才需要）
+    if (!self.isShowingVinylRecord) {
+        [self.animationCoordinator addRotationViews:@[imageView] 
+                                          rotations:@[@(6.0)] 
+                                          durations:@[@(120.0)] 
+                                      rotationTypes:@[@(RotationTypeCounterClockwise)]];
+    }
 
     
     [self.view addSubview:[self buildTableHeadView]];
@@ -1146,6 +1292,20 @@
     [self.cloudButton addTarget:self action:@selector(cloudDownloadButtonTapped:) forControlEvents:UIControlEventTouchUpInside];
     [self.view addSubview:self.cloudButton];
     
+    // 🎼 歌词打轴按钮 - 放在云端按钮下方
+    CGFloat timingButtonY = cloudButtonY + controlButtonHeight + controlSpacing;
+    self.lyricsTimingButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    [self.lyricsTimingButton setTitle:@"🎼" forState:UIControlStateNormal];
+    self.lyricsTimingButton.titleLabel.font = [UIFont systemFontOfSize:20];
+    [self.lyricsTimingButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+    self.lyricsTimingButton.backgroundColor = [UIColor colorWithRed:0.9 green:0.5 blue:0.1 alpha:0.85];
+    self.lyricsTimingButton.layer.cornerRadius = 6;
+    self.lyricsTimingButton.layer.borderWidth = 1.0;
+    self.lyricsTimingButton.layer.borderColor = [UIColor colorWithRed:1.0 green:0.7 blue:0.3 alpha:0.8].CGColor;
+    self.lyricsTimingButton.frame = CGRectMake(leftX, timingButtonY, controlButtonWidth, controlButtonHeight);
+    [self.lyricsTimingButton addTarget:self action:@selector(lyricsTimingButtonTapped:) forControlEvents:UIControlEventTouchUpInside];
+    [self.view addSubview:self.lyricsTimingButton];
+    
     // 🆕 添加搜索栏 - 放在右侧
     CGFloat searchBarX = leftX + buttonWidth + 15;
     CGFloat searchBarWidth = self.view.frame.size.width - searchBarX - 10;
@@ -1259,6 +1419,184 @@
     
     return cell;
 }
+
+#pragma mark - UITableView 编辑和删除
+
+// 🆕 使用 iOS 11+ 的左侧滑动 API（避免与右侧收藏、播放按钮重叠）
+- (UISwipeActionsConfiguration *)tableView:(UITableView *)tableView leadingSwipeActionsConfigurationForRowAtIndexPath:(NSIndexPath *)indexPath API_AVAILABLE(ios(11.0)) {
+    
+    MusicItem *musicItem = self.displayedMusicItems[indexPath.row];
+    
+    // 检查是否可以删除（Bundle文件不可删除）
+    BOOL isBundleFile = ![musicItem.filePath hasPrefix:@"/var/mobile"] && 
+                        ![musicItem.filePath hasPrefix:@"/Users"] &&
+                        ![musicItem.filePath containsString:@"Documents"];
+    
+    if (isBundleFile) {
+        // Bundle文件：不显示任何侧滑操作
+        return nil;
+    }
+    
+    // 创建删除操作（从左侧滑出）
+    UIContextualAction *deleteAction = [UIContextualAction contextualActionWithStyle:UIContextualActionStyleDestructive
+                                                                               title:@"删除"
+                                                                             handler:^(UIContextualAction * _Nonnull action, __kindof UIView * _Nonnull sourceView, void (^ _Nonnull completionHandler)(BOOL)) {
+        // 显示确认对话框
+        NSString *message = [NSString stringWithFormat:@"确定要删除 \"%@\" 吗？\n\n这将同时删除：\n• 音频文件\n• 歌词文件（如有）\n• 所有播放记录\n\n此操作不可撤销！", musicItem.displayName];
+        
+        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"🗑️ 删除歌曲"
+                                                                       message:message
+                                                                preferredStyle:UIAlertControllerStyleAlert];
+        
+        // 确认删除按钮
+        UIAlertAction *confirmDelete = [UIAlertAction actionWithTitle:@"删除"
+                                                                style:UIAlertActionStyleDestructive
+                                                              handler:^(UIAlertAction * _Nonnull action) {
+            [self performDeleteMusicItem:musicItem atIndexPath:indexPath];
+            completionHandler(YES); // 关闭侧滑
+        }];
+        
+        // 取消按钮
+        UIAlertAction *cancelAction = [UIAlertAction actionWithTitle:@"取消"
+                                                               style:UIAlertActionStyleCancel
+                                                             handler:^(UIAlertAction * _Nonnull action) {
+            completionHandler(NO); // 不删除，关闭侧滑
+        }];
+        
+        [alert addAction:cancelAction];
+        [alert addAction:confirmDelete];
+        
+        [self presentViewController:alert animated:YES completion:nil];
+    }];
+    
+    // 自定义删除按钮样式
+    deleteAction.backgroundColor = [UIColor colorWithRed:1.0 green:0.2 blue:0.2 alpha:1.0]; // 鲜红色
+    deleteAction.image = [UIImage systemImageNamed:@"trash.fill"]; // iOS 13+ 系统图标
+    
+    // 返回侧滑配置
+    UISwipeActionsConfiguration *configuration = [UISwipeActionsConfiguration configurationWithActions:@[deleteAction]];
+    configuration.performsFirstActionWithFullSwipe = NO; // 禁止完全侧滑直接删除（必须点击确认）
+    
+    return configuration;
+}
+
+// ⚠️ 启用侧滑编辑功能（必须返回 YES 才能触发侧滑）
+- (BOOL)tableView:(UITableView *)tableView canEditRowAtIndexPath:(NSIndexPath *)indexPath {
+    // 检查是否可以删除（Bundle文件不可删除）
+    MusicItem *musicItem = self.displayedMusicItems[indexPath.row];
+    BOOL isBundleFile = ![musicItem.filePath hasPrefix:@"/var/mobile"] &&
+                        ![musicItem.filePath hasPrefix:@"/Users"] &&
+                        ![musicItem.filePath containsString:@"Documents"];
+    return !isBundleFile;
+}
+
+- (void)tableView:(UITableView *)tableView commitEditingStyle:(UITableViewCellEditingStyle)editingStyle forRowAtIndexPath:(NSIndexPath *)indexPath {
+    // iOS 10 及以下的删除处理
+    if (editingStyle == UITableViewCellEditingStyleDelete) {
+        MusicItem *musicItem = self.displayedMusicItems[indexPath.row];
+        
+        NSString *message = [NSString stringWithFormat:@"确定要删除 \"%@\" 吗？\n\n此操作不可撤销！", musicItem.displayName];
+        
+        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"🗑️ 删除歌曲"
+                                                                       message:message
+                                                                preferredStyle:UIAlertControllerStyleAlert];
+        
+        UIAlertAction *deleteAction = [UIAlertAction actionWithTitle:@"删除"
+                                                               style:UIAlertActionStyleDestructive
+                                                             handler:^(UIAlertAction * _Nonnull action) {
+            [self performDeleteMusicItem:musicItem atIndexPath:indexPath];
+        }];
+        
+        UIAlertAction *cancelAction = [UIAlertAction actionWithTitle:@"取消"
+                                                               style:UIAlertActionStyleCancel
+                                                             handler:^(UIAlertAction * _Nonnull action) {
+            [tableView setEditing:NO animated:YES];
+        }];
+        
+        [alert addAction:cancelAction];
+        [alert addAction:deleteAction];
+        
+        [self presentViewController:alert animated:YES completion:nil];
+    }
+}
+
+// 执行删除操作
+- (void)performDeleteMusicItem:(MusicItem *)musicItem atIndexPath:(NSIndexPath *)indexPath {
+    NSLog(@"🗑️ 开始删除歌曲: %@", musicItem.displayName);
+    
+    // 在后台线程执行删除操作
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+        NSError *error = nil;
+        BOOL success = [self.musicLibrary deleteMusicItem:musicItem error:&error];
+        
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (success) {
+                // 刷新显示列表
+                [self refreshMusicList];
+                
+                // 显示成功提示（轻量级toast）
+                [self showToast:[NSString stringWithFormat:@"✅ 已删除 \"%@\"", musicItem.displayName]];
+                
+                NSLog(@"✅ 删除成功: %@", musicItem.displayName);
+            } else {
+                // 显示错误提示
+                NSString *errorMessage = error ? error.localizedDescription : @"未知错误";
+                UIAlertController *errorAlert = [UIAlertController alertControllerWithTitle:@"❌ 删除失败" 
+                                                                                    message:[NSString stringWithFormat:@"删除失败：%@", errorMessage] 
+                                                                             preferredStyle:UIAlertControllerStyleAlert];
+                [errorAlert addAction:[UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil]];
+                [self presentViewController:errorAlert animated:YES completion:nil];
+                
+                NSLog(@"❌ 删除失败: %@ - %@", musicItem.displayName, errorMessage);
+            }
+        });
+    });
+}
+
+// 显示轻量级Toast提示
+- (void)showToast:(NSString *)message {
+    UILabel *toastLabel = [[UILabel alloc] init];
+    toastLabel.text = message;
+    toastLabel.font = [UIFont systemFontOfSize:14];
+    toastLabel.textColor = [UIColor whiteColor];
+    toastLabel.backgroundColor = [UIColor colorWithWhite:0.2 alpha:0.9];
+    toastLabel.textAlignment = NSTextAlignmentCenter;
+    toastLabel.numberOfLines = 0;
+    toastLabel.layer.cornerRadius = 10;
+    toastLabel.clipsToBounds = YES;
+    
+    // 计算尺寸
+    CGSize textSize = [message boundingRectWithSize:CGSizeMake(self.view.bounds.size.width - 80, CGFLOAT_MAX)
+                                            options:NSStringDrawingUsesLineFragmentOrigin
+                                         attributes:@{NSFontAttributeName: toastLabel.font}
+                                            context:nil].size;
+    
+    CGFloat width = textSize.width + 40;
+    CGFloat height = textSize.height + 20;
+    
+    toastLabel.frame = CGRectMake((self.view.bounds.size.width - width) / 2,
+                                  self.view.bounds.size.height - 150,
+                                  width,
+                                  height);
+    toastLabel.alpha = 0;
+    
+    [self.view addSubview:toastLabel];
+    
+    // 显示动画
+    [UIView animateWithDuration:0.3 animations:^{
+        toastLabel.alpha = 1.0;
+    } completion:^(BOOL finished) {
+        // 1.5秒后自动消失
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            [UIView animateWithDuration:0.3 animations:^{
+                toastLabel.alpha = 0;
+            } completion:^(BOOL finished) {
+                [toastLabel removeFromSuperview];
+            }];
+        });
+    }];
+}
+
 -(void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath
 {
     // 🔧 点击列表项时隐藏键盘
@@ -1448,6 +1786,7 @@
     // 🆕 使用当前显示的音乐项
     if (index < self.displayedMusicItems.count) {
         MusicItem *musicItem = self.displayedMusicItems[index];
+        NSString *songName = musicItem.displayName ?: musicItem.fileName;
         
         // 🔧 修复：优先使用 filePath（导入的文件），否则从 Bundle 查找
         NSURL *fileUrl = nil;
@@ -1460,10 +1799,44 @@
         }
         
         UIImage *image = [self musicImageWithMusicURL:fileUrl];
+        
+        // 🎵 根据是否有封面切换显示 imageView 或 vinylRecordView
         if (image) {
+            // 有封面，显示 imageView
             imageView.image = image;
+            imageView.hidden = NO;
+            self.vinylRecordView.hidden = YES;
+            
+            // 如果之前在显示黑胶唱片，需要停止动画并重新设置旋转
+            if (self.isShowingVinylRecord) {
+                [self.vinylRecordView stopSpinning];
+                self.isShowingVinylRecord = NO;
+                
+                // 重新添加 imageView 的旋转动画
+                [self.animationCoordinator addRotationViews:@[imageView] 
+                                                  rotations:@[@(6.0)] 
+                                                  durations:@[@(120.0)] 
+                                              rotationTypes:@[@(RotationTypeCounterClockwise)]];
+            }
+            
             // 更新粒子图像
             [self.animationCoordinator updateParticleImage:image];
+            NSLog(@"🖼️ 显示音乐封面");
+        } else {
+            // 没有封面，显示黑胶唱片动画
+            imageView.hidden = YES;
+            self.vinylRecordView.hidden = NO;
+            self.isShowingVinylRecord = YES;
+            
+            // 使用歌曲名称生成一致的随机外观
+            [self.vinylRecordView regenerateAppearanceWithSongName:songName];
+            
+            // 如果正在播放，启动黑胶唱片旋转
+            if (self.player.isPlaying) {
+                [self.vinylRecordView startSpinning];
+            }
+            
+            NSLog(@"🎵 显示黑胶唱片动画（无封面）: %@", songName);
         }
     }
 }
@@ -1492,6 +1865,12 @@
 }
 -(void)didFinishPlay
 {
+    // 🔧 检查是否禁止自动播放（用户在其他页面时）
+    if (self.shouldPreventAutoResume) {
+        NSLog(@"⏹️ 播放结束，但用户在其他页面，不自动播放下一首");
+        return;
+    }
+    
     // 🔂 单曲循环模式：重新播放当前歌曲
     if (self.isSingleLoopMode) {
         NSLog(@"🔂 单曲循环：重新播放当前歌曲");
@@ -1557,6 +1936,9 @@
         [self updateNowPlayingInfo];
         NSLog(@"✅ 播放开始后已更新完整媒体信息");
         
+        // 🎵 更新进度条时长
+        [self updateProgressWithDuration:self.player.duration];
+        
         // 🔍 运行诊断测试（已禁用，不需要覆盖真实歌曲信息）
         // [self forceUpdateNowPlayingInfo];
     });
@@ -1565,6 +1947,9 @@
 - (void)playerDidUpdateTime:(NSTimeInterval)currentTime {
     // 更新歌词显示
     [self.lyricsView updateWithTime:currentTime];
+    
+    // 🎵 更新进度条当前时间
+    [self updateProgressWithCurrentTime:currentTime];
     
     // 🎵 定期更新系统播放进度（每5秒更新一次，避免频繁更新）
     NSTimeInterval now = [[NSDate date] timeIntervalSince1970];
@@ -1822,6 +2207,20 @@
     [self.view bringSubviewToFront:self.cyberpunkControlPanel];
 }
 
+// 🎨 处理特效配置按钮点击（从特效选择器中）
+- (void)handleEffectSettingsButtonTapped:(NSNotification *)notification {
+    VisualEffectType effectType = [notification.userInfo[@"effectType"] integerValue];
+    
+    NSLog(@"🎨 收到特效配置请求: %ld", (long)effectType);
+    
+    // 根据特效类型打开对应的配置面板
+    if (effectType == VisualEffectTypeGalaxy) {
+        [self galaxyControlButtonTapped:nil];
+    } else if (effectType == VisualEffectTypeCyberPunk) {
+        [self cyberpunkControlButtonTapped:nil];
+    }
+}
+
 - (void)quickEffectButtonTapped:(UIButton *)sender {
     VisualEffectType effectType = (VisualEffectType)sender.tag;
     
@@ -1980,6 +2379,9 @@
         return;
     }
     
+    // 🔧 标记禁止自动恢复播放（进入其他页面时不应自动恢复）
+    self.shouldPreventAutoResume = YES;
+    
     // 创建卡拉OK视图控制器
     KaraokeViewController *karaokeVC = [[KaraokeViewController alloc] init];
     MusicItem *musicItem = self.displayedMusicItems[index];
@@ -2007,10 +2409,210 @@
         }
     }
     
+    // 同步歌词可见性状态
+    self.lyricsEffectPanel.lyricsVisible = (self.lyricsContainer.alpha > 0.5);
+    
     [self.lyricsEffectPanel showAnimated:YES];
     [self.view bringSubviewToFront:self.lyricsEffectPanel];
     
     NSLog(@"🎭 打开歌词特效面板");
+}
+
+#pragma mark - 📝 导入歌词
+
+- (void)importLyricsButtonTapped:(UIButton *)sender {
+    // 🔧 隐藏键盘
+    [self.searchBar resignFirstResponder];
+    
+    // 检查是否有选中的歌曲
+    if (self.displayedMusicItems.count == 0 || index < 0 || index >= self.displayedMusicItems.count) {
+        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"提示" 
+                                                                       message:@"请先选择要关联歌词的歌曲" 
+                                                                preferredStyle:UIAlertControllerStyleAlert];
+        
+        UIAlertAction *okAction = [UIAlertAction actionWithTitle:@"确定" 
+                                                           style:UIAlertActionStyleDefault 
+                                                         handler:nil];
+        [alert addAction:okAction];
+        
+        [self presentViewController:alert animated:YES completion:nil];
+        return;
+    }
+    
+    MusicItem *currentMusicItem = self.displayedMusicItems[index];
+    NSLog(@"📝 为歌曲导入歌词: %@", currentMusicItem.fileName);
+    
+    // 显示选择面板：导入新歌词 or 自动匹配
+    UIAlertController *actionSheet = [UIAlertController alertControllerWithTitle:@"导入歌词" 
+                                                                         message:[NSString stringWithFormat:@"为「%@」导入歌词", currentMusicItem.fileName]
+                                                                  preferredStyle:UIAlertControllerStyleActionSheet];
+    
+    // 选择 LRC 文件
+    UIAlertAction *importAction = [UIAlertAction actionWithTitle:@"📂 从文件选择 LRC" 
+                                                           style:UIAlertActionStyleDefault 
+                                                         handler:^(UIAlertAction * _Nonnull action) {
+        [self openLRCFilePicker];
+    }];
+    [actionSheet addAction:importAction];
+    
+    // 批量导入歌词
+    UIAlertAction *batchImportAction = [UIAlertAction actionWithTitle:@"📁 批量导入歌词文件" 
+                                                                style:UIAlertActionStyleDefault 
+                                                              handler:^(UIAlertAction * _Nonnull action) {
+        [self openBatchLRCFilePicker];
+    }];
+    [actionSheet addAction:batchImportAction];
+    
+    // 取消
+    UIAlertAction *cancelAction = [UIAlertAction actionWithTitle:@"取消" 
+                                                           style:UIAlertActionStyleCancel 
+                                                         handler:nil];
+    [actionSheet addAction:cancelAction];
+    
+    // iPad 需要设置 popover
+    if (UI_USER_INTERFACE_IDIOM() == UIUserInterfaceIdiomPad) {
+        actionSheet.popoverPresentationController.sourceView = sender;
+        actionSheet.popoverPresentationController.sourceRect = sender.bounds;
+    }
+    
+    [self presentViewController:actionSheet animated:YES completion:nil];
+}
+
+- (void)openLRCFilePicker {
+    NSLog(@"📂 打开 LRC 文件选择器...");
+    
+    UIDocumentPickerViewController *documentPicker;
+    if (@available(iOS 14.0, *)) {
+        // iOS 14+ 使用 UTType
+        UTType *lrcType = [UTType typeWithFilenameExtension:@"lrc"];
+        UTType *txtType = UTTypeText;
+        
+        NSMutableArray *contentTypes = [NSMutableArray array];
+        if (lrcType) {
+            [contentTypes addObject:lrcType];
+        }
+        [contentTypes addObject:txtType];
+        
+        documentPicker = [[UIDocumentPickerViewController alloc] initForOpeningContentTypes:contentTypes];
+    } else {
+        // iOS 13 及以下版本
+        NSArray *lrcTypes = @[
+            @"public.text",
+            @"public.plain-text",
+            @"public.data"
+        ];
+        documentPicker = [[UIDocumentPickerViewController alloc] initWithDocumentTypes:lrcTypes inMode:UIDocumentPickerModeImport];
+    }
+    
+    documentPicker.delegate = self;
+    documentPicker.allowsMultipleSelection = NO;  // 单选模式（关联当前歌曲）
+    documentPicker.modalPresentationStyle = UIModalPresentationFormSheet;
+    
+    // 使用 accessibilityHint 标记这是歌词导入
+    documentPicker.view.accessibilityHint = @"lyrics_import_single";
+    
+    [self presentViewController:documentPicker animated:YES completion:nil];
+}
+
+#pragma mark - 🎼 歌词打轴
+
+- (void)lyricsTimingButtonTapped:(UIButton *)sender {
+    // 🔧 隐藏键盘
+    [self.searchBar resignFirstResponder];
+    
+    // 检查是否有选中的歌曲
+    if (self.displayedMusicItems.count == 0 || index < 0 || index >= self.displayedMusicItems.count) {
+        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"提示" 
+                                                                       message:@"请先选择要打轴的歌曲" 
+                                                                preferredStyle:UIAlertControllerStyleAlert];
+        
+        UIAlertAction *okAction = [UIAlertAction actionWithTitle:@"确定" 
+                                                           style:UIAlertActionStyleDefault 
+                                                         handler:nil];
+        [alert addAction:okAction];
+        
+        [self presentViewController:alert animated:YES completion:nil];
+        return;
+    }
+    
+    MusicItem *currentMusicItem = self.displayedMusicItems[index];
+    NSLog(@"🎼 进入歌词打轴: %@", currentMusicItem.fileName);
+    
+    // 停止当前播放
+    [self.player stop];
+    
+    // 🔧 标记禁止自动恢复播放（进入其他页面时不应自动恢复）
+    self.shouldPreventAutoResume = YES;
+    
+    // 创建歌词编辑器
+    LyricsEditorViewController *editor = [[LyricsEditorViewController alloc] initWithAudioFilePath:[currentMusicItem playableFilePath]];
+    
+    // 设置歌曲信息
+    editor.songTitle = currentMusicItem.displayName ?: currentMusicItem.fileName;
+    editor.artistName = currentMusicItem.artist;
+    editor.albumName = currentMusicItem.album;
+    
+    // 设置代理
+    editor.delegate = (id<LyricsEditorViewControllerDelegate>)self;
+    
+    // 🔧 改为 push 操作（而非模态展示）
+    [self.navigationController pushViewController:editor animated:YES];
+}
+
+#pragma mark - LyricsEditorViewControllerDelegate
+
+- (void)lyricsEditor:(LyricsEditorViewController *)editor didFinishWithLRCContent:(NSString *)lrcContent {
+    NSLog(@"🎼 歌词打轴完成，LRC 内容长度: %lu", (unsigned long)lrcContent.length);
+}
+
+- (void)lyricsEditor:(LyricsEditorViewController *)editor didSaveLRCToPath:(NSString *)path {
+    NSLog(@"🎼 歌词已保存到: %@", path);
+    
+    // 可选：刷新当前歌曲的歌词显示
+    if (index >= 0 && index < self.displayedMusicItems.count) {
+        MusicItem *currentMusicItem = self.displayedMusicItems[index];
+        [[LyricsManager sharedManager] clearLyricsCacheForAudioFile:currentMusicItem.filePath];
+        // 重新加载歌词
+        [self.player loadLyricsForCurrentTrack];
+    }
+}
+
+- (void)lyricsEditorDidCancel:(LyricsEditorViewController *)editor {
+    NSLog(@"🎼 歌词打轴已取消");
+}
+
+- (void)openBatchLRCFilePicker {
+    NSLog(@"📁 打开批量 LRC 文件选择器...");
+    
+    UIDocumentPickerViewController *documentPicker;
+    if (@available(iOS 14.0, *)) {
+        UTType *lrcType = [UTType typeWithFilenameExtension:@"lrc"];
+        UTType *txtType = UTTypeText;
+        
+        NSMutableArray *contentTypes = [NSMutableArray array];
+        if (lrcType) {
+            [contentTypes addObject:lrcType];
+        }
+        [contentTypes addObject:txtType];
+        
+        documentPicker = [[UIDocumentPickerViewController alloc] initForOpeningContentTypes:contentTypes];
+    } else {
+        NSArray *lrcTypes = @[
+            @"public.text",
+            @"public.plain-text",
+            @"public.data"
+        ];
+        documentPicker = [[UIDocumentPickerViewController alloc] initWithDocumentTypes:lrcTypes inMode:UIDocumentPickerModeImport];
+    }
+    
+    documentPicker.delegate = self;
+    documentPicker.allowsMultipleSelection = YES;  // 多选模式
+    documentPicker.modalPresentationStyle = UIModalPresentationFormSheet;
+    
+    // 使用 accessibilityHint 标记这是批量歌词导入
+    documentPicker.view.accessibilityHint = @"lyrics_import_batch";
+    
+    [self presentViewController:documentPicker animated:YES completion:nil];
 }
 
 #pragma mark - 歌词视图设置
@@ -2509,12 +3111,41 @@
     [feedback impactOccurred];
 }
 
+- (void)lyricsVisibilityDidChange:(BOOL)isVisible {
+    NSLog(@"👁️ 歌词可见性已切换: %@", isVisible ? @"显示" : @"隐藏");
+    
+    // 使用动画切换歌词容器的可见性
+    [UIView animateWithDuration:0.3 animations:^{
+        self.lyricsContainer.alpha = isVisible ? 1.0 : 0.0;
+    }];
+    
+    // 添加触觉反馈
+    UIImpactFeedbackGenerator *feedback = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleLight];
+    [feedback impactOccurred];
+}
+
 #pragma mark - UIDocumentPickerDelegate
 
 - (void)documentPicker:(UIDocumentPickerViewController *)controller didPickDocumentsAtURLs:(NSArray<NSURL *> *)urls {
     NSLog(@"📥 用户选择了 %ld 个文件", (long)urls.count);
     
     if (urls.count == 0) {
+        return;
+    }
+    
+    // 📝 检查是否是 LRC 歌词文件导入
+    NSURL *firstURL = urls.firstObject;
+    NSString *fileExtension = [firstURL.pathExtension lowercaseString];
+    
+    if ([fileExtension isEqualToString:@"lrc"]) {
+        // 是歌词文件，走歌词导入流程
+        if (urls.count == 1) {
+            // 单个文件 - 关联到当前歌曲
+            [self handleSingleLRCImport:firstURL];
+        } else {
+            // 多个文件 - 批量导入
+            [self handleBatchLRCImport:urls];
+        }
         return;
     }
     
@@ -2627,6 +3258,127 @@
     NSLog(@"📥 用户取消了文件选择");
 }
 
+#pragma mark - 📝 歌词导入处理
+
+- (void)handleSingleLRCImport:(NSURL *)lrcURL {
+    // 检查是否有当前选中的歌曲
+    if (index < 0 || index >= self.displayedMusicItems.count) {
+        // 没有选中歌曲，按文件名自动匹配
+        [self handleBatchLRCImport:@[lrcURL]];
+        return;
+    }
+    
+    MusicItem *currentMusicItem = self.displayedMusicItems[index];
+    NSString *audioPath = [currentMusicItem playableFilePath];
+    
+    NSLog(@"📝 导入歌词关联到: %@", currentMusicItem.fileName);
+    
+    // 显示导入进度
+    UIAlertController *progressAlert = [UIAlertController alertControllerWithTitle:@"正在导入歌词"
+                                                                            message:@"请稍候..."
+                                                                     preferredStyle:UIAlertControllerStyleAlert];
+    [self presentViewController:progressAlert animated:YES completion:nil];
+    
+    // 使用 LyricsManager 导入
+    [[LyricsManager sharedManager] importLRCFile:lrcURL
+                                    forAudioFile:audioPath
+                                      completion:^(LRCParser *parser, NSError *error) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [progressAlert dismissViewControllerAnimated:YES completion:^{
+                if (parser) {
+                    // 导入成功
+                    NSString *message = [NSString stringWithFormat:@"已为「%@」导入歌词\n共 %lu 行歌词",
+                                       currentMusicItem.fileName,
+                                       (unsigned long)parser.lyrics.count];
+                    
+                    UIAlertController *successAlert = [UIAlertController alertControllerWithTitle:@"✅ 歌词导入成功"
+                                                                                          message:message
+                                                                                   preferredStyle:UIAlertControllerStyleAlert];
+                    [successAlert addAction:[UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil]];
+                    [self presentViewController:successAlert animated:YES completion:nil];
+                    
+                    // 如果当前正在播放这首歌，立即更新歌词显示
+                    if (self.player.isPlaying) {
+                        self.lyricsView.parser = parser;
+                        self.lyricsContainer.hidden = NO;
+                    }
+                    
+                    NSLog(@"✅ 歌词导入成功: %@ (%lu 行)", currentMusicItem.fileName, (unsigned long)parser.lyrics.count);
+                } else {
+                    // 导入失败
+                    UIAlertController *errorAlert = [UIAlertController alertControllerWithTitle:@"❌ 歌词导入失败"
+                                                                                         message:error.localizedDescription ?: @"无法解析歌词文件"
+                                                                                  preferredStyle:UIAlertControllerStyleAlert];
+                    [errorAlert addAction:[UIAlertAction actionWithTitle:@"确定" style:UIAlertActionStyleDefault handler:nil]];
+                    [self presentViewController:errorAlert animated:YES completion:nil];
+                    
+                    NSLog(@"❌ 歌词导入失败: %@", error.localizedDescription);
+                }
+            }];
+        });
+    }];
+}
+
+- (void)handleBatchLRCImport:(NSArray<NSURL *> *)lrcURLs {
+    NSLog(@"📁 批量导入 %ld 个歌词文件", (long)lrcURLs.count);
+    
+    // 显示导入进度
+    UIAlertController *progressAlert = [UIAlertController alertControllerWithTitle:@"正在批量导入歌词"
+                                                                            message:[NSString stringWithFormat:@"共 %ld 个文件...", (long)lrcURLs.count]
+                                                                     preferredStyle:UIAlertControllerStyleAlert];
+    [self presentViewController:progressAlert animated:YES completion:nil];
+    
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+        __block NSInteger successCount = 0;
+        __block NSInteger failureCount = 0;
+        dispatch_group_t group = dispatch_group_create();
+        
+        for (NSURL *lrcURL in lrcURLs) {
+            dispatch_group_enter(group);
+            
+            [[LyricsManager sharedManager] importLRCFile:lrcURL
+                                              completion:^(LRCParser *parser, NSError *error) {
+                if (parser) {
+                    successCount++;
+                } else {
+                    failureCount++;
+                }
+                dispatch_group_leave(group);
+            }];
+        }
+        
+        // 等待所有导入完成
+        dispatch_group_wait(group, DISPATCH_TIME_FOREVER);
+        
+        // 回到主线程显示结果
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [progressAlert dismissViewControllerAnimated:YES completion:^{
+                NSString *message;
+                NSString *title;
+                
+                if (successCount > 0 && failureCount == 0) {
+                    title = @"✅ 批量导入完成";
+                    message = [NSString stringWithFormat:@"成功导入 %ld 个歌词文件", (long)successCount];
+                } else if (successCount > 0) {
+                    title = @"⚠️ 部分导入成功";
+                    message = [NSString stringWithFormat:@"成功: %ld 个\n失败: %ld 个", (long)successCount, (long)failureCount];
+                } else {
+                    title = @"❌ 导入失败";
+                    message = @"所有歌词文件导入失败";
+                }
+                
+                UIAlertController *resultAlert = [UIAlertController alertControllerWithTitle:title
+                                                                                      message:message
+                                                                               preferredStyle:UIAlertControllerStyleAlert];
+                [resultAlert addAction:[UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil]];
+                [self presentViewController:resultAlert animated:YES completion:nil];
+                
+                NSLog(@"📁 批量歌词导入完成: 成功 %ld, 失败 %ld", (long)successCount, (long)failureCount);
+            }];
+        });
+    });
+}
+
 #pragma mark - 🎵 系统媒体控制（控制中心、锁屏等）
 
 /// 配置远程控制命令中心（iOS 16+ 优化版）
@@ -2663,6 +3415,11 @@
     [commandCenter.playCommand addTargetWithHandler:^MPRemoteCommandHandlerStatus(MPRemoteCommandEvent * _Nonnull event) {
         NSLog(@"🎵 系统控制: 播放");
         dispatch_async(dispatch_get_main_queue(), ^{
+            // 🔧 检查是否禁止自动恢复播放（用户在其他页面时）
+            if (self.shouldPreventAutoResume) {
+                NSLog(@"   ⚠️ 已禁止播放（用户在其他页面）");
+                return;
+            }
             if (!self.player.isPlaying) {
                 [self playCurrentTrack];
             }
@@ -2852,7 +3609,14 @@
         }
     }
     
-    // 🎵 如果没有真实封面，使用项目中的 none_image 图片
+    // 🎵 如果没有真实封面，使用 App Icon 作为默认封面
+    UIImage *appIcon = [UIImage imageNamed:@"none_image"];
+    if (appIcon) {
+        NSLog(@"✅ 使用 App Icon 作为默认封面 (%.0fx%.0f)", appIcon.size.width, appIcon.size.height);
+        return appIcon;
+    }
+    
+    // 🎵 如果无法获取 App Icon，尝试使用项目中的 none_image 图片
     UIImage *noneImage = [UIImage imageNamed:@"none_image"];
     if (noneImage) {
         NSLog(@"✅ 使用默认封面图片: none_image (%.0fx%.0f)", noneImage.size.width, noneImage.size.height);
@@ -2955,6 +3719,11 @@
 - (void)stopPlayback {
     NSLog(@"⏹️ 外部控制: 停止播放");
     [self.player stop];
+    
+    // 🎵 如果正在显示黑胶唱片，停止旋转动画
+    if (self.isShowingVinylRecord) {
+        [self.vinylRecordView stopSpinning];
+    }
     
     // 🎵 iOS 16+: 更新播放状态为暂停（不清除信息）
     NSMutableDictionary *nowPlayingInfo = [[MPNowPlayingInfoCenter defaultCenter].nowPlayingInfo mutableCopy];
@@ -3075,7 +3844,206 @@
     
     [self.player playWithFileName:playPath];
     
+    // 🎵 如果正在显示黑胶唱片，开始旋转动画
+    if (self.isShowingVinylRecord) {
+        [self.vinylRecordView startSpinning];
+    }
+    
     // 🎵 注意：完整的播放信息将在 playerDidStartPlaying 回调中更新
+}
+
+#pragma mark - 🎧 音频会话中断和路由变化处理
+
+/// 处理音频会话中断（来电、闹钟、Siri等）
+- (void)handleAudioSessionInterruption:(NSNotification *)notification {
+    AVAudioSessionInterruptionType interruptionType = [notification.userInfo[AVAudioSessionInterruptionTypeKey] unsignedIntegerValue];
+    
+    if (interruptionType == AVAudioSessionInterruptionTypeBegan) {
+        // 中断开始（来电、闹钟等）
+        NSLog(@"🎧 音频会话中断开始");
+        
+        // 🔧 记录中断前是否正在播放（用于决定是否恢复）
+        self.wasPlayingBeforeInterruption = self.player.isPlaying;
+        NSLog(@"   中断前播放状态: %@", self.wasPlayingBeforeInterruption ? @"播放中" : @"已暂停");
+        
+        // 系统会自动暂停音频，我们只需要更新UI状态
+        if (self.player.isPlaying) {
+            // 更新播放/暂停按钮状态
+            dispatch_async(dispatch_get_main_queue(), ^{
+                [self.playPauseButton setTitle:@"▶️" forState:UIControlStateNormal];
+                self.playPauseButton.backgroundColor = [UIColor colorWithRed:0.2 green:0.7 blue:0.3 alpha:0.85];
+            });
+            
+            // 更新系统媒体信息为暂停状态
+            NSMutableDictionary *nowPlayingInfo = [[MPNowPlayingInfoCenter defaultCenter].nowPlayingInfo mutableCopy];
+            if (nowPlayingInfo) {
+                nowPlayingInfo[MPNowPlayingInfoPropertyPlaybackRate] = @(0.0);
+                nowPlayingInfo[MPNowPlayingInfoPropertyElapsedPlaybackTime] = @(self.player.currentTime);
+                [MPNowPlayingInfoCenter defaultCenter].nowPlayingInfo = nowPlayingInfo;
+            }
+        }
+        
+    } else if (interruptionType == AVAudioSessionInterruptionTypeEnded) {
+        // 中断结束
+        NSLog(@"🎧 音频会话中断结束");
+        
+        // 🔧 检查是否禁止自动恢复播放（用户进入其他页面时设置）
+        if (self.shouldPreventAutoResume) {
+            NSLog(@"   ⚠️ 已禁止自动恢复播放（用户可能在其他页面）");
+            return;
+        }
+        
+        // 🔧 检查中断前是否正在播放
+        if (!self.wasPlayingBeforeInterruption) {
+            NSLog(@"   ⚠️ 中断前未播放，不恢复播放");
+            return;
+        }
+        
+        // 检查是否应该恢复播放
+        AVAudioSessionInterruptionOptions options = [notification.userInfo[AVAudioSessionInterruptionOptionKey] unsignedIntegerValue];
+        BOOL shouldResume = (options & AVAudioSessionInterruptionOptionShouldResume) != 0;
+        
+        NSLog(@"   是否应该恢复播放: %@", shouldResume ? @"是" : @"否");
+        
+        if (shouldResume) {
+            // 重新激活音频会话
+            NSError *error = nil;
+            [[AVAudioSession sharedInstance] setActive:YES error:&error];
+            if (error) {
+                NSLog(@"❌ 重新激活音频会话失败: %@", error);
+            } else {
+                NSLog(@"✅ 音频会话已重新激活");
+                
+                // 恢复播放
+                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                    [self playCurrentTrack];
+                    NSLog(@"✅ 已恢复播放");
+                    // 清除标志
+                    self.wasPlayingBeforeInterruption = NO;
+                });
+            }
+        }
+    }
+}
+
+/// 处理音频路由变化（耳机插拔、蓝牙连接/断开）
+- (void)handleAudioSessionRouteChange:(NSNotification *)notification {
+    AVAudioSessionRouteChangeReason reason = [notification.userInfo[AVAudioSessionRouteChangeReasonKey] unsignedIntegerValue];
+    
+    NSLog(@"🎧 音频路由变化，原因: %lu", (unsigned long)reason);
+    
+    switch (reason) {
+        case AVAudioSessionRouteChangeReasonNewDeviceAvailable: {
+            // 新设备连接（耳机插入、蓝牙连接）
+            NSLog(@"🎧 新音频设备连接");
+            
+            AVAudioSession *session = [AVAudioSession sharedInstance];
+            AVAudioSessionRouteDescription *currentRoute = session.currentRoute;
+            
+            for (AVAudioSessionPortDescription *output in currentRoute.outputs) {
+                NSLog(@"   输出设备: %@ (%@)", output.portName, output.portType);
+                
+                // 检测是否是耳机或蓝牙设备
+                if ([output.portType isEqualToString:AVAudioSessionPortHeadphones] ||
+                    [output.portType isEqualToString:AVAudioSessionPortBluetoothA2DP] ||
+                    [output.portType isEqualToString:AVAudioSessionPortBluetoothLE] ||
+                    [output.portType isEqualToString:AVAudioSessionPortBluetoothHFP]) {
+                    
+                    NSLog(@"✅ 检测到耳机/蓝牙设备连接");
+                    
+                    // 耳机连接时，如果之前在播放，继续播放
+                    // 注意：这里不自动播放，因为用户可能只是插入耳机准备听
+                    // 如果需要自动播放，可以取消下面的注释
+                    /*
+                    if (!self.player.isPlaying && index < self.displayedMusicItems.count) {
+                        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                            [self playCurrentTrack];
+                            NSLog(@"✅ 耳机连接，自动恢复播放");
+                        });
+                    }
+                    */
+                }
+            }
+            break;
+        }
+            
+        case AVAudioSessionRouteChangeReasonOldDeviceUnavailable: {
+            // 设备断开（耳机拔出、蓝牙断开）
+            NSLog(@"🎧 音频设备断开");
+            
+            AVAudioSessionRouteDescription *previousRoute = notification.userInfo[AVAudioSessionRouteChangePreviousRouteKey];
+            
+            for (AVAudioSessionPortDescription *output in previousRoute.outputs) {
+                NSLog(@"   断开的设备: %@ (%@)", output.portName, output.portType);
+                
+                // 检测是否是耳机或蓝牙设备
+                if ([output.portType isEqualToString:AVAudioSessionPortHeadphones] ||
+                    [output.portType isEqualToString:AVAudioSessionPortBluetoothA2DP] ||
+                    [output.portType isEqualToString:AVAudioSessionPortBluetoothLE] ||
+                    [output.portType isEqualToString:AVAudioSessionPortBluetoothHFP]) {
+                    
+                    NSLog(@"⚠️ 耳机/蓝牙设备已断开，暂停播放");
+                    
+                    // 耳机拔出时自动暂停播放
+                    if (self.player.isPlaying) {
+                        [self stopPlayback];
+                        NSLog(@"✅ 已自动暂停播放");
+                    }
+                }
+            }
+            break;
+        }
+            
+        case AVAudioSessionRouteChangeReasonCategoryChange: {
+            // 音频类别变化
+            NSLog(@"🎧 音频类别变化");
+            
+            AVAudioSession *session = [AVAudioSession sharedInstance];
+            NSLog(@"   新类别: %@", session.category);
+            NSLog(@"   新模式: %@", session.mode);
+            
+            // 如果类别变化导致播放停止，需要重新配置
+            if (self.player.isPlaying) {
+                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                    // 重新配置音频会话
+                    [self.player configureAudioSession];
+                    NSLog(@"✅ 已重新配置音频会话");
+                });
+            }
+            break;
+        }
+            
+        case AVAudioSessionRouteChangeReasonOverride:
+            NSLog(@"🎧 音频路由被覆盖");
+            break;
+            
+        case AVAudioSessionRouteChangeReasonWakeFromSleep:
+            NSLog(@"🎧 从睡眠中唤醒");
+            break;
+            
+        case AVAudioSessionRouteChangeReasonNoSuitableRouteForCategory:
+            NSLog(@"⚠️ 当前类别没有合适的音频路由");
+            break;
+            
+        case AVAudioSessionRouteChangeReasonRouteConfigurationChange:
+            NSLog(@"🎧 音频路由配置变化");
+            break;
+            
+        default:
+            NSLog(@"🎧 其他路由变化原因: %lu", (unsigned long)reason);
+            break;
+    }
+    
+    // 打印当前音频路由信息
+    AVAudioSession *session = [AVAudioSession sharedInstance];
+    AVAudioSessionRouteDescription *currentRoute = session.currentRoute;
+    NSLog(@"📋 当前音频路由:");
+    for (AVAudioSessionPortDescription *output in currentRoute.outputs) {
+        NSLog(@"   输出: %@ (%@)", output.portName, output.portType);
+    }
+    for (AVAudioSessionPortDescription *input in currentRoute.inputs) {
+        NSLog(@"   输入: %@ (%@)", input.portName, input.portType);
+    }
 }
 
 @end

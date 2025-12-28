@@ -19,6 +19,7 @@
 @property (nonatomic, strong) UIView *selectionOverlay;
 @property (nonatomic, strong) CAGradientLayer *backgroundGradient;
 @property (nonatomic, strong) CAShapeLayer *borderLayer;
+@property (nonatomic, strong) UIButton *configButton;  // 🎨 特效配置按钮
 @end
 
 @implementation EffectCardView
@@ -100,6 +101,18 @@
     _selectionOverlay.alpha = 0;
     [self addSubview:_selectionOverlay];
     
+    // 🎨 配置按钮（仅在特定特效上显示）
+    _configButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    [_configButton setTitle:@"⚙️" forState:UIControlStateNormal];
+    _configButton.titleLabel.font = [UIFont systemFontOfSize:24];
+    _configButton.backgroundColor = [UIColor colorWithRed:0.2 green:0.2 blue:0.3 alpha:0.9];
+    _configButton.layer.cornerRadius = 18;
+    _configButton.layer.borderWidth = 1.5;
+    _configButton.layer.borderColor = [UIColor colorWithRed:0.5 green:0.5 blue:0.6 alpha:1.0].CGColor;
+    [_configButton addTarget:self action:@selector(configButtonTapped:) forControlEvents:UIControlEventTouchUpInside];
+    _configButton.hidden = YES;  // 默认隐藏
+    [self addSubview:_configButton];
+    
     // 添加点击手势
     UITapGestureRecognizer *tapGesture = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(cardTapped:)];
     [self addGestureRecognizer:tapGesture];
@@ -122,7 +135,7 @@
     CGFloat labelX = padding + imageSize + 12;
     CGFloat labelWidth = bounds.size.width - labelX - padding;
     
-    _nameLabel.frame = CGRectMake(labelX, padding, labelWidth, 20);
+    _nameLabel.frame = CGRectMake(labelX, padding, labelWidth - 50, 20);  // 为设置按钮留出空间
     _descriptionLabel.frame = CGRectMake(labelX, padding + 24, labelWidth, 32);
     
     // 分类标签
@@ -132,6 +145,9 @@
     
     // 性能指示器
     _performanceIndicator.frame = CGRectMake(bounds.size.width - 20, bounds.size.height - 20, 8, 8);
+    
+    // 🎨 配置按钮（右上角）
+    _configButton.frame = CGRectMake(bounds.size.width - 48, padding + 2, 36, 36);
 }
 
 - (void)updateContent {
@@ -149,6 +165,16 @@
     
     // 更新支持状态
     [self updateSupportStatus];
+    
+    // 🎨 根据特效类型决定是否显示设置按钮
+    [self updateSettingsButtonVisibility];
+}
+
+- (void)updateSettingsButtonVisibility {
+    // 只在 Galaxy 和 CyberPunk 特效上显示配置按钮
+    BOOL shouldShowSettings = (_effectInfo.type == VisualEffectTypeGalaxy || 
+                               _effectInfo.type == VisualEffectTypeCyberPunk);
+    _configButton.hidden = !shouldShowSettings;
 }
 
 - (void)updateCategoryBadge {
@@ -318,6 +344,14 @@
     [[NSNotificationCenter defaultCenter] postNotificationName:@"EffectCardSelected" 
                                                         object:self 
                                                       userInfo:@{@"effectType": @(_effectType)}];
+}
+
+- (void)configButtonTapped:(UIButton *)sender {
+    // 🎨 发送特效配置通知
+    [[NSNotificationCenter defaultCenter] postNotificationName:@"EffectSettingsButtonTapped" 
+                                                        object:self 
+                                                      userInfo:@{@"effectType": @(_effectType)}];
+    NSLog(@"🎨 特效配置按钮被点击: %@", _effectInfo.name);
 }
 
 @end

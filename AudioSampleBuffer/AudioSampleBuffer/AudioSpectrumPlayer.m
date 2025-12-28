@@ -12,6 +12,7 @@
     AVAudioFramePosition lastStartFramePosition;
     dispatch_source_t _sometimer;
     dispatch_queue_t _queue;
+    BOOL _isSeeking;  // 是否正在跳转中，防止触发 didFinishPlay
 }
 @property (nonatomic, strong) AVAudioEngine *engine;
 @property (nonatomic, strong) AVAudioPlayerNode *player;
@@ -282,6 +283,139 @@
     
     // 停止时清除歌词
     self.lyricsParser = nil;
+}
+
+#pragma mark - 进度跳转
+
+- (void)seekToTime:(NSTimeInterval)time {
+    if (!self.file) {
+        NSLog(@"❌ seekToTime: 没有音频文件");
+        return;
+    }
+    
+    // 限制时间范围
+    time = fmax(0, fmin(time, self.duration - 0.5));  // 留出0.5秒余量，避免跳到末尾
+    
+    // 标记正在跳转，防止 completionHandler 触发 didFinishPlay
+    _isSeeking = YES;
+    
+    BOOL wasPlaying = self.player.isPlaying;
+    
+    // 停止当前播放
+    [self.player stop];
+    
+    // 停止计时器
+    if (_sometimer != nil) {
+        dispatch_source_cancel(_sometimer);
+        _queue = nil;
+        _sometimer = nil;
+    }
+    
+    // 计算目标帧位置
+    double sampleRate = self.file.processingFormat.sampleRate;
+    AVAudioFramePosition startingFrame = (AVAudioFramePosition)(time * sampleRate);
+    
+    // 确保帧位置有效
+    startingFrame = MAX(0, MIN(startingFrame, self.file.length - 1));
+    
+    // 计算剩余帧数
+    AVAudioFrameCount frameCount = (AVAudioFrameCount)(self.file.length - startingFrame);
+    
+    if (frameCount <= 1000) {  // 留出一些缓冲
+        NSLog(@"⚠️ seekToTime: 接近文件末尾，调整位置");
+        startingFrame = MAX(0, self.file.length - 1000);
+        frameCount = (AVAudioFrameCount)(self.file.length - startingFrame);
+    }
+    
+    // 更新起始帧位置（用于时间计算）
+    lastStartFramePosition = startingFrame;
+    
+    // 更新当前时间
+    _currentTime = time;
+    
+    // 调度从指定位置开始播放的片段
+    __weak typeof(self) weakSelf = self;
+    [self.player scheduleSegment:self.file
+                   startingFrame:startingFrame
+                      frameCount:frameCount
+                          atTime:nil
+               completionCallbackType:AVAudioPlayerNodeCompletionDataPlayedBack
+               completionHandler:^(AVAudioPlayerNodeCompletionCallbackType callbackType) {
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (strongSelf && !strongSelf->_isSeeking) {
+            // 只有在非跳转状态下才触发播放完成
+            dispatch_async(dispatch_get_main_queue(), ^{
+                if (!strongSelf->_isSeeking && strongSelf.player.isPlaying == NO) {
+                    [strongSelf.delegate didFinishPlay];
+                }
+            });
+        }
+    }];
+    
+    // 恢复标记
+    _isSeeking = NO;
+    
+    // 如果之前在播放，恢复播放并重启计时器
+    if (wasPlaying) {
+        [self.player play];
+        
+        // 从新的时间位置开始计时
+        [self countDownBeginFromTime:time duration:self.duration];
+    }
+    
+    NSLog(@"⏩ 跳转到 %.2f 秒 (帧: %lld, 剩余帧: %u)", time, (long long)startingFrame, (unsigned int)frameCount);
+}
+
+/// 从指定时间开始倒计时
+- (void)countDownBeginFromTime:(NSTimeInterval)startTime duration:(NSTimeInterval)totalDuration {
+    // 先停止之前的计时器
+    if (_sometimer != nil) {
+        dispatch_source_cancel(_sometimer);
+        _queue = nil;
+        _sometimer = nil;
+    }
+    
+    _timeBegining = YES;
+    _queue = dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0);
+    _sometimer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, _queue);
+    
+    __block NSTimeInterval elapsedTime = startTime;
+    __weak typeof(self) weakSelf = self;
+    
+    // 每0.1秒更新一次
+    dispatch_source_set_timer(_sometimer, dispatch_walltime(NULL, 0), 0.1 * NSEC_PER_SEC, 0);
+    
+    dispatch_source_set_event_handler(_sometimer, ^{
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) return;
+        
+        // 检查是否正在跳转
+        if (strongSelf->_isSeeking) return;
+        
+        if (elapsedTime < totalDuration && strongSelf.player.isPlaying) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                strongSelf->_currentTime = elapsedTime;
+                
+                if ([strongSelf.delegate respondsToSelector:@selector(playerDidUpdateTime:)]) {
+                    [strongSelf.delegate playerDidUpdateTime:elapsedTime];
+                }
+            });
+            
+            elapsedTime += 0.1;
+        } else if (elapsedTime >= totalDuration) {
+            dispatch_source_cancel(strongSelf->_sometimer);
+            strongSelf->_queue = nil;
+            strongSelf->_sometimer = nil;
+            dispatch_async(dispatch_get_main_queue(), ^{
+                strongSelf->_timeBegining = NO;
+                if (!strongSelf->_isSeeking) {
+                    [strongSelf.delegate didFinishPlay];
+                }
+            });
+        }
+    });
+    
+    dispatch_resume(_sometimer);
 }
 
 #pragma mark - Lyrics

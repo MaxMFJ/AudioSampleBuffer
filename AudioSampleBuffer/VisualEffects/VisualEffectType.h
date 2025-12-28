@@ -35,6 +35,10 @@ typedef NS_ENUM(NSUInteger, VisualEffectType) {
     VisualEffectTypeGeometricMorph,         // 几何变形
     VisualEffectTypeFractalPattern,         // 分形图案
     
+    // 实验性效果
+    VisualEffectTypeAuroraRipples,          // 极光波纹
+    VisualEffectTypeStarVortex,             // 恒星涡旋
+    
     // 数量
     VisualEffectTypeCount
 };

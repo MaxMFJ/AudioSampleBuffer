@@ -530,6 +530,69 @@
     }]];
 }
 
+#pragma mark - 删除管理
+
+- (BOOL)deleteMusicItem:(MusicItem *)music error:(NSError **)error {
+    NSFileManager *fileManager = [NSFileManager defaultManager];
+    NSMutableArray *deletedFiles = [NSMutableArray array];
+    NSError *deleteError = nil;
+    
+    // 1. 删除音频文件
+    if (music.filePath && [fileManager fileExistsAtPath:music.filePath]) {
+        BOOL deleted = [fileManager removeItemAtPath:music.filePath error:&deleteError];
+        if (deleted) {
+            [deletedFiles addObject:music.filePath];
+            NSLog(@"✅ 已删除音频文件: %@", [music.filePath lastPathComponent]);
+        } else {
+            NSLog(@"❌ 删除音频文件失败: %@", deleteError.localizedDescription);
+            if (error) *error = deleteError;
+            return NO;
+        }
+    }
+    
+    // 2. 删除解密后的文件（如果是NCM）
+    if (music.isNCM && music.decryptedPath && [fileManager fileExistsAtPath:music.decryptedPath]) {
+        [fileManager removeItemAtPath:music.decryptedPath error:nil];
+        [deletedFiles addObject:music.decryptedPath];
+        NSLog(@"✅ 已删除解密文件: %@", [music.decryptedPath lastPathComponent]);
+    }
+    
+    // 3. 删除对应的歌词文件
+    NSString *audioFileName = [[music.filePath lastPathComponent] stringByDeletingPathExtension];
+    
+    // 3.1 删除 Documents/Lyrics 目录下的歌词
+    NSArray *paths = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES);
+    NSString *documentsDir = paths.firstObject;
+    NSString *lyricsDir = [documentsDir stringByAppendingPathComponent:@"Lyrics"];
+    NSString *lyricsPath = [lyricsDir stringByAppendingPathComponent:[NSString stringWithFormat:@"%@.lrc", audioFileName]];
+    
+    if ([fileManager fileExistsAtPath:lyricsPath]) {
+        [fileManager removeItemAtPath:lyricsPath error:nil];
+        [deletedFiles addObject:lyricsPath];
+        NSLog(@"✅ 已删除歌词文件: %@", [lyricsPath lastPathComponent]);
+    }
+    
+    // 3.2 删除音频文件同目录下的歌词
+    NSString *sameDirLyricsPath = [[music.filePath stringByDeletingPathExtension] stringByAppendingPathExtension:@"lrc"];
+    if ([fileManager fileExistsAtPath:sameDirLyricsPath]) {
+        [fileManager removeItemAtPath:sameDirLyricsPath error:nil];
+        [deletedFiles addObject:sameDirLyricsPath];
+        NSLog(@"✅ 已删除同目录歌词: %@", [sameDirLyricsPath lastPathComponent]);
+    }
+    
+    // 4. 从音乐库中移除
+    NSMutableArray *mutableLibrary = [self.musicLibrary mutableCopy];
+    [mutableLibrary removeObject:music];
+    self.musicLibrary = [mutableLibrary copy];
+    
+    // 5. 保存更改
+    [self saveToCache];
+    
+    NSLog(@"🗑️ 成功删除歌曲及相关文件: %@ (共%lu个文件)", music.displayName, (unsigned long)deletedFiles.count);
+    
+    return YES;
+}
+
 #pragma mark - NCM 文件管理
 
 - (NSArray<MusicItem *> *)allNCMFiles {

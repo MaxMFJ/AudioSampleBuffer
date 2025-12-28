@@ -1258,6 +1258,155 @@ typedef struct {
 
 @end
 
+#pragma mark - 极光波纹渲染器 (实验性效果)
+
+@implementation AuroraRippleRenderer
+
+- (void)setupPipeline {
+    // 创建极光波纹效果的渲染管线
+    MTLRenderPipelineDescriptor *pipelineDescriptor = [[MTLRenderPipelineDescriptor alloc] init];
+    pipelineDescriptor.label = @"AuroraRipple";
+    pipelineDescriptor.vertexFunction = [self.defaultLibrary newFunctionWithName:@"neon_vertex"];
+    pipelineDescriptor.fragmentFunction = [self.defaultLibrary newFunctionWithName:@"auroraRippleFragment"];
+    pipelineDescriptor.colorAttachments[0].pixelFormat = self.metalView.colorPixelFormat;
+    
+    // 配置MSAA采样 - 匹配MTKView的设置
+    pipelineDescriptor.sampleCount = self.metalView.sampleCount;
+    
+    // 配置深度缓冲格式
+    pipelineDescriptor.depthAttachmentPixelFormat = self.metalView.depthStencilPixelFormat;
+    
+    // 启用混合模式（Additive Blending增强发光效果）
+    pipelineDescriptor.colorAttachments[0].blendingEnabled = YES;
+    pipelineDescriptor.colorAttachments[0].rgbBlendOperation = MTLBlendOperationAdd;
+    pipelineDescriptor.colorAttachments[0].alphaBlendOperation = MTLBlendOperationAdd;
+    pipelineDescriptor.colorAttachments[0].sourceRGBBlendFactor = MTLBlendFactorSourceAlpha;
+    pipelineDescriptor.colorAttachments[0].sourceAlphaBlendFactor = MTLBlendFactorSourceAlpha;
+    pipelineDescriptor.colorAttachments[0].destinationRGBBlendFactor = MTLBlendFactorOneMinusSourceAlpha;
+    pipelineDescriptor.colorAttachments[0].destinationAlphaBlendFactor = MTLBlendFactorOneMinusSourceAlpha;
+    
+    NSError *error;
+    self.pipelineState = [self.device newRenderPipelineStateWithDescriptor:pipelineDescriptor error:&error];
+    
+    if (!self.pipelineState) {
+        NSLog(@"❌ 创建极光波纹管线失败: %@", error);
+        NSLog(@"❌ 顶点函数: %@", pipelineDescriptor.vertexFunction);
+        NSLog(@"❌ 片段函数: %@", pipelineDescriptor.fragmentFunction);
+        return;
+    }
+    
+    NSLog(@"✅ 极光波纹管线创建成功 - 实验性效果");
+    [self setupPerformanceOptimizations];
+}
+
+- (void)setupPerformanceOptimizations {
+    NSString *deviceName = self.device.name;
+    NSMutableDictionary *params = [self.renderParameters mutableCopy] ?: [NSMutableDictionary dictionary];
+    
+    if ([deviceName containsString:@"A17"] || [deviceName containsString:@"A16"]) {
+        // 高端设备 - 高质量极光效果
+        params[@"auroraLayers"] = @(4);
+        params[@"rippleCount"] = @(5);
+        params[@"starDensity"] = @(1.0);
+        params[@"effectQuality"] = @(1.0);
+        NSLog(@"🌌 极光波纹: 高端设备，使用高质量设置");
+        
+    } else if ([deviceName containsString:@"A15"] || [deviceName containsString:@"A14"]) {
+        // 中端设备 - 平衡设置
+        params[@"auroraLayers"] = @(3);
+        params[@"rippleCount"] = @(4);
+        params[@"starDensity"] = @(0.7);
+        params[@"effectQuality"] = @(0.8);
+        NSLog(@"🌌 极光波纹: 中端设备，使用平衡设置");
+        
+    } else {
+        // 低端设备 - 性能优先
+        params[@"auroraLayers"] = @(2);
+        params[@"rippleCount"] = @(3);
+        params[@"starDensity"] = @(0.5);
+        params[@"effectQuality"] = @(0.6);
+        NSLog(@"🌌 极光波纹: 低端设备，使用性能优化设置");
+    }
+    
+    [self setRenderParameters:params];
+}
+
+- (void)encodeRenderCommands:(id<MTLRenderCommandEncoder>)encoder {
+    if (!self.pipelineState) {
+        NSLog(@"❌ AuroraRipple: pipelineState为空，无法渲染！");
+        return;
+    }
+    
+    static int frameCount = 0;
+    if (frameCount < 3) {
+        NSLog(@"🌌 AuroraRipple: 正在渲染第 %d 帧", frameCount);
+        frameCount++;
+    }
+    
+    [encoder setRenderPipelineState:self.pipelineState];
+    [encoder setVertexBuffer:self.uniformBuffer offset:0 atIndex:0];
+    [encoder setFragmentBuffer:self.uniformBuffer offset:0 atIndex:0];
+    
+    // 绘制全屏四边形
+    [encoder drawPrimitives:MTLPrimitiveTypeTriangleStrip vertexStart:0 vertexCount:4];
+}
+
+@end
+
+#pragma mark - 恒星涡旋渲染器 (实验性效果)
+
+@implementation StarVortexRenderer
+
+- (void)setupPipeline {
+    MTLRenderPipelineDescriptor *pipelineDescriptor = [[MTLRenderPipelineDescriptor alloc] init];
+    pipelineDescriptor.label = @"StarVortex";
+    pipelineDescriptor.vertexFunction = [self.defaultLibrary newFunctionWithName:@"neon_vertex"];
+    pipelineDescriptor.fragmentFunction = [self.defaultLibrary newFunctionWithName:@"starVortexFragment"];
+    pipelineDescriptor.colorAttachments[0].pixelFormat = self.metalView.colorPixelFormat;
+    
+    pipelineDescriptor.sampleCount = self.metalView.sampleCount;
+    pipelineDescriptor.depthAttachmentPixelFormat = self.metalView.depthStencilPixelFormat;
+    
+    pipelineDescriptor.colorAttachments[0].blendingEnabled = YES;
+    pipelineDescriptor.colorAttachments[0].rgbBlendOperation = MTLBlendOperationAdd;
+    pipelineDescriptor.colorAttachments[0].sourceRGBBlendFactor = MTLBlendFactorSourceAlpha;
+    pipelineDescriptor.colorAttachments[0].destinationRGBBlendFactor = MTLBlendFactorOne;
+    
+    NSError *error;
+    self.pipelineState = [self.device newRenderPipelineStateWithDescriptor:pipelineDescriptor error:&error];
+    
+    if (!self.pipelineState) {
+        NSLog(@"❌ 创建恒星涡旋管线失败: %@", error);
+        return;
+    }
+    
+    [self setupPerformanceOptimizations];
+}
+
+- (void)setupPerformanceOptimizations {
+    NSString *deviceName = self.device.name;
+    NSMutableDictionary *params = [self.renderParameters mutableCopy] ?: [NSMutableDictionary dictionary];
+    
+    if ([deviceName containsString:@"A17"] || [deviceName containsString:@"A16"]) {
+        params[@"vortexLayers"] = @(4);
+        params[@"flareComplexity"] = @(1.0);
+    } else {
+        params[@"vortexLayers"] = @(2);
+        params[@"flareComplexity"] = @(0.7);
+    }
+    [self setRenderParameters:params];
+}
+
+- (void)encodeRenderCommands:(id<MTLRenderCommandEncoder>)encoder {
+    if (!self.pipelineState) return;
+    [encoder setRenderPipelineState:self.pipelineState];
+    [encoder setVertexBuffer:self.uniformBuffer offset:0 atIndex:0];
+    [encoder setFragmentBuffer:self.uniformBuffer offset:0 atIndex:0];
+    [encoder drawPrimitives:MTLPrimitiveTypeTriangleStrip vertexStart:0 vertexCount:4];
+}
+
+@end
+
 #pragma mark - 渲染器工厂
 
 @implementation MetalRendererFactory
@@ -1321,6 +1470,13 @@ typedef struct {
             
         case VisualEffectTypeFractalPattern:
             return [[FractalPatternRenderer alloc] initWithMetalView:metalView];
+            
+        // 实验性效果
+        case VisualEffectTypeAuroraRipples:
+            return [[AuroraRippleRenderer alloc] initWithMetalView:metalView];
+            
+        case VisualEffectTypeStarVortex:
+            return [[StarVortexRenderer alloc] initWithMetalView:metalView];
             
         default:
             return [[DefaultEffectRenderer alloc] initWithMetalView:metalView];

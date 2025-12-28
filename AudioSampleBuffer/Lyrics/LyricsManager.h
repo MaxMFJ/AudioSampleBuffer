@@ -81,6 +81,33 @@ typedef void(^LyricsCompletionBlock)(LRCParser * _Nullable parser, NSError * _Nu
  */
 - (NSString *)lyricsSandboxDirectory;
 
+/**
+ * 导入外部LRC文件并关联到指定的音频文件
+ *
+ * @param lrcURL 外部LRC文件的URL
+ * @param audioPath 要关联的音频文件路径
+ * @param completion 完成回调，返回解析后的歌词和可能的错误
+ */
+- (void)importLRCFile:(NSURL *)lrcURL
+         forAudioFile:(NSString *)audioPath
+           completion:(LyricsCompletionBlock)completion;
+
+/**
+ * 导入外部LRC文件到歌词目录（自动根据文件名匹配歌曲）
+ *
+ * @param lrcURL 外部LRC文件的URL
+ * @param completion 完成回调，返回解析后的歌词和可能的错误
+ */
+- (void)importLRCFile:(NSURL *)lrcURL
+           completion:(LyricsCompletionBlock)completion;
+
+/**
+ * 清除指定音频文件的歌词缓存
+ *
+ * @param audioPath 音频文件路径
+ */
+- (void)clearLyricsCacheForAudioFile:(NSString *)audioPath;
+
 @end
 
 NS_ASSUME_NONNULL_END

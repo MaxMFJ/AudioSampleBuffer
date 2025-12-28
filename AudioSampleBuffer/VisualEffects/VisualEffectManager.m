@@ -215,6 +215,19 @@
             settings[@"trebleResponse"] = @(1.2);
             break;
             
+        case VisualEffectTypeAuroraRipples:
+            settings[@"auroraLayers"] = @(3);
+            settings[@"rippleCount"] = @(4);
+            settings[@"starDensity"] = @(0.7);
+            break;
+            
+        case VisualEffectTypeStarVortex:
+            settings[@"vortexLayers"] = @(3);
+            settings[@"flareComplexity"] = @(0.8);
+            settings[@"rotationSpeed"] = @(1.0);
+            settings[@"colorIntensity"] = @(1.2);
+            break;
+            
         default:
             settings[@"intensity"] = @(1.0);
             break;
@@ -575,6 +588,9 @@
         case VisualEffectTypeFireworks:
         case VisualEffectTypeGeometricMorph:
         case VisualEffectTypeFractalPattern:
+        // 实验性Metal特效
+        case VisualEffectTypeAuroraRipples:
+        case VisualEffectTypeStarVortex:
             return YES;
             
         case VisualEffectTypeClassicSpectrum:

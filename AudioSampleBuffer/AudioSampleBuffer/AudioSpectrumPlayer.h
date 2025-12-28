@@ -47,8 +47,15 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)playWithFileName:(NSString *)fileName;
 - (void)stop;
 
+/// 跳转到指定时间播放
+/// @param time 目标时间（秒）
+- (void)seekToTime:(NSTimeInterval)time;
+
 /// 手动加载歌词
 - (void)loadLyricsForCurrentTrack;
+
+/// 🔊 配置音频会话（可在需要时手动调用）
+- (void)configureAudioSession;
 
 @end
 

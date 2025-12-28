@@ -13,6 +13,7 @@ NS_ASSUME_NONNULL_BEGIN
 @protocol LyricsEffectControlDelegate <NSObject>
 
 - (void)lyricsEffectDidChange:(LyricsEffectType)effectType;
+- (void)lyricsVisibilityDidChange:(BOOL)isVisible;
 
 @end
 
@@ -20,6 +21,7 @@ NS_ASSUME_NONNULL_BEGIN
 
 @property (nonatomic, weak) id<LyricsEffectControlDelegate> delegate;
 @property (nonatomic, assign) LyricsEffectType currentEffect;
+@property (nonatomic, assign) BOOL lyricsVisible; // 歌词是否可见
 
 - (void)showAnimated:(BOOL)animated;
 - (void)hideAnimated:(BOOL)animated;

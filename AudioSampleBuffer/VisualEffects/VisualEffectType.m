@@ -146,6 +146,19 @@
                                                category:EffectCategoryCreative
                                        performanceLevel:PerformanceLevelHigh]];
     
+    // 实验性效果
+    [effects addObject:[VisualEffectInfo effectWithType:VisualEffectTypeAuroraRipples
+                                                   name:@"极光波纹"
+                                            description:@"北极光般的流动光带与音频驱动的多层波纹效果"
+                                               category:EffectCategoryExperimental
+                                       performanceLevel:PerformanceLevelHigh]];
+    
+    [effects addObject:[VisualEffectInfo effectWithType:VisualEffectTypeStarVortex
+                                                   name:@"恒星涡旋"
+                                            description:@"中心恒星日冕爆发与旋转的等离子云气效果"
+                                               category:EffectCategoryExperimental
+                                       performanceLevel:PerformanceLevelHigh]];
+    
     self.effects = [effects copy];
 }
 

@@ -138,6 +138,9 @@ static void CheckError(OSStatus error, const char *operation) {
 - (void)viewWillAppear:(BOOL)animated {
     [super viewWillAppear:animated];
     
+    // 显示导航栏（从首页进入时需要显示）
+    [self.navigationController setNavigationBarHidden:NO animated:animated];
+    
     // 🎯 关键修复：重新激活AudioSession（防止被其他页面改变）
     if (self.karaokeAudioEngine) {
         NSError *error = nil;

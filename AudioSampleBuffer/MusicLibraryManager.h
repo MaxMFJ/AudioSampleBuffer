@@ -152,6 +152,11 @@ typedef NS_ENUM(NSInteger, MusicSortType) {
 // 获取收藏列表
 - (NSArray<MusicItem *> *)favoriteMusic;
 
+#pragma mark - 删除管理
+
+// 删除音乐（包括文件和歌词）
+- (BOOL)deleteMusicItem:(MusicItem *)music error:(NSError **)error;
+
 #pragma mark - NCM 文件管理
 
 // 获取所有 NCM 文件

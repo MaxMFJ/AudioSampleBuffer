@@ -12,6 +12,7 @@
 @property (nonatomic, strong) UIView *contentView;
 @property (nonatomic, strong) UILabel *titleLabel;
 @property (nonatomic, strong) UIButton *closeButton;
+@property (nonatomic, strong) UIButton *toggleVisibilityButton;
 @property (nonatomic, strong) UICollectionView *effectCollectionView;
 @property (nonatomic, strong) NSArray<LyricsEffectInfo *> *effects;
 
@@ -67,6 +68,20 @@
     [_closeButton addTarget:self action:@selector(closeButtonTapped) forControlEvents:UIControlEventTouchUpInside];
     [_contentView addSubview:_closeButton];
     
+    // 歌词显示/隐藏切换按钮
+    _toggleVisibilityButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    _toggleVisibilityButton.titleLabel.font = [UIFont boldSystemFontOfSize:15];
+    _toggleVisibilityButton.backgroundColor = [UIColor colorWithRed:0.2 green:0.6 blue:0.9 alpha:0.9];
+    _toggleVisibilityButton.layer.cornerRadius = 22;
+    _toggleVisibilityButton.layer.borderWidth = 2;
+    _toggleVisibilityButton.layer.borderColor = [UIColor colorWithRed:0.3 green:0.7 blue:1.0 alpha:1.0].CGColor;
+    [_toggleVisibilityButton addTarget:self action:@selector(toggleVisibilityButtonTapped) forControlEvents:UIControlEventTouchUpInside];
+    [_contentView addSubview:_toggleVisibilityButton];
+    
+    // 默认歌词可见
+    _lyricsVisible = YES;
+    [self updateToggleButtonAppearance];
+    
     // 集合视图布局
     UICollectionViewFlowLayout *layout = [[UICollectionViewFlowLayout alloc] init];
     layout.scrollDirection = UICollectionViewScrollDirectionVertical;
@@ -101,7 +116,16 @@
     _closeButton.frame = CGRectMake(contentWidth - 50, 10, 40, 40);
     _titleLabel.frame = CGRectMake(20, 15, contentWidth - 90, 30);
     
-    _effectCollectionView.frame = CGRectMake(0, 60, contentWidth, contentHeight - 60);
+    // 歌词显示/隐藏切换按钮 - 放在标题下方
+    CGFloat toggleButtonWidth = 160;
+    CGFloat toggleButtonHeight = 44;
+    _toggleVisibilityButton.frame = CGRectMake((contentWidth - toggleButtonWidth) / 2, 
+                                                55, 
+                                                toggleButtonWidth, 
+                                                toggleButtonHeight);
+    
+    // 集合视图位置下移，为切换按钮留出空间
+    _effectCollectionView.frame = CGRectMake(0, 110, contentWidth, contentHeight - 110);
 }
 
 #pragma mark - UICollectionViewDataSource
@@ -232,6 +256,43 @@
 
 - (void)closeButtonTapped {
     [self hideAnimated:YES];
+}
+
+- (void)toggleVisibilityButtonTapped {
+    _lyricsVisible = !_lyricsVisible;
+    [self updateToggleButtonAppearance];
+    
+    // 通知代理
+    if ([_delegate respondsToSelector:@selector(lyricsVisibilityDidChange:)]) {
+        [_delegate lyricsVisibilityDidChange:_lyricsVisible];
+    }
+    
+    // 添加触觉反馈
+    UIImpactFeedbackGenerator *feedback = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleMedium];
+    [feedback impactOccurred];
+    
+    NSLog(@"👁️ 歌词显示状态切换: %@", _lyricsVisible ? @"显示" : @"隐藏");
+}
+
+- (void)updateToggleButtonAppearance {
+    if (_lyricsVisible) {
+        [_toggleVisibilityButton setTitle:@"👁️ 显示歌词" forState:UIControlStateNormal];
+        [_toggleVisibilityButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+        _toggleVisibilityButton.backgroundColor = [UIColor colorWithRed:0.2 green:0.6 blue:0.9 alpha:0.9];
+        _toggleVisibilityButton.layer.borderColor = [UIColor colorWithRed:0.3 green:0.7 blue:1.0 alpha:1.0].CGColor;
+    } else {
+        [_toggleVisibilityButton setTitle:@"👁️‍🗨️ 隐藏歌词" forState:UIControlStateNormal];
+        [_toggleVisibilityButton setTitleColor:[UIColor colorWithWhite:0.7 alpha:1.0] forState:UIControlStateNormal];
+        _toggleVisibilityButton.backgroundColor = [UIColor colorWithRed:0.3 green:0.3 blue:0.3 alpha:0.9];
+        _toggleVisibilityButton.layer.borderColor = [UIColor colorWithWhite:0.5 alpha:1.0].CGColor;
+    }
+}
+
+#pragma mark - Setter
+
+- (void)setLyricsVisible:(BOOL)lyricsVisible {
+    _lyricsVisible = lyricsVisible;
+    [self updateToggleButtonAppearance];
 }
 
 @end

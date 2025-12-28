@@ -187,6 +187,20 @@ NS_ASSUME_NONNULL_BEGIN
 @end
 
 /**
+ * 极光波纹渲染器 - 实验性效果
+ * 融合北极光流动美学与音频驱动的多层波纹效果
+ */
+@interface AuroraRippleRenderer : BaseMetalRenderer
+@end
+
+/**
+ * 恒星涡旋渲染器 - 实验性效果
+ * 中心恒星日冕爆发与旋转的等离子云气效果
+ */
+@interface StarVortexRenderer : BaseMetalRenderer
+@end
+
+/**
  * 默认效果渲染器
  */
 @interface DefaultEffectRenderer : BaseMetalRenderer

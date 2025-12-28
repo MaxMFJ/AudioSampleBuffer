@@ -14,6 +14,8 @@
 		4C110D4C2EA9CD5100D59E12 /* LiquidMetalShader.metal in Sources */ = {isa = PBXBuildFile; fileRef = 4C110D462EA9CD5100D59E12 /* LiquidMetalShader.metal */; };
 		4C110D502EA9DA7F00D59E12 /* ParticleFlowShader.metal in Sources */ = {isa = PBXBuildFile; fileRef = 4C110D4F2EA9DA7F00D59E12 /* ParticleFlowShader.metal */; };
 		4C110D512EAA365E00D59E12 /* LuminousMistCoreShader.metal in Sources */ = {isa = PBXBuildFile; fileRef = 4C110D502EAA365E00D59E12 /* LuminousMistCoreShader.metal */; };
+		4C110D522EAD000000D59E12 /* AuroraRippleShader.metal in Sources */ = {isa = PBXBuildFile; fileRef = 4C110D532EAD000000D59E12 /* AuroraRippleShader.metal */; };
+		4C110D542EAD100000D59E12 /* StarVortexShader.metal in Sources */ = {isa = PBXBuildFile; fileRef = 4C110D552EAD100000D59E12 /* StarVortexShader.metal */; };
 		4C2C69F02EA216AF00D18118 /* 队长 - 楼顶上的小斑鸠.ncm in Resources */ = {isa = PBXBuildFile; fileRef = 4C2C69EC2EA216AF00D18118 /* 队长 - 楼顶上的小斑鸠.ncm */; };
 		4C2C69F12EA216AF00D18118 /* 小霞,海洋Bo - 向云端.ncm in Resources */ = {isa = PBXBuildFile; fileRef = 4C2C69EF2EA216AF00D18118 /* 小霞,海洋Bo - 向云端.ncm */; };
 		4C2C69F22EA216AF00D18118 /* 郭顶 - 凄美地.ncm in Resources */ = {isa = PBXBuildFile; fileRef = 4C2C69ED2EA216AF00D18118 /* 郭顶 - 凄美地.ncm */; };
@@ -104,6 +106,11 @@
 		4C699F8E2E9F951A009090AB /* SoundTouchBridge.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4C699F7D2E9F951A009090AB /* SoundTouchBridge.cpp */; };
 		4C699F8F2E9F951A009090AB /* AAFilter.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4C699F662E9F951A009090AB /* AAFilter.cpp */; };
 		4C77CD1B2E990F61008EA7C6 /* CyberpunkControlPanel.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C77CD1A2E990F61008EA7C6 /* CyberpunkControlPanel.m */; };
+		4C7D338C2EFEE12A0027CBC8 /* 火.wav in Resources */ = {isa = PBXBuildFile; fileRef = 4C7D338B2EFEE12A0027CBC8 /* 火.wav */; };
+		4C7D338E2EFEE5250027CBC8 /* 被迫接受.wav in Resources */ = {isa = PBXBuildFile; fileRef = 4C7D338D2EFEE5250027CBC8 /* 被迫接受.wav */; };
+		4C7D33972EFEEC8D0027CBC8 /* ViewController+PlaybackProgress.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C7D33962EFEEC8D0027CBC8 /* ViewController+PlaybackProgress.m */; };
+		4C7D339A2EFEEC950027CBC8 /* AudioProgressView.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C7D33992EFEEC950027CBC8 /* AudioProgressView.m */; };
+		4C7D33A02F00000000000001 /* VinylRecordView.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C7D33A22F00000000000002 /* VinylRecordView.m */; };
 		4c4e68e181504d63bdcceeb4 /* QQMusicAPIService.m in Sources */ = {isa = PBXBuildFile; fileRef = 8f06cadb652e4fd8b81f19fb /* QQMusicAPIService.m */; };
 		64C5446228C838D100C23393 /* AppDelegate.m in Sources */ = {isa = PBXBuildFile; fileRef = 64C5446128C838D100C23393 /* AppDelegate.m */; };
 		64C5446828C838D100C23393 /* ViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = 64C5446728C838D100C23393 /* ViewController.m */; };
@@ -118,9 +125,30 @@
 		64C5448D28C83A7700C23393 /* SpectrumView.m in Sources */ = {isa = PBXBuildFile; fileRef = 64C5448528C83A7700C23393 /* SpectrumView.m */; };
 		64C5448E28C83A7700C23393 /* AudioSpectrumPlayer.m in Sources */ = {isa = PBXBuildFile; fileRef = 64C5448628C83A7700C23393 /* AudioSpectrumPlayer.m */; };
 		64C544CF28C83B1200C23393 /* AudioToolbox.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 64C544CE28C83B1200C23393 /* AudioToolbox.framework */; };
+		4C7D33C02F11200000000001 /* LRCGenerator.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C7D33B02F11100000000002 /* LRCGenerator.m */; };
+		4C7D33C02F11200000000002 /* LyricsEditorViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C7D33B02F11100000000004 /* LyricsEditorViewController.m */; };
+		4C7D33C02F11200000000003 /* LyricsLineCell.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C7D33B02F11100000000006 /* LyricsLineCell.m */; };
+		4C7D33C02F11200000000004 /* LyricsTextInputView.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C7D33B02F11100000000008 /* LyricsTextInputView.m */; };
+		4C7D33C02F11200000000005 /* LyricsTimingControlView.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C7D33B02F1110000000000A /* LyricsTimingControlView.m */; };
+		4C7D33C02F11200000000006 /* AudioWaveformView.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C7D33B02F1110000000000C /* AudioWaveformView.m */; };
+		4C7D33C02F11200000000007 /* LocalLyricsListViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C7D33B02F1110000000000E /* LocalLyricsListViewController.m */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		4C7D33B02F11100000000001 /* LRCGenerator.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = LRCGenerator.h; sourceTree = "<group>"; };
+		4C7D33B02F11100000000002 /* LRCGenerator.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = LRCGenerator.m; sourceTree = "<group>"; };
+		4C7D33B02F11100000000003 /* LyricsEditorViewController.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = LyricsEditorViewController.h; sourceTree = "<group>"; };
+		4C7D33B02F11100000000004 /* LyricsEditorViewController.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = LyricsEditorViewController.m; sourceTree = "<group>"; };
+		4C7D33B02F11100000000005 /* LyricsLineCell.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = LyricsLineCell.h; sourceTree = "<group>"; };
+		4C7D33B02F11100000000006 /* LyricsLineCell.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = LyricsLineCell.m; sourceTree = "<group>"; };
+		4C7D33B02F11100000000007 /* LyricsTextInputView.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = LyricsTextInputView.h; sourceTree = "<group>"; };
+		4C7D33B02F11100000000008 /* LyricsTextInputView.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = LyricsTextInputView.m; sourceTree = "<group>"; };
+		4C7D33B02F11100000000009 /* LyricsTimingControlView.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = LyricsTimingControlView.h; sourceTree = "<group>"; };
+		4C7D33B02F1110000000000A /* LyricsTimingControlView.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = LyricsTimingControlView.m; sourceTree = "<group>"; };
+		4C7D33B02F1110000000000B /* AudioWaveformView.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AudioWaveformView.h; sourceTree = "<group>"; };
+		4C7D33B02F1110000000000C /* AudioWaveformView.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AudioWaveformView.m; sourceTree = "<group>"; };
+		4C7D33B02F1110000000000D /* LocalLyricsListViewController.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = LocalLyricsListViewController.h; sourceTree = "<group>"; };
+		4C7D33B02F1110000000000E /* LocalLyricsListViewController.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = LocalLyricsListViewController.m; sourceTree = "<group>"; };
 		4C110D412EA9CD5100D59E12 /* AudioReactive3DShader.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = AudioReactive3DShader.metal; sourceTree = "<group>"; };
 		4C110D422EA9CD5100D59E12 /* CircularWaveShader.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = CircularWaveShader.metal; sourceTree = "<group>"; };
 		4C110D442EA9CD5100D59E12 /* FractalPatternShader.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = FractalPatternShader.metal; sourceTree = "<group>"; };
@@ -128,6 +156,8 @@
 		4C110D462EA9CD5100D59E12 /* LiquidMetalShader.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = LiquidMetalShader.metal; sourceTree = "<group>"; };
 		4C110D4F2EA9DA7F00D59E12 /* ParticleFlowShader.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = ParticleFlowShader.metal; sourceTree = "<group>"; };
 		4C110D502EAA365E00D59E12 /* LuminousMistCoreShader.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = LuminousMistCoreShader.metal; sourceTree = "<group>"; };
+		4C110D532EAD000000D59E12 /* AuroraRippleShader.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = AuroraRippleShader.metal; sourceTree = "<group>"; };
+		4C110D552EAD100000D59E12 /* StarVortexShader.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = StarVortexShader.metal; sourceTree = "<group>"; };
 		4C2C69EC2EA216AF00D18118 /* 队长 - 楼顶上的小斑鸠.ncm */ = {isa = PBXFileReference; lastKnownFileType = file; path = "队长 - 楼顶上的小斑鸠.ncm"; sourceTree = "<group>"; };
 		4C2C69ED2EA216AF00D18118 /* 郭顶 - 凄美地.ncm */ = {isa = PBXFileReference; lastKnownFileType = file; path = "郭顶 - 凄美地.ncm"; sourceTree = "<group>"; };
 		4C2C69EE2EA216AF00D18118 /* 黄绮珊 - 离不开你 (Live).ncm */ = {isa = PBXFileReference; lastKnownFileType = file; path = "黄绮珊 - 离不开你 (Live).ncm"; sourceTree = "<group>"; };
@@ -293,6 +323,14 @@
 		4C699F812E9F951A009090AB /* TDStretch.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = TDStretch.cpp; sourceTree = "<group>"; };
 		4C77CD192E990F61008EA7C6 /* CyberpunkControlPanel.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = CyberpunkControlPanel.h; sourceTree = "<group>"; };
 		4C77CD1A2E990F61008EA7C6 /* CyberpunkControlPanel.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = CyberpunkControlPanel.m; sourceTree = "<group>"; };
+		4C7D338B2EFEE12A0027CBC8 /* 火.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = "火.wav"; sourceTree = "<group>"; };
+		4C7D338D2EFEE5250027CBC8 /* 被迫接受.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = "被迫接受.wav"; sourceTree = "<group>"; };
+		4C7D33952EFEEC8D0027CBC8 /* ViewController+PlaybackProgress.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "ViewController+PlaybackProgress.h"; sourceTree = "<group>"; };
+		4C7D33962EFEEC8D0027CBC8 /* ViewController+PlaybackProgress.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = "ViewController+PlaybackProgress.m"; sourceTree = "<group>"; };
+		4C7D33982EFEEC950027CBC8 /* AudioProgressView.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AudioProgressView.h; sourceTree = "<group>"; };
+		4C7D33992EFEEC950027CBC8 /* AudioProgressView.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AudioProgressView.m; sourceTree = "<group>"; };
+		4C7D33A12F00000000000001 /* VinylRecordView.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = VinylRecordView.h; sourceTree = "<group>"; };
+		4C7D33A22F00000000000002 /* VinylRecordView.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = VinylRecordView.m; sourceTree = "<group>"; };
 		64C5445D28C838D100C23393 /* AudioSampleBuffer.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AudioSampleBuffer.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		64C5446028C838D100C23393 /* AppDelegate.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AppDelegate.h; sourceTree = "<group>"; };
 		64C5446128C838D100C23393 /* AppDelegate.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AppDelegate.m; sourceTree = "<group>"; };
@@ -434,6 +472,27 @@
 			path = Lyrics;
 			sourceTree = "<group>";
 		};
+		4C7D33B02F1111000000000B /* LyricsEditor */ = {
+			isa = PBXGroup;
+			children = (
+				4C7D33B02F11100000000001 /* LRCGenerator.h */,
+				4C7D33B02F11100000000002 /* LRCGenerator.m */,
+				4C7D33B02F11100000000003 /* LyricsEditorViewController.h */,
+				4C7D33B02F11100000000004 /* LyricsEditorViewController.m */,
+				4C7D33B02F11100000000005 /* LyricsLineCell.h */,
+				4C7D33B02F11100000000006 /* LyricsLineCell.m */,
+				4C7D33B02F11100000000007 /* LyricsTextInputView.h */,
+				4C7D33B02F11100000000008 /* LyricsTextInputView.m */,
+				4C7D33B02F11100000000009 /* LyricsTimingControlView.h */,
+				4C7D33B02F1110000000000A /* LyricsTimingControlView.m */,
+				4C7D33B02F1110000000000B /* AudioWaveformView.h */,
+				4C7D33B02F1110000000000C /* AudioWaveformView.m */,
+				4C7D33B02F1110000000000D /* LocalLyricsListViewController.h */,
+				4C7D33B02F1110000000000E /* LocalLyricsListViewController.m */,
+			);
+			path = LyricsEditor;
+			sourceTree = "<group>";
+		};
 		4C65487B2EA0C500006DD8DD /* Tools */ = {
 			isa = PBXGroup;
 			children = (
@@ -460,6 +519,7 @@
 		4C66E6D82E8A89E8003200DA /* Audio */ = {
 			isa = PBXGroup;
 			children = (
+				4C7D338B2EFEE12A0027CBC8 /* 火.wav */,
 				4C6548B42EA0E643006DD8DD /* 福禄寿FloruitShow - 我用什么把你留住.ncm */,
 				4C6548DE2EA0ECE0006DD8DD /* lrc */,
 				4C5E4B9D2EA10825009B5708 /* 队长 - 哪里都是你.mp3 */,
@@ -470,6 +530,7 @@
 				4C2C69ED2EA216AF00D18118 /* 郭顶 - 凄美地.ncm */,
 				4C2C69EE2EA216AF00D18118 /* 黄绮珊 - 离不开你 (Live).ncm */,
 				4C2C69EF2EA216AF00D18118 /* 小霞,海洋Bo - 向云端.ncm */,
+				4C7D338D2EFEE5250027CBC8 /* 被迫接受.wav */,
 			);
 			path = Audio;
 			sourceTree = "<group>";
@@ -496,6 +557,8 @@
 		4C66E7152E8A9255003200DA /* VisualEffects */ = {
 			isa = PBXGroup;
 			children = (
+				4C110D532EAD000000D59E12 /* AuroraRippleShader.metal */,
+				4C110D552EAD100000D59E12 /* StarVortexShader.metal */,
 				4C110D502EAA365E00D59E12 /* LuminousMistCoreShader.metal */,
 				4C110D412EA9CD5100D59E12 /* AudioReactive3DShader.metal */,
 				4C110D422EA9CD5100D59E12 /* CircularWaveShader.metal */,
@@ -625,6 +688,10 @@
 				64C5446728C838D100C23393 /* ViewController.m */,
 				64C5447D28C8395200C23393 /* AudioPlayCell.h */,
 				64C5447E28C8395200C23393 /* AudioPlayCell.m */,
+				4C7D33A12F00000000000001 /* VinylRecordView.h */,
+				4C7D33A22F00000000000002 /* VinylRecordView.m */,
+				4C7D33952EFEEC8D0027CBC8 /* ViewController+PlaybackProgress.h */,
+				4C7D33962EFEEC8D0027CBC8 /* ViewController+PlaybackProgress.m */,
 				64C5448028C83A0700C23393 /* TTi.h */,
 				64C5448128C83A0700C23393 /* TTi.m */,
 				64C5446928C838D100C23393 /* Main.storyboard */,
@@ -635,6 +702,7 @@
 				4C66E7042E8A8DBB003200DA /* Animations */,
 				4C66E7152E8A9255003200DA /* VisualEffects */,
 				4C5C27B62E9CFE7F00D9AEA9 /* Lyrics */,
+				4C7D33B02F1111000000000B /* LyricsEditor */,
 				4C5167EB2E9DED6200853960 /* Karaoke */,
 				4C65487B2EA0C500006DD8DD /* Tools */,
 				4C2C6A3A2EA22A1C00D18118 /* Download */,
@@ -653,6 +721,8 @@
 		64C544D028C83B5A00C23393 /* AudioSampleBuffer */ = {
 			isa = PBXGroup;
 			children = (
+				4C7D33982EFEEC950027CBC8 /* AudioProgressView.h */,
+				4C7D33992EFEEC950027CBC8 /* AudioProgressView.m */,
 				64C5448928C83A7700C23393 /* AudioSpectrumPlayer.h */,
 				64C5448628C83A7700C23393 /* AudioSpectrumPlayer.m */,
 				64C5448828C83A7700C23393 /* AudioSpectrumRecorder.h */,
@@ -722,6 +792,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				4C7D338C2EFEE12A0027CBC8 /* 火.wav in Resources */,
 				64C5447028C838D400C23393 /* LaunchScreen.storyboard in Resources */,
 				4C6548B52EA0E643006DD8DD /* 福禄寿FloruitShow - 我用什么把你留住.ncm in Resources */,
 				64C5446D28C838D400C23393 /* Assets.xcassets in Resources */,
@@ -737,6 +808,7 @@
 				4C2C69F22EA216AF00D18118 /* 郭顶 - 凄美地.ncm in Resources */,
 				4C2C69F32EA216AF00D18118 /* 黄绮珊 - 离不开你 (Live).ncm in Resources */,
 				4C6548822EA0C500006DD8DD /* ncm_enhanced_lyrics_checker.py in Resources */,
+				4C7D338E2EFEE5250027CBC8 /* 被迫接受.wav in Resources */,
 				4C6548832EA0C500006DD8DD /* batch_extract_lyrics.sh in Resources */,
 				4C6548842EA0C500006DD8DD /* sync_lyrics_to_sandbox.sh in Resources */,
 				4C6548852EA0C500006DD8DD /* extract_ncm_lyrics.sh in Resources */,
@@ -768,6 +840,8 @@
 				4C699F8D2E9F951A009090AB /* cpu_detect_x86.cpp in Sources */,
 				4C699F8E2E9F951A009090AB /* SoundTouchBridge.cpp in Sources */,
 				4C110D512EAA365E00D59E12 /* LuminousMistCoreShader.metal in Sources */,
+				4C110D522EAD000000D59E12 /* AuroraRippleShader.metal in Sources */,
+				4C110D542EAD100000D59E12 /* StarVortexShader.metal in Sources */,
 				4C699F8F2E9F951A009090AB /* AAFilter.cpp in Sources */,
 				4C2C6A422EA236ED00D18118 /* KugouMusicDownloader.m in Sources */,
 				4c4e68e181504d63bdcceeb4 /* QQMusicAPIService.m in Sources */,
@@ -803,6 +877,7 @@
 				4C2C6A232EA2170A00D18118 /* smallft.c in Sources */,
 				4C2C6A252EA2170A00D18118 /* resample.c in Sources */,
 				4C2C6A282EA2170A00D18118 /* jitter.c in Sources */,
+				4C7D33972EFEEC8D0027CBC8 /* ViewController+PlaybackProgress.m in Sources */,
 				4C2C6A292EA2170A00D18118 /* fftwrap.c in Sources */,
 				4C2C6A2B2EA2170A00D18118 /* kiss_fftr.c in Sources */,
 				4C2C6A2C2EA2170A00D18118 /* preprocess.c in Sources */,
@@ -819,6 +894,7 @@
 				4C5168832E9E5FD500853960 /* LyricsView.m in Sources */,
 				4C5168842E9E5FD500853960 /* LRCParser.m in Sources */,
 				64C5447F28C8395200C23393 /* AudioPlayCell.m in Sources */,
+				4C7D33A02F00000000000001 /* VinylRecordView.m in Sources */,
 				4C110D482EA9CD5100D59E12 /* AudioReactive3DShader.metal in Sources */,
 				4C110D492EA9CD5100D59E12 /* GeometricMorphShader.metal in Sources */,
 				4C110D4A2EA9CD5100D59E12 /* CircularWaveShader.metal in Sources */,
@@ -839,9 +915,17 @@
 				4C5167F52E9E027F00853960 /* RecordingListViewController.m in Sources */,
 				4C5167F62E9E027F00853960 /* RecordingPlaybackView.m in Sources */,
 				4C77CD1B2E990F61008EA7C6 /* CyberpunkControlPanel.m in Sources */,
+				4C7D339A2EFEEC950027CBC8 /* AudioProgressView.m in Sources */,
 				4C66E70A2E8A8DBB003200DA /* ParticleAnimationManager.m in Sources */,
 				4C66E70B2E8A8DBB003200DA /* AnimationProtocol.m in Sources */,
 				64C5448C28C83A7700C23393 /* RealtimeAnalyzer.m in Sources */,
+				4C7D33C02F11200000000001 /* LRCGenerator.m in Sources */,
+				4C7D33C02F11200000000002 /* LyricsEditorViewController.m in Sources */,
+				4C7D33C02F11200000000003 /* LyricsLineCell.m in Sources */,
+				4C7D33C02F11200000000004 /* LyricsTextInputView.m in Sources */,
+				4C7D33C02F11200000000005 /* LyricsTimingControlView.m in Sources */,
+				4C7D33C02F11200000000006 /* AudioWaveformView.m in Sources */,
+				4C7D33C02F11200000000007 /* LocalLyricsListViewController.m in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -985,7 +1069,7 @@
 				CODE_SIGN_ENTITLEMENTS = AudioSampleBuffer/AudioSampleBuffer.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 2;
-				DEVELOPMENT_TEAM = 4R3F9TA3GA;
+				DEVELOPMENT_TEAM = 55RY84Y52S;
 				ENABLE_APP_SANDBOX = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = AudioSampleBuffer/Info.plist;
@@ -1020,7 +1104,7 @@
 				CODE_SIGN_ENTITLEMENTS = AudioSampleBuffer/AudioSampleBuffer.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 2;
-				DEVELOPMENT_TEAM = 4R3F9TA3GA;
+				DEVELOPMENT_TEAM = 55RY84Y52S;
 				ENABLE_APP_SANDBOX = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = AudioSampleBuffer/Info.plist;
