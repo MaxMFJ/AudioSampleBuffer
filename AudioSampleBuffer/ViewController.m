@@ -3220,25 +3220,31 @@
         dispatch_async(dispatch_get_main_queue(), ^{
             [progressAlert dismissViewControllerAnimated:YES completion:^{
                 if (successCount > 0) {
-                    // 导入成功，重新加载音乐库
-                    [self.musicLibrary reloadMusicLibrary];
-                    [self refreshMusicList];
-                    
-                    // 显示成功提示
-                    NSString *message;
-                    if (failureCount > 0) {
-                        message = [NSString stringWithFormat:@"成功导入 %ld 首\n失败 %ld 首", (long)successCount, (long)failureCount];
-                    } else {
-                        message = [NSString stringWithFormat:@"成功导入 %ld 首音乐文件", (long)successCount];
-                    }
-                    
-                    UIAlertController *successAlert = [UIAlertController alertControllerWithTitle:@"✅ 导入完成"
-                                                                                          message:message
-                                                                                   preferredStyle:UIAlertControllerStyleAlert];
-                    [successAlert addAction:[UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil]];
-                    [self presentViewController:successAlert animated:YES completion:nil];
-                    
-                    NSLog(@"✅ 导入完成: 成功 %ld 首, 失败 %ld 首", (long)successCount, (long)failureCount);
+                    // 导入成功，在后台线程重新加载音乐库（避免主线程阻塞）
+                    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+                        [self.musicLibrary reloadMusicLibrary];
+                        
+                        // 回到主线程刷新UI
+                        dispatch_async(dispatch_get_main_queue(), ^{
+                            [self refreshMusicList];
+                            
+                            // 显示成功提示
+                            NSString *message;
+                            if (failureCount > 0) {
+                                message = [NSString stringWithFormat:@"成功导入 %ld 首\n失败 %ld 首", (long)successCount, (long)failureCount];
+                            } else {
+                                message = [NSString stringWithFormat:@"成功导入 %ld 首音乐文件", (long)successCount];
+                            }
+                            
+                            UIAlertController *successAlert = [UIAlertController alertControllerWithTitle:@"✅ 导入完成"
+                                                                                                  message:message
+                                                                                           preferredStyle:UIAlertControllerStyleAlert];
+                            [successAlert addAction:[UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil]];
+                            [self presentViewController:successAlert animated:YES completion:nil];
+                            
+                            NSLog(@"✅ 导入完成: 成功 %ld 首, 失败 %ld 首", (long)successCount, (long)failureCount);
+                        });
+                    });
                 } else {
                     // 全部失败
                     UIAlertController *errorAlert = [UIAlertController alertControllerWithTitle:@"❌ 导入失败"

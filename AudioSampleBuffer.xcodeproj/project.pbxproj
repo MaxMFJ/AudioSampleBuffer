@@ -111,6 +111,13 @@
 		4C7D33972EFEEC8D0027CBC8 /* ViewController+PlaybackProgress.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C7D33962EFEEC8D0027CBC8 /* ViewController+PlaybackProgress.m */; };
 		4C7D339A2EFEEC950027CBC8 /* AudioProgressView.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C7D33992EFEEC950027CBC8 /* AudioProgressView.m */; };
 		4C7D33A02F00000000000001 /* VinylRecordView.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C7D33A22F00000000000002 /* VinylRecordView.m */; };
+		4C7D33C02F11200000000001 /* LRCGenerator.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C7D33B02F11100000000002 /* LRCGenerator.m */; };
+		4C7D33C02F11200000000002 /* LyricsEditorViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C7D33B02F11100000000004 /* LyricsEditorViewController.m */; };
+		4C7D33C02F11200000000003 /* LyricsLineCell.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C7D33B02F11100000000006 /* LyricsLineCell.m */; };
+		4C7D33C02F11200000000004 /* LyricsTextInputView.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C7D33B02F11100000000008 /* LyricsTextInputView.m */; };
+		4C7D33C02F11200000000005 /* LyricsTimingControlView.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C7D33B02F1110000000000A /* LyricsTimingControlView.m */; };
+		4C7D33C02F11200000000006 /* AudioWaveformView.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C7D33B02F1110000000000C /* AudioWaveformView.m */; };
+		4C7D33C02F11200000000007 /* LocalLyricsListViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C7D33B02F1110000000000E /* LocalLyricsListViewController.m */; };
 		4c4e68e181504d63bdcceeb4 /* QQMusicAPIService.m in Sources */ = {isa = PBXBuildFile; fileRef = 8f06cadb652e4fd8b81f19fb /* QQMusicAPIService.m */; };
 		64C5446228C838D100C23393 /* AppDelegate.m in Sources */ = {isa = PBXBuildFile; fileRef = 64C5446128C838D100C23393 /* AppDelegate.m */; };
 		64C5446828C838D100C23393 /* ViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = 64C5446728C838D100C23393 /* ViewController.m */; };
@@ -125,30 +132,9 @@
 		64C5448D28C83A7700C23393 /* SpectrumView.m in Sources */ = {isa = PBXBuildFile; fileRef = 64C5448528C83A7700C23393 /* SpectrumView.m */; };
 		64C5448E28C83A7700C23393 /* AudioSpectrumPlayer.m in Sources */ = {isa = PBXBuildFile; fileRef = 64C5448628C83A7700C23393 /* AudioSpectrumPlayer.m */; };
 		64C544CF28C83B1200C23393 /* AudioToolbox.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 64C544CE28C83B1200C23393 /* AudioToolbox.framework */; };
-		4C7D33C02F11200000000001 /* LRCGenerator.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C7D33B02F11100000000002 /* LRCGenerator.m */; };
-		4C7D33C02F11200000000002 /* LyricsEditorViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C7D33B02F11100000000004 /* LyricsEditorViewController.m */; };
-		4C7D33C02F11200000000003 /* LyricsLineCell.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C7D33B02F11100000000006 /* LyricsLineCell.m */; };
-		4C7D33C02F11200000000004 /* LyricsTextInputView.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C7D33B02F11100000000008 /* LyricsTextInputView.m */; };
-		4C7D33C02F11200000000005 /* LyricsTimingControlView.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C7D33B02F1110000000000A /* LyricsTimingControlView.m */; };
-		4C7D33C02F11200000000006 /* AudioWaveformView.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C7D33B02F1110000000000C /* AudioWaveformView.m */; };
-		4C7D33C02F11200000000007 /* LocalLyricsListViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C7D33B02F1110000000000E /* LocalLyricsListViewController.m */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		4C7D33B02F11100000000001 /* LRCGenerator.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = LRCGenerator.h; sourceTree = "<group>"; };
-		4C7D33B02F11100000000002 /* LRCGenerator.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = LRCGenerator.m; sourceTree = "<group>"; };
-		4C7D33B02F11100000000003 /* LyricsEditorViewController.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = LyricsEditorViewController.h; sourceTree = "<group>"; };
-		4C7D33B02F11100000000004 /* LyricsEditorViewController.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = LyricsEditorViewController.m; sourceTree = "<group>"; };
-		4C7D33B02F11100000000005 /* LyricsLineCell.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = LyricsLineCell.h; sourceTree = "<group>"; };
-		4C7D33B02F11100000000006 /* LyricsLineCell.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = LyricsLineCell.m; sourceTree = "<group>"; };
-		4C7D33B02F11100000000007 /* LyricsTextInputView.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = LyricsTextInputView.h; sourceTree = "<group>"; };
-		4C7D33B02F11100000000008 /* LyricsTextInputView.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = LyricsTextInputView.m; sourceTree = "<group>"; };
-		4C7D33B02F11100000000009 /* LyricsTimingControlView.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = LyricsTimingControlView.h; sourceTree = "<group>"; };
-		4C7D33B02F1110000000000A /* LyricsTimingControlView.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = LyricsTimingControlView.m; sourceTree = "<group>"; };
-		4C7D33B02F1110000000000B /* AudioWaveformView.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AudioWaveformView.h; sourceTree = "<group>"; };
-		4C7D33B02F1110000000000C /* AudioWaveformView.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AudioWaveformView.m; sourceTree = "<group>"; };
-		4C7D33B02F1110000000000D /* LocalLyricsListViewController.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = LocalLyricsListViewController.h; sourceTree = "<group>"; };
-		4C7D33B02F1110000000000E /* LocalLyricsListViewController.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = LocalLyricsListViewController.m; sourceTree = "<group>"; };
 		4C110D412EA9CD5100D59E12 /* AudioReactive3DShader.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = AudioReactive3DShader.metal; sourceTree = "<group>"; };
 		4C110D422EA9CD5100D59E12 /* CircularWaveShader.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = CircularWaveShader.metal; sourceTree = "<group>"; };
 		4C110D442EA9CD5100D59E12 /* FractalPatternShader.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = FractalPatternShader.metal; sourceTree = "<group>"; };
@@ -331,6 +317,20 @@
 		4C7D33992EFEEC950027CBC8 /* AudioProgressView.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AudioProgressView.m; sourceTree = "<group>"; };
 		4C7D33A12F00000000000001 /* VinylRecordView.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = VinylRecordView.h; sourceTree = "<group>"; };
 		4C7D33A22F00000000000002 /* VinylRecordView.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = VinylRecordView.m; sourceTree = "<group>"; };
+		4C7D33B02F11100000000001 /* LRCGenerator.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = LRCGenerator.h; sourceTree = "<group>"; };
+		4C7D33B02F11100000000002 /* LRCGenerator.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = LRCGenerator.m; sourceTree = "<group>"; };
+		4C7D33B02F11100000000003 /* LyricsEditorViewController.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = LyricsEditorViewController.h; sourceTree = "<group>"; };
+		4C7D33B02F11100000000004 /* LyricsEditorViewController.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = LyricsEditorViewController.m; sourceTree = "<group>"; };
+		4C7D33B02F11100000000005 /* LyricsLineCell.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = LyricsLineCell.h; sourceTree = "<group>"; };
+		4C7D33B02F11100000000006 /* LyricsLineCell.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = LyricsLineCell.m; sourceTree = "<group>"; };
+		4C7D33B02F11100000000007 /* LyricsTextInputView.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = LyricsTextInputView.h; sourceTree = "<group>"; };
+		4C7D33B02F11100000000008 /* LyricsTextInputView.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = LyricsTextInputView.m; sourceTree = "<group>"; };
+		4C7D33B02F11100000000009 /* LyricsTimingControlView.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = LyricsTimingControlView.h; sourceTree = "<group>"; };
+		4C7D33B02F1110000000000A /* LyricsTimingControlView.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = LyricsTimingControlView.m; sourceTree = "<group>"; };
+		4C7D33B02F1110000000000B /* AudioWaveformView.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AudioWaveformView.h; sourceTree = "<group>"; };
+		4C7D33B02F1110000000000C /* AudioWaveformView.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AudioWaveformView.m; sourceTree = "<group>"; };
+		4C7D33B02F1110000000000D /* LocalLyricsListViewController.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = LocalLyricsListViewController.h; sourceTree = "<group>"; };
+		4C7D33B02F1110000000000E /* LocalLyricsListViewController.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = LocalLyricsListViewController.m; sourceTree = "<group>"; };
 		64C5445D28C838D100C23393 /* AudioSampleBuffer.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AudioSampleBuffer.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		64C5446028C838D100C23393 /* AppDelegate.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AppDelegate.h; sourceTree = "<group>"; };
 		64C5446128C838D100C23393 /* AppDelegate.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AppDelegate.m; sourceTree = "<group>"; };
@@ -470,27 +470,6 @@
 				4C51687D2E9E5FD500853960 /* LyricsView.m */,
 			);
 			path = Lyrics;
-			sourceTree = "<group>";
-		};
-		4C7D33B02F1111000000000B /* LyricsEditor */ = {
-			isa = PBXGroup;
-			children = (
-				4C7D33B02F11100000000001 /* LRCGenerator.h */,
-				4C7D33B02F11100000000002 /* LRCGenerator.m */,
-				4C7D33B02F11100000000003 /* LyricsEditorViewController.h */,
-				4C7D33B02F11100000000004 /* LyricsEditorViewController.m */,
-				4C7D33B02F11100000000005 /* LyricsLineCell.h */,
-				4C7D33B02F11100000000006 /* LyricsLineCell.m */,
-				4C7D33B02F11100000000007 /* LyricsTextInputView.h */,
-				4C7D33B02F11100000000008 /* LyricsTextInputView.m */,
-				4C7D33B02F11100000000009 /* LyricsTimingControlView.h */,
-				4C7D33B02F1110000000000A /* LyricsTimingControlView.m */,
-				4C7D33B02F1110000000000B /* AudioWaveformView.h */,
-				4C7D33B02F1110000000000C /* AudioWaveformView.m */,
-				4C7D33B02F1110000000000D /* LocalLyricsListViewController.h */,
-				4C7D33B02F1110000000000E /* LocalLyricsListViewController.m */,
-			);
-			path = LyricsEditor;
 			sourceTree = "<group>";
 		};
 		4C65487B2EA0C500006DD8DD /* Tools */ = {
@@ -653,6 +632,27 @@
 				4C2C6A222EA2170A00D18118 /* SpeexDSPBridge.mm */,
 			);
 			path = DSP;
+			sourceTree = "<group>";
+		};
+		4C7D33B02F1111000000000B /* LyricsEditor */ = {
+			isa = PBXGroup;
+			children = (
+				4C7D33B02F11100000000001 /* LRCGenerator.h */,
+				4C7D33B02F11100000000002 /* LRCGenerator.m */,
+				4C7D33B02F11100000000003 /* LyricsEditorViewController.h */,
+				4C7D33B02F11100000000004 /* LyricsEditorViewController.m */,
+				4C7D33B02F11100000000005 /* LyricsLineCell.h */,
+				4C7D33B02F11100000000006 /* LyricsLineCell.m */,
+				4C7D33B02F11100000000007 /* LyricsTextInputView.h */,
+				4C7D33B02F11100000000008 /* LyricsTextInputView.m */,
+				4C7D33B02F11100000000009 /* LyricsTimingControlView.h */,
+				4C7D33B02F1110000000000A /* LyricsTimingControlView.m */,
+				4C7D33B02F1110000000000B /* AudioWaveformView.h */,
+				4C7D33B02F1110000000000C /* AudioWaveformView.m */,
+				4C7D33B02F1110000000000D /* LocalLyricsListViewController.h */,
+				4C7D33B02F1110000000000E /* LocalLyricsListViewController.m */,
+			);
+			path = LyricsEditor;
 			sourceTree = "<group>";
 		};
 		64C5445428C838D100C23393 = {
@@ -1069,7 +1069,7 @@
 				CODE_SIGN_ENTITLEMENTS = AudioSampleBuffer/AudioSampleBuffer.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 2;
-				DEVELOPMENT_TEAM = 55RY84Y52S;
+				DEVELOPMENT_TEAM = ADPF86V7JV;
 				ENABLE_APP_SANDBOX = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = AudioSampleBuffer/Info.plist;
@@ -1088,7 +1088,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.gongtuo.AudioSampleBuffer;
+				PRODUCT_BUNDLE_IDENTIFIER = com.gongtuos.AudioSampleBuffer;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTS_MACCATALYST = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -1104,7 +1104,7 @@
 				CODE_SIGN_ENTITLEMENTS = AudioSampleBuffer/AudioSampleBuffer.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 2;
-				DEVELOPMENT_TEAM = 55RY84Y52S;
+				DEVELOPMENT_TEAM = ADPF86V7JV;
 				ENABLE_APP_SANDBOX = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = AudioSampleBuffer/Info.plist;
@@ -1123,7 +1123,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.gongtuo.AudioSampleBuffer;
+				PRODUCT_BUNDLE_IDENTIFIER = com.gongtuos.AudioSampleBuffer;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTS_MACCATALYST = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
