@@ -66,4 +66,72 @@
     NSLog(@"📱 应用即将失去焦点 (applicationWillResignActive)");
 }
 
+- (BOOL)application:(UIApplication *)app
+            openURL:(NSURL *)url
+            options:(NSDictionary<UIApplicationOpenURLOptionsKey,id> *)options {
+
+    NSLog(@"收到跳转：%@", url.absoluteString);
+
+    // fakegame://login?uid=123&token=abc
+    NSURLComponents *c = [NSURLComponents componentsWithURL:url resolvingAgainstBaseURL:NO];
+    
+    // 构建显示内容
+    NSMutableString *message = [NSMutableString string];
+    [message appendFormat:@"完整 URL：\n%@\n\n", url.absoluteString];
+    
+    if (c.host) {
+        [message appendFormat:@"Host：%@\n", c.host];
+    }
+    if (c.path) {
+        [message appendFormat:@"Path：%@\n", c.path];
+    }
+    
+    if (c.queryItems && c.queryItems.count > 0) {
+        [message appendString:@"\n查询参数：\n"];
+        for (NSURLQueryItem *item in c.queryItems) {
+            NSLog(@"%@ = %@", item.name, item.value);
+            [message appendFormat:@"%@ = %@\n", item.name, item.value ?: @"(null)"];
+        }
+    }
+    
+    // 显示弹窗
+    dispatch_async(dispatch_get_main_queue(), ^{
+        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"收到 URL 跳转"
+                                                                       message:message
+                                                                preferredStyle:UIAlertControllerStyleAlert];
+        
+        UIAlertAction *okAction = [UIAlertAction actionWithTitle:@"确定"
+                                                           style:UIAlertActionStyleDefault
+                                                         handler:nil];
+        [alert addAction:okAction];
+        
+        // 获取当前窗口的根视图控制器
+        UIViewController *rootViewController = self.window.rootViewController;
+        if (rootViewController) {
+            // 如果根视图控制器是导航控制器，获取最顶层的视图控制器
+            if ([rootViewController isKindOfClass:[UINavigationController class]]) {
+                UINavigationController *navController = (UINavigationController *)rootViewController;
+                rootViewController = navController.topViewController;
+            }
+            // 如果根视图控制器是标签栏控制器，获取选中的视图控制器
+            if ([rootViewController isKindOfClass:[UITabBarController class]]) {
+                UITabBarController *tabController = (UITabBarController *)rootViewController;
+                rootViewController = tabController.selectedViewController;
+                if ([rootViewController isKindOfClass:[UINavigationController class]]) {
+                    UINavigationController *navController = (UINavigationController *)rootViewController;
+                    rootViewController = navController.topViewController;
+                }
+            }
+            // 如果根视图控制器正在展示其他视图控制器，使用 presentedViewController
+            while (rootViewController.presentedViewController) {
+                rootViewController = rootViewController.presentedViewController;
+            }
+            
+            [rootViewController presentViewController:alert animated:YES completion:nil];
+        }
+    });
+    
+    return YES;
+}
+
 @end

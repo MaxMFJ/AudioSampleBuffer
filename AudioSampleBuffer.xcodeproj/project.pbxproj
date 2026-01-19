@@ -106,8 +106,6 @@
 		4C699F8E2E9F951A009090AB /* SoundTouchBridge.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4C699F7D2E9F951A009090AB /* SoundTouchBridge.cpp */; };
 		4C699F8F2E9F951A009090AB /* AAFilter.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4C699F662E9F951A009090AB /* AAFilter.cpp */; };
 		4C77CD1B2E990F61008EA7C6 /* CyberpunkControlPanel.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C77CD1A2E990F61008EA7C6 /* CyberpunkControlPanel.m */; };
-		4C7D338C2EFEE12A0027CBC8 /* 火.wav in Resources */ = {isa = PBXBuildFile; fileRef = 4C7D338B2EFEE12A0027CBC8 /* 火.wav */; };
-		4C7D338E2EFEE5250027CBC8 /* 被迫接受.wav in Resources */ = {isa = PBXBuildFile; fileRef = 4C7D338D2EFEE5250027CBC8 /* 被迫接受.wav */; };
 		4C7D33972EFEEC8D0027CBC8 /* ViewController+PlaybackProgress.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C7D33962EFEEC8D0027CBC8 /* ViewController+PlaybackProgress.m */; };
 		4C7D339A2EFEEC950027CBC8 /* AudioProgressView.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C7D33992EFEEC950027CBC8 /* AudioProgressView.m */; };
 		4C7D33A02F00000000000001 /* VinylRecordView.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C7D33A22F00000000000002 /* VinylRecordView.m */; };
@@ -309,8 +307,6 @@
 		4C699F812E9F951A009090AB /* TDStretch.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = TDStretch.cpp; sourceTree = "<group>"; };
 		4C77CD192E990F61008EA7C6 /* CyberpunkControlPanel.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = CyberpunkControlPanel.h; sourceTree = "<group>"; };
 		4C77CD1A2E990F61008EA7C6 /* CyberpunkControlPanel.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = CyberpunkControlPanel.m; sourceTree = "<group>"; };
-		4C7D338B2EFEE12A0027CBC8 /* 火.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = "火.wav"; sourceTree = "<group>"; };
-		4C7D338D2EFEE5250027CBC8 /* 被迫接受.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = "被迫接受.wav"; sourceTree = "<group>"; };
 		4C7D33952EFEEC8D0027CBC8 /* ViewController+PlaybackProgress.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "ViewController+PlaybackProgress.h"; sourceTree = "<group>"; };
 		4C7D33962EFEEC8D0027CBC8 /* ViewController+PlaybackProgress.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = "ViewController+PlaybackProgress.m"; sourceTree = "<group>"; };
 		4C7D33982EFEEC950027CBC8 /* AudioProgressView.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AudioProgressView.h; sourceTree = "<group>"; };
@@ -498,7 +494,6 @@
 		4C66E6D82E8A89E8003200DA /* Audio */ = {
 			isa = PBXGroup;
 			children = (
-				4C7D338B2EFEE12A0027CBC8 /* 火.wav */,
 				4C6548B42EA0E643006DD8DD /* 福禄寿FloruitShow - 我用什么把你留住.ncm */,
 				4C6548DE2EA0ECE0006DD8DD /* lrc */,
 				4C5E4B9D2EA10825009B5708 /* 队长 - 哪里都是你.mp3 */,
@@ -509,7 +504,6 @@
 				4C2C69ED2EA216AF00D18118 /* 郭顶 - 凄美地.ncm */,
 				4C2C69EE2EA216AF00D18118 /* 黄绮珊 - 离不开你 (Live).ncm */,
 				4C2C69EF2EA216AF00D18118 /* 小霞,海洋Bo - 向云端.ncm */,
-				4C7D338D2EFEE5250027CBC8 /* 被迫接受.wav */,
 			);
 			path = Audio;
 			sourceTree = "<group>";
@@ -792,7 +786,6 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				4C7D338C2EFEE12A0027CBC8 /* 火.wav in Resources */,
 				64C5447028C838D400C23393 /* LaunchScreen.storyboard in Resources */,
 				4C6548B52EA0E643006DD8DD /* 福禄寿FloruitShow - 我用什么把你留住.ncm in Resources */,
 				64C5446D28C838D400C23393 /* Assets.xcassets in Resources */,
@@ -808,7 +801,6 @@
 				4C2C69F22EA216AF00D18118 /* 郭顶 - 凄美地.ncm in Resources */,
 				4C2C69F32EA216AF00D18118 /* 黄绮珊 - 离不开你 (Live).ncm in Resources */,
 				4C6548822EA0C500006DD8DD /* ncm_enhanced_lyrics_checker.py in Resources */,
-				4C7D338E2EFEE5250027CBC8 /* 被迫接受.wav in Resources */,
 				4C6548832EA0C500006DD8DD /* batch_extract_lyrics.sh in Resources */,
 				4C6548842EA0C500006DD8DD /* sync_lyrics_to_sandbox.sh in Resources */,
 				4C6548852EA0C500006DD8DD /* extract_ncm_lyrics.sh in Resources */,
@@ -1069,7 +1061,7 @@
 				CODE_SIGN_ENTITLEMENTS = AudioSampleBuffer/AudioSampleBuffer.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 2;
-				DEVELOPMENT_TEAM = ADPF86V7JV;
+				DEVELOPMENT_TEAM = Y7N46V3M6U;
 				ENABLE_APP_SANDBOX = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = AudioSampleBuffer/Info.plist;
@@ -1104,7 +1096,7 @@
 				CODE_SIGN_ENTITLEMENTS = AudioSampleBuffer/AudioSampleBuffer.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 2;
-				DEVELOPMENT_TEAM = ADPF86V7JV;
+				DEVELOPMENT_TEAM = Y7N46V3M6U;
 				ENABLE_APP_SANDBOX = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = AudioSampleBuffer/Info.plist;
