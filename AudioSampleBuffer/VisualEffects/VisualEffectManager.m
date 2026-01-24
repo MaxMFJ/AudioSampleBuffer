@@ -228,6 +228,13 @@
             settings[@"colorIntensity"] = @(1.2);
             break;
             
+        case VisualEffectTypeNeonSpringLines:
+            settings[@"lineCount"] = @(7);
+            settings[@"springDamping"] = @(2.5);
+            settings[@"glowIntensity"] = @(1.5);
+            settings[@"audioSensitivity"] = @(1.0);
+            break;
+            
         default:
             settings[@"intensity"] = @(1.0);
             break;
@@ -591,6 +598,7 @@
         // 实验性Metal特效
         case VisualEffectTypeAuroraRipples:
         case VisualEffectTypeStarVortex:
+        case VisualEffectTypeNeonSpringLines:
             return YES;
             
         case VisualEffectTypeClassicSpectrum:

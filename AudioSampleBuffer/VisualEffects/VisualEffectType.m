@@ -159,6 +159,12 @@
                                                category:EffectCategoryExperimental
                                        performanceLevel:PerformanceLevelHigh]];
     
+    [effects addObject:[VisualEffectInfo effectWithType:VisualEffectTypeNeonSpringLines
+                                                   name:@"霓虹弹簧竖线"
+                                            description:@"发光霓虹竖线随音频产生弹簧动画效果"
+                                               category:EffectCategoryExperimental
+                                       performanceLevel:PerformanceLevelMedium]];
+    
     self.effects = [effects copy];
 }
 

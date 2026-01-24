@@ -1407,6 +1407,47 @@ typedef struct {
 
 @end
 
+#pragma mark - 霓虹弹簧竖线渲染器 (实验性效果)
+
+@implementation NeonSpringLinesRenderer
+
+- (void)setupPipeline {
+    MTLRenderPipelineDescriptor *pipelineDescriptor = [[MTLRenderPipelineDescriptor alloc] init];
+    pipelineDescriptor.label = @"NeonSpringLines";
+    pipelineDescriptor.vertexFunction = [self.defaultLibrary newFunctionWithName:@"neon_vertex"];
+    pipelineDescriptor.fragmentFunction = [self.defaultLibrary newFunctionWithName:@"neonSpringLinesFragment"];
+    pipelineDescriptor.colorAttachments[0].pixelFormat = self.metalView.colorPixelFormat;
+    
+    pipelineDescriptor.sampleCount = self.metalView.sampleCount;
+    pipelineDescriptor.depthAttachmentPixelFormat = self.metalView.depthStencilPixelFormat;
+    
+    // 启用混合模式以实现发光效果
+    pipelineDescriptor.colorAttachments[0].blendingEnabled = YES;
+    pipelineDescriptor.colorAttachments[0].rgbBlendOperation = MTLBlendOperationAdd;
+    pipelineDescriptor.colorAttachments[0].sourceRGBBlendFactor = MTLBlendFactorSourceAlpha;
+    pipelineDescriptor.colorAttachments[0].destinationRGBBlendFactor = MTLBlendFactorOne;
+    
+    NSError *error;
+    self.pipelineState = [self.device newRenderPipelineStateWithDescriptor:pipelineDescriptor error:&error];
+    
+    if (!self.pipelineState) {
+        NSLog(@"❌ 创建霓虹弹簧竖线管线失败: %@", error);
+        return;
+    }
+    
+    NSLog(@"✅ 霓虹弹簧竖线渲染器初始化成功");
+}
+
+- (void)encodeRenderCommands:(id<MTLRenderCommandEncoder>)encoder {
+    if (!self.pipelineState) return;
+    [encoder setRenderPipelineState:self.pipelineState];
+    [encoder setVertexBuffer:self.uniformBuffer offset:0 atIndex:0];
+    [encoder setFragmentBuffer:self.uniformBuffer offset:0 atIndex:0];
+    [encoder drawPrimitives:MTLPrimitiveTypeTriangleStrip vertexStart:0 vertexCount:4];
+}
+
+@end
+
 #pragma mark - 渲染器工厂
 
 @implementation MetalRendererFactory
@@ -1477,6 +1518,9 @@ typedef struct {
             
         case VisualEffectTypeStarVortex:
             return [[StarVortexRenderer alloc] initWithMetalView:metalView];
+            
+        case VisualEffectTypeNeonSpringLines:
+            return [[NeonSpringLinesRenderer alloc] initWithMetalView:metalView];
             
         default:
             return [[DefaultEffectRenderer alloc] initWithMetalView:metalView];

@@ -201,6 +201,13 @@ NS_ASSUME_NONNULL_BEGIN
 @end
 
 /**
+ * 霓虹弹簧竖线渲染器 - 实验性效果
+ * 发光霓虹竖线随音频产生弹簧动画效果
+ */
+@interface NeonSpringLinesRenderer : BaseMetalRenderer
+@end
+
+/**
  * 默认效果渲染器
  */
 @interface DefaultEffectRenderer : BaseMetalRenderer

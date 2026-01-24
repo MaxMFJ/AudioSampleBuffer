@@ -38,6 +38,7 @@ typedef NS_ENUM(NSUInteger, VisualEffectType) {
     // 实验性效果
     VisualEffectTypeAuroraRipples,          // 极光波纹
     VisualEffectTypeStarVortex,             // 恒星涡旋
+    VisualEffectTypeNeonSpringLines,        // 霓虹弹簧竖线
     
     // 数量
     VisualEffectTypeCount
