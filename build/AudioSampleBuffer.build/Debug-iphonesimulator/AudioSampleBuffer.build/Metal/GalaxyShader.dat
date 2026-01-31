@@ -1,4 +1,0 @@
-dependencies: \
-  /Users/lzz/Downloads/AudioSampleBuffer-main/AudioSampleBuffer/VisualEffects/GalaxyShader.metal \
-  /private/var/run/com.apple.security.cryptexd/mnt/com.apple.MobileAsset.MetalToolchain-v17.1.324.0.B3weWD/Metal.xctoolchain/usr/metal/32023/lib/clang/32023.830/include/metal/module.modulemap \
-  /Users/lzz/Downloads/AudioSampleBuffer-main/AudioSampleBuffer/VisualEffects/ShaderCommon.metal

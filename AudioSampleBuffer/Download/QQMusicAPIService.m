@@ -460,6 +460,14 @@ static NSString *const kAPIBaseURL = @"https://api.qqmp3.vip/api";
                 return;
             }
             
+            // 详情接口有时不返回 name/artist，用搜索结果补全
+            if (!detail.name || detail.name.length == 0) {
+                detail.name = firstResult.name ?: @"未知";
+            }
+            if (!detail.artist || detail.artist.length == 0) {
+                detail.artist = firstResult.artist ?: @"未知";
+            }
+            
             if (progress) {
                 progress(0.5, @"下载中...");
             }

@@ -165,6 +165,14 @@
             return;
         }
         
+        // 详情接口有时不返回 name/artist，用搜索结果补全，避免「歌曲信息不完整」无法生成文件名
+        if (!detail.name || detail.name.length == 0) {
+            detail.name = result.name ?: @"未知";
+        }
+        if (!detail.artist || detail.artist.length == 0) {
+            detail.artist = result.artist ?: @"未知";
+        }
+        
         // 更新进度
         dispatch_async(dispatch_get_main_queue(), ^{
             progressAlert.message = @"开始下载... 30%";

@@ -1088,7 +1088,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.gongtuos.AudioSampleBuffer;
+				PRODUCT_BUNDLE_IDENTIFIER = com.mfj.AudioSampleBuffer;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTS_MACCATALYST = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -1104,7 +1104,7 @@
 				CODE_SIGN_ENTITLEMENTS = AudioSampleBuffer/AudioSampleBuffer.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 2;
-				DEVELOPMENT_TEAM = 2H56GPHLTR;
+				DEVELOPMENT_TEAM = MA8YY74FVW;
 				ENABLE_APP_SANDBOX = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = AudioSampleBuffer/Info.plist;
@@ -1123,7 +1123,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.gongtuos.AudioSampleBuffer;
+				PRODUCT_BUNDLE_IDENTIFIER = com.mfj.AudioSampleBuffer;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTS_MACCATALYST = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
