@@ -165,6 +165,12 @@
                                                category:EffectCategoryExperimental
                                        performanceLevel:PerformanceLevelMedium]];
     
+    [effects addObject:[VisualEffectInfo effectWithType:VisualEffectTypeCherryBlossomSnow
+                                                   name:@"樱花飘雪"
+                                            description:@"如梦似幻的粉色樱花花瓣随风飘落，柔光弥漫的春日梦境"
+                                               category:EffectCategoryExperimental
+                                       performanceLevel:PerformanceLevelHigh]];
+    
     self.effects = [effects copy];
 }
 

@@ -235,6 +235,13 @@
             settings[@"audioSensitivity"] = @(1.0);
             break;
             
+        case VisualEffectTypeCherryBlossomSnow:
+            settings[@"petalLayers"] = @(3);
+            settings[@"petalDensity"] = @(0.8);
+            settings[@"glowIntensity"] = @(1.2);
+            settings[@"audioSensitivity"] = @(1.0);
+            break;
+            
         default:
             settings[@"intensity"] = @(1.0);
             break;
@@ -599,6 +606,7 @@
         case VisualEffectTypeAuroraRipples:
         case VisualEffectTypeStarVortex:
         case VisualEffectTypeNeonSpringLines:
+        case VisualEffectTypeCherryBlossomSnow:
             return YES;
             
         case VisualEffectTypeClassicSpectrum:

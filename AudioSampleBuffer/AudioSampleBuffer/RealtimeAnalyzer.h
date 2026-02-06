@@ -1,6 +1,5 @@
 #import <Foundation/Foundation.h>
 #import <AVFoundation/AVFoundation.h>
-#import <Accelerate/Accelerate.h>
 
 NS_ASSUME_NONNULL_BEGIN
 

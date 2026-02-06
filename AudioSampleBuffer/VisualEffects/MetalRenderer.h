@@ -208,6 +208,13 @@ NS_ASSUME_NONNULL_BEGIN
 @end
 
 /**
+ * 樱花飘雪渲染器 - 实验性效果
+ * 如梦似幻的粉色樱花花瓣随风飘落，柔光弥漫的春日梦境
+ */
+@interface CherryBlossomSnowRenderer : BaseMetalRenderer
+@end
+
+/**
  * 默认效果渲染器
  */
 @interface DefaultEffectRenderer : BaseMetalRenderer

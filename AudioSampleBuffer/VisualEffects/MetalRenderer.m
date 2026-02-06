@@ -1448,6 +1448,75 @@ typedef struct {
 
 @end
 
+#pragma mark - 樱花飘雪渲染器 (实验性效果)
+
+@implementation CherryBlossomSnowRenderer
+
+- (void)setupPipeline {
+    MTLRenderPipelineDescriptor *pipelineDescriptor = [[MTLRenderPipelineDescriptor alloc] init];
+    pipelineDescriptor.label = @"CherryBlossomSnow";
+    pipelineDescriptor.vertexFunction = [self.defaultLibrary newFunctionWithName:@"neon_vertex"];
+    pipelineDescriptor.fragmentFunction = [self.defaultLibrary newFunctionWithName:@"cherryBlossomSnowFragment"];
+    pipelineDescriptor.colorAttachments[0].pixelFormat = self.metalView.colorPixelFormat;
+    
+    pipelineDescriptor.sampleCount = self.metalView.sampleCount;
+    pipelineDescriptor.depthAttachmentPixelFormat = self.metalView.depthStencilPixelFormat;
+    
+    // 启用混合模式（柔和叠加）
+    pipelineDescriptor.colorAttachments[0].blendingEnabled = YES;
+    pipelineDescriptor.colorAttachments[0].rgbBlendOperation = MTLBlendOperationAdd;
+    pipelineDescriptor.colorAttachments[0].alphaBlendOperation = MTLBlendOperationAdd;
+    pipelineDescriptor.colorAttachments[0].sourceRGBBlendFactor = MTLBlendFactorSourceAlpha;
+    pipelineDescriptor.colorAttachments[0].sourceAlphaBlendFactor = MTLBlendFactorSourceAlpha;
+    pipelineDescriptor.colorAttachments[0].destinationRGBBlendFactor = MTLBlendFactorOneMinusSourceAlpha;
+    pipelineDescriptor.colorAttachments[0].destinationAlphaBlendFactor = MTLBlendFactorOneMinusSourceAlpha;
+    
+    NSError *error;
+    self.pipelineState = [self.device newRenderPipelineStateWithDescriptor:pipelineDescriptor error:&error];
+    
+    if (!self.pipelineState) {
+        NSLog(@"❌ 创建樱花飘雪管线失败: %@", error);
+        return;
+    }
+    
+    NSLog(@"✅ 樱花飘雪管线创建成功 - 实验性效果");
+    [self setupPerformanceOptimizations];
+}
+
+- (void)setupPerformanceOptimizations {
+    NSString *deviceName = self.device.name;
+    NSMutableDictionary *params = [self.renderParameters mutableCopy] ?: [NSMutableDictionary dictionary];
+    
+    if ([deviceName containsString:@"A17"] || [deviceName containsString:@"A16"]) {
+        params[@"petalLayers"] = @(4);
+        params[@"petalDensity"] = @(1.0);
+        params[@"effectQuality"] = @(1.0);
+        NSLog(@"🌸 樱花飘雪: 高端设备，使用高质量设置");
+    } else if ([deviceName containsString:@"A15"] || [deviceName containsString:@"A14"]) {
+        params[@"petalLayers"] = @(3);
+        params[@"petalDensity"] = @(0.7);
+        params[@"effectQuality"] = @(0.8);
+        NSLog(@"🌸 樱花飘雪: 中端设备，使用平衡设置");
+    } else {
+        params[@"petalLayers"] = @(2);
+        params[@"petalDensity"] = @(0.5);
+        params[@"effectQuality"] = @(0.6);
+        NSLog(@"🌸 樱花飘雪: 低端设备，使用性能优化设置");
+    }
+    
+    [self setRenderParameters:params];
+}
+
+- (void)encodeRenderCommands:(id<MTLRenderCommandEncoder>)encoder {
+    if (!self.pipelineState) return;
+    [encoder setRenderPipelineState:self.pipelineState];
+    [encoder setVertexBuffer:self.uniformBuffer offset:0 atIndex:0];
+    [encoder setFragmentBuffer:self.uniformBuffer offset:0 atIndex:0];
+    [encoder drawPrimitives:MTLPrimitiveTypeTriangleStrip vertexStart:0 vertexCount:4];
+}
+
+@end
+
 #pragma mark - 渲染器工厂
 
 @implementation MetalRendererFactory
@@ -1521,6 +1590,9 @@ typedef struct {
             
         case VisualEffectTypeNeonSpringLines:
             return [[NeonSpringLinesRenderer alloc] initWithMetalView:metalView];
+            
+        case VisualEffectTypeCherryBlossomSnow:
+            return [[CherryBlossomSnowRenderer alloc] initWithMetalView:metalView];
             
         default:
             return [[DefaultEffectRenderer alloc] initWithMetalView:metalView];

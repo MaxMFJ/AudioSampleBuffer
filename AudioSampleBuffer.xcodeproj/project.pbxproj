@@ -17,6 +17,7 @@
 		4C110D522EAD000000D59E12 /* AuroraRippleShader.metal in Sources */ = {isa = PBXBuildFile; fileRef = 4C110D532EAD000000D59E12 /* AuroraRippleShader.metal */; };
 		4C110D542EAD100000D59E12 /* StarVortexShader.metal in Sources */ = {isa = PBXBuildFile; fileRef = 4C110D552EAD100000D59E12 /* StarVortexShader.metal */; };
 		4C110D562EAD200000D59E12 /* NeonSpringLinesShader.metal in Sources */ = {isa = PBXBuildFile; fileRef = 4C110D572EAD200000D59E12 /* NeonSpringLinesShader.metal */; };
+		4C110D582EAD300000D59E12 /* CherryBlossomShader.metal in Sources */ = {isa = PBXBuildFile; fileRef = 4C110D592EAD300000D59E12 /* CherryBlossomShader.metal */; };
 		4C2C69F02EA216AF00D18118 /* 队长 - 楼顶上的小斑鸠.ncm in Resources */ = {isa = PBXBuildFile; fileRef = 4C2C69EC2EA216AF00D18118 /* 队长 - 楼顶上的小斑鸠.ncm */; };
 		4C2C69F12EA216AF00D18118 /* 小霞,海洋Bo - 向云端.ncm in Resources */ = {isa = PBXBuildFile; fileRef = 4C2C69EF2EA216AF00D18118 /* 小霞,海洋Bo - 向云端.ncm */; };
 		4C2C69F22EA216AF00D18118 /* 郭顶 - 凄美地.ncm in Resources */ = {isa = PBXBuildFile; fileRef = 4C2C69ED2EA216AF00D18118 /* 郭顶 - 凄美地.ncm */; };
@@ -129,6 +130,7 @@
 		64C5448228C83A0700C23393 /* TTi.m in Sources */ = {isa = PBXBuildFile; fileRef = 64C5448128C83A0700C23393 /* TTi.m */; };
 		64C5448B28C83A7700C23393 /* AudioSpectrumRecorder.m in Sources */ = {isa = PBXBuildFile; fileRef = 64C5448728C83A7700C23393 /* AudioSpectrumRecorder.m */; };
 		64C5448C28C83A7700C23393 /* RealtimeAnalyzer.m in Sources */ = {isa = PBXBuildFile; fileRef = 64C5448A28C83A7700C23393 /* RealtimeAnalyzer.m */; };
+		4CDSP00012F24CF0000000001 /* RealtimeAnalyzerDSP.c in Sources */ = {isa = PBXBuildFile; fileRef = 4CDSP00012F24CF0000000003 /* RealtimeAnalyzerDSP.c */; };
 		64C5448D28C83A7700C23393 /* SpectrumView.m in Sources */ = {isa = PBXBuildFile; fileRef = 64C5448528C83A7700C23393 /* SpectrumView.m */; };
 		64C5448E28C83A7700C23393 /* AudioSpectrumPlayer.m in Sources */ = {isa = PBXBuildFile; fileRef = 64C5448628C83A7700C23393 /* AudioSpectrumPlayer.m */; };
 		64C544CF28C83B1200C23393 /* AudioToolbox.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 64C544CE28C83B1200C23393 /* AudioToolbox.framework */; };
@@ -145,6 +147,7 @@
 		4C110D532EAD000000D59E12 /* AuroraRippleShader.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = AuroraRippleShader.metal; sourceTree = "<group>"; };
 		4C110D552EAD100000D59E12 /* StarVortexShader.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = StarVortexShader.metal; sourceTree = "<group>"; };
 		4C110D572EAD200000D59E12 /* NeonSpringLinesShader.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = NeonSpringLinesShader.metal; sourceTree = "<group>"; };
+		4C110D592EAD300000D59E12 /* CherryBlossomShader.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = CherryBlossomShader.metal; sourceTree = "<group>"; };
 		4C2C69EC2EA216AF00D18118 /* 队长 - 楼顶上的小斑鸠.ncm */ = {isa = PBXFileReference; lastKnownFileType = file; path = "队长 - 楼顶上的小斑鸠.ncm"; sourceTree = "<group>"; };
 		4C2C69ED2EA216AF00D18118 /* 郭顶 - 凄美地.ncm */ = {isa = PBXFileReference; lastKnownFileType = file; path = "郭顶 - 凄美地.ncm"; sourceTree = "<group>"; };
 		4C2C69EE2EA216AF00D18118 /* 黄绮珊 - 离不开你 (Live).ncm */ = {isa = PBXFileReference; lastKnownFileType = file; path = "黄绮珊 - 离不开你 (Live).ncm"; sourceTree = "<group>"; };
@@ -347,6 +350,8 @@
 		64C5448128C83A0700C23393 /* TTi.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = TTi.m; sourceTree = "<group>"; };
 		64C5448328C83A7600C23393 /* SpectrumView.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = SpectrumView.h; sourceTree = "<group>"; };
 		64C5448428C83A7600C23393 /* RealtimeAnalyzer.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = RealtimeAnalyzer.h; sourceTree = "<group>"; };
+		4CDSP00012F24CF0000000002 /* RealtimeAnalyzerDSP.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = RealtimeAnalyzerDSP.h; sourceTree = "<group>"; };
+		4CDSP00012F24CF0000000003 /* RealtimeAnalyzerDSP.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = RealtimeAnalyzerDSP.c; sourceTree = "<group>"; };
 		64C5448528C83A7700C23393 /* SpectrumView.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = SpectrumView.m; sourceTree = "<group>"; };
 		64C5448628C83A7700C23393 /* AudioSpectrumPlayer.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AudioSpectrumPlayer.m; sourceTree = "<group>"; };
 		64C5448728C83A7700C23393 /* AudioSpectrumRecorder.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AudioSpectrumRecorder.m; sourceTree = "<group>"; };
@@ -569,6 +574,7 @@
 				4C66E7132E8A9255003200DA /* VisualEffectType.h */,
 				4C66E7142E8A9255003200DA /* VisualEffectType.m */,
 				4CBE681E2F24BE5300F0C733 /* NeonSpringLinesShader.metal */,
+				4C110D592EAD300000D59E12 /* CherryBlossomShader.metal */,
 			);
 			path = VisualEffects;
 			sourceTree = "<group>";
@@ -729,6 +735,8 @@
 				64C5448728C83A7700C23393 /* AudioSpectrumRecorder.m */,
 				64C5448428C83A7600C23393 /* RealtimeAnalyzer.h */,
 				64C5448A28C83A7700C23393 /* RealtimeAnalyzer.m */,
+				4CDSP00012F24CF0000000002 /* RealtimeAnalyzerDSP.h */,
+				4CDSP00012F24CF0000000003 /* RealtimeAnalyzerDSP.c */,
 				64C5448328C83A7600C23393 /* SpectrumView.h */,
 				64C5448528C83A7700C23393 /* SpectrumView.m */,
 			);
@@ -841,6 +849,7 @@
 				4C110D522EAD000000D59E12 /* AuroraRippleShader.metal in Sources */,
 				4C110D542EAD100000D59E12 /* StarVortexShader.metal in Sources */,
 				4C110D562EAD200000D59E12 /* NeonSpringLinesShader.metal in Sources */,
+				4C110D582EAD300000D59E12 /* CherryBlossomShader.metal in Sources */,
 				4C699F8F2E9F951A009090AB /* AAFilter.cpp in Sources */,
 				4C2C6A422EA236ED00D18118 /* KugouMusicDownloader.m in Sources */,
 				4c4e68e181504d63bdcceeb4 /* QQMusicAPIService.m in Sources */,
@@ -918,7 +927,9 @@
 				4C66E70A2E8A8DBB003200DA /* ParticleAnimationManager.m in Sources */,
 				4C66E70B2E8A8DBB003200DA /* AnimationProtocol.m in Sources */,
 				4CBE681F2F24BE5300F0C733 /* NeonSpringLinesShader.metal in Sources */,
+				4C110D582EAD300000D59E12 /* CherryBlossomShader.metal in Sources */,
 				64C5448C28C83A7700C23393 /* RealtimeAnalyzer.m in Sources */,
+				4CDSP00012F24CF0000000001 /* RealtimeAnalyzerDSP.c in Sources */,
 				4C7D33C02F11200000000001 /* LRCGenerator.m in Sources */,
 				4C7D33C02F11200000000002 /* LyricsEditorViewController.m in Sources */,
 				4C7D33C02F11200000000003 /* LyricsLineCell.m in Sources */,
@@ -1104,7 +1115,7 @@
 				CODE_SIGN_ENTITLEMENTS = AudioSampleBuffer/AudioSampleBuffer.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 2;
-				DEVELOPMENT_TEAM = MA8YY74FVW;
+				DEVELOPMENT_TEAM = 2H56GPHLTR;
 				ENABLE_APP_SANDBOX = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = AudioSampleBuffer/Info.plist;
