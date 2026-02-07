@@ -46,9 +46,14 @@ struct AnalyzerDSP {
     // Pre-computed tables
     float    *aWeights;         // A-weighting       [halfFFTSize]
     BandRange *bands;           // frequency ranges   [frequencyBands]
+    int      *bandStartBin;     // per-band start bin index [frequencyBands]
+    int      *bandEndBin;       // per-band end bin index   [frequencyBands]
 
     // Temporal smoothing buffers (per channel, max 2 channels)
     float *spectrumBuffer[2];   // [frequencyBands] each
+
+    // Highlight kernel for vDSP_conv [0.25, 0.5, 0.25]
+    float highlightKernel[3];
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -89,44 +94,34 @@ static void ComputeBands(BandRange *bands, int count,
     }
 }
 
-/// Find the maximum value in magnitudes[startIdx .. endIdx].
-/// Uses vDSP_maxv for vectorized max.
-static inline float FindMaxInRange(const float *magnitudes, int totalBins,
-                                   float lowerFreq, float upperFreq,
-                                   float bandWidth) {
-    int startIdx = (int)(lowerFreq / bandWidth + 0.5f);
-    int endIdx   = (int)(upperFreq / bandWidth + 0.5f);
-    if (endIdx >= totalBins) endIdx = totalBins - 1;
-    if (startIdx >= totalBins || startIdx > endIdx) return 0.0f;
-
-    vDSP_Length count = (vDSP_Length)(endIdx - startIdx + 1);
-    if (count == 1) return magnitudes[startIdx];
-
-    float maxVal = 0.0f;
-    vDSP_maxv(magnitudes + startIdx, 1, &maxVal, count);
-    return maxVal;
+/// Precompute bin index range for each band (avoids per-frame division in hot path).
+static void ComputeBandBins(int *bandStartBin, int *bandEndBin,
+                            const BandRange *bands, int bandCount,
+                            float bandWidth, int halfFFTSize) {
+    for (int i = 0; i < bandCount; i++) {
+        int startIdx = (int)(bands[i].lowerFrequency / bandWidth + 0.5f);
+        int endIdx   = (int)(bands[i].upperFrequency / bandWidth + 0.5f);
+        if (endIdx >= halfFFTSize) endIdx = halfFFTSize - 1;
+        if (startIdx < 0) startIdx = 0;
+        if (startIdx > endIdx) endIdx = startIdx;
+        bandStartBin[i] = startIdx;
+        bandEndBin[i]   = endIdx;
+    }
 }
 
-/// 3-point weighted average smoothing: weights = {0.5, 1.0, 0.5}, sum = 2.0
-static void HighlightWaveform(const float *input, float *output, int count) {
+/// 3-point weighted average smoothing via vDSP_conv: kernel [0.25, 0.5, 0.25]
+static void HighlightWaveform(const float *input, float *output, int count,
+                              const float *kernel) {
     if (count <= 2) {
         memcpy(output, input, (size_t)count * sizeof(float));
         return;
     }
-
-    // First element: pass through
     output[0] = input[0];
-
-    // Middle elements: weighted average
-    const float invTotalWeight = 1.0f / 2.0f;  // 0.5 + 1.0 + 0.5 = 2.0
-    for (int i = 1; i < count - 1; i++) {
-        output[i] = (input[i - 1] * 0.5f
-                   + input[i]     * 1.0f
-                   + input[i + 1] * 0.5f) * invTotalWeight;
-    }
-
-    // Last element: pass through
     output[count - 1] = input[count - 1];
+    const unsigned long resultLen = (unsigned long)(count - 2);
+    if (resultLen > 0) {
+        vDSP_conv(input, 1, kernel, 1, output + 1, 1, resultLen, 3);
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -173,6 +168,20 @@ AnalyzerDSPRef AnalyzerDSP_Create(int fftSize,
     ref->bands = (BandRange *)calloc((size_t)frequencyBands, sizeof(BandRange));
     ComputeBands(ref->bands, frequencyBands, startFrequency, endFrequency);
 
+    // Pre-compute band bin indices (avoids per-frame division in hot path)
+    {
+        const float bandWidth = sampleRate / (float)fftSize;
+        ref->bandStartBin = (int *)calloc((size_t)frequencyBands, sizeof(int));
+        ref->bandEndBin   = (int *)calloc((size_t)frequencyBands, sizeof(int));
+        ComputeBandBins(ref->bandStartBin, ref->bandEndBin,
+                       ref->bands, frequencyBands, bandWidth, ref->halfFFTSize);
+    }
+
+    // Highlight kernel for vDSP_conv: [0.25, 0.5, 0.25]
+    ref->highlightKernel[0] = 0.25f;
+    ref->highlightKernel[1] = 0.5f;
+    ref->highlightKernel[2] = 0.25f;
+
     // Spectrum smoothing buffers (2 channels)
     for (int ch = 0; ch < 2; ch++) {
         ref->spectrumBuffer[ch] = (float *)calloc((size_t)frequencyBands, sizeof(float));
@@ -194,6 +203,8 @@ void AnalyzerDSP_Destroy(AnalyzerDSPRef ref) {
     free(ref->smoothedSpectrum);
     free(ref->aWeights);
     free(ref->bands);
+    free(ref->bandStartBin);
+    free(ref->bandEndBin);
     for (int ch = 0; ch < 2; ch++) free(ref->spectrumBuffer[ch]);
     free(ref);
 }
@@ -238,28 +249,31 @@ void AnalyzerDSP_ProcessChannel(AnalyzerDSPRef ref,
     // ── Step 4: Apply A-weighting (vectorized multiply) ──────────────────
     vDSP_vmul(ref->magnitudes, 1, ref->aWeights, 1, ref->weightedMags, 1, (vDSP_Length)half);
 
-    // ── Step 5: Map to frequency bands (find max per band) ───────────────
-    const float bandWidth = sampleRate / (float)N;
+    // ── Step 5: Map to frequency bands (precomputed bin indices + vDSP_maxv) ─
     const float ampScale = (float)amplitudeLevel;
     for (int i = 0; i < bands; i++) {
-        float maxVal = FindMaxInRange(ref->weightedMags, half,
-                                      ref->bands[i].lowerFrequency,
-                                      ref->bands[i].upperFrequency,
-                                      bandWidth);
+        int startIdx = ref->bandStartBin[i];
+        int endIdx   = ref->bandEndBin[i];
+        float maxVal = 0.0f;
+        vDSP_Length len = (vDSP_Length)(endIdx - startIdx + 1);
+        if (len > 0) {
+            vDSP_maxv(ref->weightedMags + startIdx, 1, &maxVal, len);
+        }
         ref->bandSpectrum[i] = maxVal * ampScale;
     }
 
-    // ── Step 6: Highlight waveform (3-point weighted average) ────────────
-    HighlightWaveform(ref->bandSpectrum, ref->smoothedSpectrum, bands);
+    // ── Step 6: Highlight waveform (vDSP_conv 3-point kernel) ────────────
+    HighlightWaveform(ref->bandSpectrum, ref->smoothedSpectrum, bands, ref->highlightKernel);
 
-    // ── Step 7: Temporal smoothing ───────────────────────────────────────
+    // ── Step 7: Temporal smoothing (vectorized: buf = old*buf + new*smoothed) ─
     float *buf = ref->spectrumBuffer[channelIndex];
     const float oldFactor = ref->spectrumSmooth;
     const float newFactor = 1.0f - oldFactor;
+    vDSP_vsmul(buf, 1, &oldFactor, buf, 1, (vDSP_Length)bands);
+    vDSP_vsma(ref->smoothedSpectrum, 1, &newFactor, buf, 1, buf, 1, (vDSP_Length)bands);
     for (int i = 0; i < bands; i++) {
-        float val = buf[i] * oldFactor + ref->smoothedSpectrum[i] * newFactor;
-        // Replace NaN with 0
-        buf[i] = (val == val) ? val : 0.0f;  // NaN != NaN
+        float val = buf[i];
+        buf[i] = (val == val) ? val : 0.0f;  // NaN → 0
         outBands[i] = buf[i];
     }
 }
