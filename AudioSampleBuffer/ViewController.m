@@ -1341,7 +1341,7 @@
 }
 
 - (UIView *)buildTableHeadView {
-    self.spectrumView = [[SpectrumView alloc] initWithFrame:CGRectMake(0, 25, self.view.frame.size.width, self.view.frame.size.height)];
+    self.spectrumView = [[SpectrumView alloc] initWithFrame:CGRectMake(0, 0, self.view.frame.size.width, self.view.frame.size.height)];
     self.spectrumView.backgroundColor = [UIColor clearColor];
     
     // 设置频谱视图到视觉效果管理器，用于在Metal特效时暂停

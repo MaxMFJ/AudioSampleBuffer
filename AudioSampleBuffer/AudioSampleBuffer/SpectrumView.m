@@ -11,17 +11,17 @@
 #import <simd/simd.h>
 
 // 与 SpectrumViewShader.metal 中 SpectrumUniforms 完全对齐
+// resolution = (drawableW, drawableH, aspectRatio, 0)，与 Galaxy/Lightning 一致
 typedef struct {
-    simd_float2 resolution;     // (drawableWidth, drawableHeight)
-    float       aspectRatio;    // viewWidth / viewHeight
-    float       innerRadius;    // 归一化 (以 viewWidth 为基准)
+    simd_float4 resolution;  // (drawableWidth, drawableHeight, aspectRatio, 0)
+    float       innerRadius; // 归一化 [0, 0.5]，与逻辑正方形一致
+    float       barWidth;
     float       time;
     float       rotationSpeed;
-    float       maxBarHeight;   // 归一化
+    float       maxBarHeight;
     float       glowIntensity;
     int         bandCount;
-    float       amplitudeScale; // 归一化
-    float       centerOffsetY;  // Y 偏移 (归一化)
+    float       amplitudeScale;
 } SpectrumUniforms;
 
 #define kMaxBands 80
@@ -272,31 +272,36 @@ typedef struct {
     MTLRenderPassDescriptor *passDesc = view.currentRenderPassDescriptor;
     if (!drawable || !passDesc) return;
     
-    // ── 更新 Uniforms ──
+    // ── 与 Galaxy / Lightning 一致：UV 中心 (0.5,0.5) + aspectCorrect，圆环不变形 ──
     CGSize drawableSize = view.drawableSize;
     CGFloat viewW = view.bounds.size.width;
     CGFloat viewH = view.bounds.size.height;
+    CGFloat aspectRatio = (viewH > 0) ? (viewW / viewH) : 1.0;
     
-    // ── 原始 UV 坐标系，半径按宽高比校正以保证屏幕上为圆 ──
-    // center = (0.5, 0.5) 为视图中心；innerRadius 等以 viewWidth 为 1.0
-    //
-    // 圆心 Y：黑胶唱片在主视图 center → SpectrumView 本地 (viewW/2, viewH/2 - 25)
-    // UV 中 Y 的 1.0 = viewH 像素，故 centerOffsetY = -25/viewH
-    CGFloat aspectRatio = viewW / viewH;
-    CGFloat frameOriginY = self.frame.origin.y; // 通常 25pt
-    float centerOffsetY = -(float)(frameOriginY / viewH);
+    // 逻辑正方形半边长（与「屏幕高度×屏幕高度」一致，取短边）
+    CGFloat halfLogical = (CGFloat)(0.5 * (viewW < viewH ? viewW : viewH));
+    if (halfLogical < 1.0) halfLogical = 1.0;
+    
+    // 归一化：内圆半径 120pt → 占逻辑半边的比例
+    CGFloat innerRadiusNorm = 120.0 / halfLogical;
+    innerRadiusNorm = (CGFloat)fmin(0.48, (double)innerRadiusNorm);
+    
+    // 条形长度：amplitude * (viewW/2) pt → 归一化 = (viewW/2) / halfLogical
+    CGFloat amplitudeScaleNorm = (viewW * 0.5) / halfLogical;
+    CGFloat maxBarNorm = (viewW * 0.35) / halfLogical;
+    maxBarNorm = (CGFloat)fmin(0.22, (double)maxBarNorm);
     
     SpectrumUniforms *u = (SpectrumUniforms *)_uniformBuffer.contents;
-    u->resolution     = (simd_float2){ (float)drawableSize.width, (float)drawableSize.height };
-    u->aspectRatio    = (float)aspectRatio;
-    u->innerRadius    = 120.0 / (float)viewW;           // 120pt → 归一化
+    u->resolution     = (simd_float4){ (float)drawableSize.width, (float)drawableSize.height,
+                                       (float)aspectRatio, 0.0f };
+    u->innerRadius    = (float)innerRadiusNorm;
+    u->barWidth       = 10.0f * (float)(M_PI / 180.0);  // 弧度
     u->time           = (float)(CACurrentMediaTime() - _startTime);
-    u->rotationSpeed  = 0.06;                            // ≈ 6圈/100秒
-    u->maxBarHeight   = 0.35;                            // 最大条高 = 0.35 × viewWidth
-    u->glowIntensity  = 0.35;
+    u->rotationSpeed  = 0.06f;
+    u->maxBarHeight   = (float)maxBarNorm;
+    u->glowIntensity  = 0.35f;
     u->bandCount      = kMaxBands;
-    u->amplitudeScale = 0.5;                             // amplitude × 0.5 (相当于旧版 viewW/2 / viewW)
-    u->centerOffsetY  = centerOffsetY;
+    u->amplitudeScale = (float)amplitudeScaleNorm;
     
     // ── 拷贝频谱数据到 GPU 缓冲 ──
     memcpy(_amplitudeBuffer.contents, _amplitudes, sizeof(float) * kMaxBands);
