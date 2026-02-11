@@ -92,7 +92,7 @@ static float3 atmosphereField(float2 uv, float bass, float hazeVal, constant Uni
 static float3 volumetricBeamSystem(float2 p, float time, float bass, float hazeVal, constant UniformsAI &uniforms) {
     float volume = 0.5 + hazeVal * 0.5;
     float brightness = 0.45 + bass * 0.35;
-    float coneW = 0.55 + bass * 0.15;
+    float coneW = 0.52 + bass * 0.15;
     float cosThresh = cos(coneW);
     float radSq = 0.95 * 0.95;  // radius^2 预计算
     
@@ -200,7 +200,7 @@ static float3 topLightArray(float2 p, float time, float mid, constant UniformsAI
     if (!colorIsSet(blueBeam)) {
         blueBeam = float3(0.3, 0.6, 1.0);
     }
-    blueBeam *= 0.65 * envelope;  // 亮度从 0.52 提升到 0.65
+    blueBeam *= 0.75 * envelope;  // 亮度从 0.52 提升到 0.65
     
     float3 arrayOut = float3(0.0);
     
@@ -214,7 +214,7 @@ static float3 topLightArray(float2 p, float time, float mid, constant UniformsAI
         
         float randomAngle = stageHash(float2(iFloat, 1.0)) * 0.15 - 0.075;
         float tiltAngle = (iFloat - 1.5) * 0.03 + randomAngle;  // 中心为 i=1.5
-        float scanSpeed = 0.24 + stageHash(float2(iFloat, 2.0)) * 0.12;  // 摆动速度从 0.1~0.16 提升到 0.24~0.36
+        float scanSpeed = 0.40 + stageHash(float2(iFloat, 2.0)) * 0.12;  // 摆动速度从 0.1~0.16 提升到 0.24~0.36
         float scanOffset = sin(time * scanSpeed + iFloat * 0.7) * 0.15;
         float beamAngle = tiltAngle + scanOffset;
         
@@ -239,7 +239,10 @@ static float3 topLightArray(float2 p, float time, float mid, constant UniformsAI
         // 沿光轴体积积分：顶部灯阵的光穿过烟雾，近亮远暗
         float axialFade = exp(-along * along * 0.12);
         
-        arrayOut += blueBeam * (beamCore * lengthFade * axialFade);
+        float3 beam = blueBeam * (beamCore * lengthFade * axialFade);
+        // 柔和叠加：防止多束光交汇时过曝（使用 soft-light 混合而非线性累加）
+        // 公式：out = out + beam * (1 - out*k)，高亮区域增长变缓
+        arrayOut += beam * (1.0 - dot(arrayOut, arrayOut) * 0.35);
     }
     
     return arrayOut;
@@ -281,16 +284,17 @@ static float3 laserSystem(float2 p, float time, float high, float mid, float bas
     float fanCycleDuration = 14.0;  // 完整周期 14 秒
     float fanPhase = fract(time / fanCycleDuration);
     
-    // 三阶段包络（渐显拉长，避免出现太突然）：
-    // [0, 0.22): 渐渐出现 + DSP 触发监听（约 3.1s 渐显）
-    // [0.22, 0.72): 展示锁定阶段（不计算 DSP，固定 envelope=1.0）
+    // 三阶段包络（超柔和渐显，完全避免突然出现）：
+    // [0, 0.28): 渐渐出现 + DSP 触发监听（约 3.9s 渐显，更长更柔和）
+    // [0.28, 0.72): 展示锁定阶段（不计算 DSP，固定 envelope=1.0）
     // [0.72, 1.0): 渐消阶段（3.92s）
     float fanEnvelope = 0.0;
     bool fanNeedTrigger = false;
     
-    if (fanPhase < 0.22) {
-        // 渐显：用较长区间 smoothstep，使亮度缓慢上升
-        fanEnvelope = smoothstep(0.0, 0.22, fanPhase);
+    if (fanPhase < 0.28) {
+        // 渐显：smoothstep 本身是 S 曲线，再套一层 smoothstep 使开始更缓慢（ease-in-out²）
+        float rawEnv = smoothstep(0.0, 0.28, fanPhase);
+        fanEnvelope = rawEnv * rawEnv * (3.0 - 2.0 * rawEnv);  // 二次缓动，开始极慢
         fanNeedTrigger = true;
     } else if (fanPhase < 0.72) {
         fanEnvelope = 1.0;
@@ -300,9 +304,10 @@ static float3 laserSystem(float2 p, float time, float high, float mid, float bas
         fanNeedTrigger = false;
     }
     
-    // 只在渐显阶段检查 DSP 触发
+    // 只在渐显阶段检查 DSP 触发（拉长触发区间，避免 DSP 突变）
     if (fanNeedTrigger) {
-        float fanTrigger = smoothstep(0.02, 0.07, high);
+        // 触发区间从 [0.02, 0.07] 拉长到 [0.015, 0.12]，更柔和
+        float fanTrigger = smoothstep(0.015, 0.12, high);
         fanEnvelope *= fanTrigger;
     }
     
@@ -314,10 +319,14 @@ static float3 laserSystem(float2 p, float time, float high, float mid, float bas
         
         // ====== Top 6 条 ======
         float2 fanOrigin = float2(0.0, 0.56);
-        float planeRotation = time * 0.15;
+        // 多频率叠加运动：组合快慢不同的正弦波，形成不规则、有机的运动感
+        float planeRotation = time * 0.15 + sin(time * 0.06) * 0.4;  // 主旋转 + 缓慢摆动
         float cosPlane = cos(planeRotation);
         float sinPlane = sin(planeRotation);
-        float baseSwing = sin(time * 0.28) * 0.5;
+        // 复合摆动：3 个频率叠加（主频 + 快频 + 慢频）→ 类似真人操作灯光的不规则感
+        float baseSwing = sin(time * 0.28) * 0.42        // 主摆动
+                        + sin(time * 0.17) * 0.18        // 慢摆动（增加"呼吸感"）
+                        + sin(time * 0.51) * 0.08;       // 快抖动（微小抖动，更生动）
         float blueMul = 0.38 * fanEnvelope;
         
         float2 toP = p - fanOrigin;
@@ -332,7 +341,7 @@ static float3 laserSystem(float2 p, float time, float high, float mid, float bas
             float depthAngle = angleInPlane * sinPlane;
             
             float2 dir = float2(sin(worldAngle), -cos(worldAngle));
-            float beam = laserLineInline(toP, dir, 0.002);
+            float beam = laserLineInline(toP, dir, 0.0012);  // 细激光（原 0.002）
             float depthFade = (1.0 - abs(depthAngle) * 0.3) * exp(-depthAngle * depthAngle * 2.5);
             
             laserOut += blueColor * (beam * blueMul * depthFade);
@@ -340,10 +349,14 @@ static float3 laserSystem(float2 p, float time, float high, float mid, float bas
         
         // ====== Bottom 6 条 ======
         float2 fanBottomOrigin = float2(0.0, -0.56);
-        float planeRotationBottom = time * 0.18 + 1.57;
+        // 底部扇形：使用不同的频率组合，与顶部形成对比和呼应
+        float planeRotationBottom = time * 0.18 + 1.57 + sin(time * 0.08) * 0.35;
         float cosPlaneB = cos(planeRotationBottom);
         float sinPlaneB = sin(planeRotationBottom);
-        float baseSwingBottom = sin(time * 0.32 + 1.0) * 0.5;
+        // 底部摆动：频率与顶部错开，避免同步（更自然）
+        float baseSwingBottom = sin(time * 0.32 + 1.0) * 0.38
+                               + sin(time * 0.21 + 0.5) * 0.2   // 慢频，相位偏移
+                               + sin(time * 0.58 + 0.8) * 0.09; // 快频，相位偏移
         float blueMulB = 0.35 * fanEnvelope;
         
         float2 toPB = p - fanBottomOrigin;
@@ -357,7 +370,7 @@ static float3 laserSystem(float2 p, float time, float high, float mid, float bas
             float depthAngle = angleInPlane * sinPlaneB;
             
             float2 dir = float2(sin(worldAngle), -cos(worldAngle));
-            float beam = laserLineInline(toPB, dir, 0.002);
+            float beam = laserLineInline(toPB, dir, 0.0012);  // 细激光（原 0.002）
             float depthFade = (1.0 - abs(depthAngle) * 0.3) * exp(-depthAngle * depthAngle * 2.5);
             
             laserOut += blueColor * (beam * blueMulB * depthFade);
@@ -664,6 +677,15 @@ fragment float4 tyndallBeamFragment(VertexOut in [[stage_in]],
         // 激光在拍点处有短促增亮（模拟灯光师卡点）
         laser *= (1.0 + beatPulse * 0.35 * aiEnergy);
         finalColor += laser;
+    }
+    
+    // 柔和 Tone Mapping：防止灯光交汇处过曝，同时保持自然
+    // 使用 Reinhard-like 压缩：亮度越高压缩越强，暗部几乎不影响
+    float luminance = dot(finalColor, float3(0.299, 0.587, 0.114));
+    // 当亮度 > 0.6 时开始柔和压缩，避免刺眼的纯白过曝
+    float compress = luminance / (1.0 + luminance * 0.45);  // 0.45 控制压缩强度（越大压缩越强）
+    if (luminance > 0.01) {
+        finalColor *= (compress / luminance);  // 保持色相，只压缩亮度
     }
     
     float pLenSq = dot(p, p);
