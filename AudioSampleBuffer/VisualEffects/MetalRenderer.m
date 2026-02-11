@@ -6,6 +6,8 @@
 //
 
 #import "MetalRenderer.h"
+#import "AIColorConfiguration.h"
+#import "MusicAIAnalyzer.h"
 #import <simd/simd.h>
 
 // 顶点结构体
@@ -29,6 +31,37 @@ typedef struct {
     vector_float4 cyberpunkFrequencyControls; // 赛博朋克频段控制: (enableBass, enableMid, enableTreble, reserved)
     vector_float4 cyberpunkBackgroundParams; // 赛博朋克背景参数: (solidColorR, solidColorG, solidColorB, intensity)
 } Uniforms;
+
+// AI 增强的统一缓冲区（用于丁达尔效应等需要动态颜色的效果）
+typedef struct {
+    matrix_float4x4 projectionMatrix;
+    matrix_float4x4 modelViewMatrix;
+    vector_float4 time;
+    vector_float4 resolution;
+    vector_float4 audioData[80];
+    vector_float4 galaxyParams1;
+    vector_float4 galaxyParams2;
+    vector_float4 galaxyParams3;
+    vector_float4 cyberpunkControls;
+    vector_float4 cyberpunkFrequencyControls;
+    vector_float4 cyberpunkBackgroundParams;
+    
+    // AI 音乐分析参数
+    vector_float4 aiParams1;  // (bpm/100, energy, danceability, valence)
+    vector_float4 aiParams2;  // (animSpeed, brightness, triggerSens, atmoIntensity)
+    
+    // AI 动态颜色（RGB + reserved）
+    vector_float4 aiColorAtmosphere;
+    vector_float4 aiColorVolumetricBeam;
+    vector_float4 aiColorTopLightArray;
+    vector_float4 aiColorLaserFanBlue;
+    vector_float4 aiColorLaserFanGreen;
+    vector_float4 aiColorRotatingBeam;
+    vector_float4 aiColorRotatingBeamExtra;   // 额外6条旋转细丝颜色
+    vector_float4 aiColorEdgeLight;           // 底部边缘描绘光颜色
+    vector_float4 aiColorCoronaFilaments;     // 外围长丝 + 放射日冕丝颜色
+    vector_float4 aiColorPulseRing;           // 脉冲环颜色
+} UniformsAI;
 
 @interface BaseMetalRenderer ()
 @property (nonatomic, strong) id<MTLDevice> device;
@@ -59,8 +92,29 @@ typedef struct {
         
         [self setupMetal];
         [self setupPipeline];
+        
+        // 🔥 监听应用即将终止的通知，确保GPU资源被释放
+        [[NSNotificationCenter defaultCenter] addObserver:self
+                                                 selector:@selector(applicationWillTerminate:)
+                                                     name:UIApplicationWillTerminateNotification
+                                                   object:nil];
     }
     return self;
+}
+
+- (void)applicationWillTerminate:(NSNotification *)notification {
+    NSLog(@"🔥 应用即将终止，清理GPU资源...");
+    [self stopRendering];
+}
+
+- (void)dealloc {
+    // 移除通知监听
+    [[NSNotificationCenter defaultCenter] removeObserver:self];
+    
+    // 确保GPU资源被释放
+    [self stopRendering];
+    
+    NSLog(@"♻️ MetalRenderer已释放");
 }
 
 - (void)setupMetal {
@@ -118,7 +172,17 @@ typedef struct {
     // 🔥 移除delegate，确保完全停止
     self.metalView.delegate = nil;
     
-    NSLog(@"⏹️ Metal渲染已停止 (delegate已移除)");
+    // 🔥 新增：等待所有GPU命令执行完毕，确保GPU资源释放
+    if (self.commandQueue) {
+        // 创建一个空的命令缓冲并等待完成，强制清空队列
+        id<MTLCommandBuffer> finalBuffer = [self.commandQueue commandBuffer];
+        if (finalBuffer) {
+            [finalBuffer commit];
+            [finalBuffer waitUntilCompleted];
+        }
+    }
+    
+    NSLog(@"⏹️ Metal渲染已停止 (delegate已移除, GPU队列已清空)");
 }
 
 - (void)pauseRendering {
@@ -129,7 +193,17 @@ typedef struct {
     // 🔥 关键：移除delegate，确保drawInMTKView不再被调用
     self.metalView.delegate = nil;
     
-    NSLog(@"⏸️ Metal渲染已暂停 (delegate已移除)");
+    // 🔥 新增：等待所有GPU命令执行完毕，确保GPU资源释放
+    if (self.commandQueue) {
+        // 创建一个空的命令缓冲并等待完成，强制清空队列
+        id<MTLCommandBuffer> finalBuffer = [self.commandQueue commandBuffer];
+        if (finalBuffer) {
+            [finalBuffer commit];
+            [finalBuffer waitUntilCompleted];
+        }
+    }
+    
+    NSLog(@"⏸️ Metal渲染已暂停 (delegate已移除, GPU队列已清空)");
 }
 
 - (void)resumeRendering {
@@ -1517,6 +1591,126 @@ typedef struct {
 
 @end
 
+#pragma mark - 丁达尔光束渲染器 (实验性效果)
+
+@interface TyndallBeamRenderer ()
+@property (nonatomic, strong) AIColorConfiguration *currentAIConfig;
+@end
+
+@implementation TyndallBeamRenderer
+
+- (instancetype)initWithMetalView:(MTKView *)metalView {
+    self = [super initWithMetalView:metalView];
+    if (self) {
+        // 重新创建更大的 uniformBuffer 来容纳 UniformsAI
+        self.uniformBuffer = [self.device newBufferWithLength:sizeof(UniformsAI)
+                                                      options:MTLResourceStorageModeShared];
+        NSLog(@"✅ 丁达尔光束渲染器使用 UniformsAI，缓冲区大小: %lu 字节", sizeof(UniformsAI));
+        
+        // 监听 AI 配置变化（播放新歌时 MusicAIAnalyzer 会发送通知）
+        [[NSNotificationCenter defaultCenter] addObserver:self
+                                                 selector:@selector(tyndallAIConfigurationDidChange:)
+                                                     name:kAIConfigurationDidChangeNotification
+                                                   object:nil];
+        
+        // 若已有当前配置（例如切到丁达尔时正在播放的歌曲已分析过），直接使用
+        _currentAIConfig = [MusicAIAnalyzer sharedAnalyzer].currentConfiguration;
+    }
+    return self;
+}
+
+- (void)dealloc {
+    [[NSNotificationCenter defaultCenter] removeObserver:self];
+}
+
+- (void)tyndallAIConfigurationDidChange:(NSNotification *)notification {
+    AIColorConfiguration *config = notification.userInfo[kAIConfigurationKey];
+    if (config) {
+        self.currentAIConfig = config;
+        NSLog(@"🎨 丁达尔: 已应用 AI 配色 %@ - %@", config.songName, config.artist ?: @"");
+    }
+}
+
+- (void)setupPipeline {
+    MTLRenderPipelineDescriptor *pipelineDescriptor = [[MTLRenderPipelineDescriptor alloc] init];
+    pipelineDescriptor.label = @"TyndallBeam";
+    pipelineDescriptor.vertexFunction = [self.defaultLibrary newFunctionWithName:@"neon_vertex"];
+    pipelineDescriptor.fragmentFunction = [self.defaultLibrary newFunctionWithName:@"tyndallBeamFragment"];
+    pipelineDescriptor.colorAttachments[0].pixelFormat = self.metalView.colorPixelFormat;
+    
+    pipelineDescriptor.sampleCount = self.metalView.sampleCount;
+    pipelineDescriptor.depthAttachmentPixelFormat = self.metalView.depthStencilPixelFormat;
+    
+    pipelineDescriptor.colorAttachments[0].blendingEnabled = YES;
+    pipelineDescriptor.colorAttachments[0].rgbBlendOperation = MTLBlendOperationAdd;
+    pipelineDescriptor.colorAttachments[0].sourceRGBBlendFactor = MTLBlendFactorSourceAlpha;
+    pipelineDescriptor.colorAttachments[0].destinationRGBBlendFactor = MTLBlendFactorOne;
+    
+    NSError *error;
+    self.pipelineState = [self.device newRenderPipelineStateWithDescriptor:pipelineDescriptor error:&error];
+    
+    if (!self.pipelineState) {
+        NSLog(@"❌ 创建丁达尔光束管线失败: %@", error);
+        return;
+    }
+    
+    NSLog(@"✅ 丁达尔光束渲染器初始化成功");
+}
+
+- (void)updateUniforms:(NSTimeInterval)time {
+    // 先调用父类方法填充基础 Uniforms 数据
+    [super updateUniforms:time];
+    
+    UniformsAI *uniforms = (UniformsAI *)[self.uniformBuffer contents];
+    AIColorConfiguration *config = self.currentAIConfig;
+    
+    if (config) {
+        // 使用 AI 分析返回的配色
+        uniforms->aiParams1 = (vector_float4){config.bpm / 100.f, config.energy, config.danceability, config.valence};
+        uniforms->aiParams2 = (vector_float4){config.animationSpeed, config.brightnessMultiplier, config.triggerSensitivity, config.atmosphereIntensity};
+        
+        uniforms->aiColorAtmosphere      = (vector_float4){config.atmosphereColor.x, config.atmosphereColor.y, config.atmosphereColor.z, 1.0};
+        uniforms->aiColorVolumetricBeam = (vector_float4){config.volumetricBeamColor.x, config.volumetricBeamColor.y, config.volumetricBeamColor.z, 1.0};
+        uniforms->aiColorTopLightArray  = (vector_float4){config.topLightArrayColor.x, config.topLightArrayColor.y, config.topLightArrayColor.z, 1.0};
+        uniforms->aiColorLaserFanBlue   = (vector_float4){config.laserFanBlueColor.x, config.laserFanBlueColor.y, config.laserFanBlueColor.z, 1.0};
+        uniforms->aiColorLaserFanGreen  = (vector_float4){config.laserFanGreenColor.x, config.laserFanGreenColor.y, config.laserFanGreenColor.z, 1.0};
+        uniforms->aiColorRotatingBeam       = (vector_float4){config.rotatingBeamColor.x, config.rotatingBeamColor.y, config.rotatingBeamColor.z, 1.0};
+        // 额外旋转细丝：在主旋转光束颜色基础上偏亮
+        uniforms->aiColorRotatingBeamExtra  = (vector_float4){
+            fminf(config.rotatingBeamColor.x + 0.1f, 1.0f),
+            fminf(config.rotatingBeamColor.y + 0.1f, 1.0f),
+            fminf(config.rotatingBeamColor.z + 0.1f, 1.0f), 1.0};
+        uniforms->aiColorEdgeLight          = (vector_float4){config.volumetricBeamColor.x, config.volumetricBeamColor.y * 0.85f, config.volumetricBeamColor.z * 0.5f, 1.0};
+        uniforms->aiColorCoronaFilaments    = (vector_float4){config.coronaFilamentsColor.x, config.coronaFilamentsColor.y, config.coronaFilamentsColor.z, 1.0};
+        uniforms->aiColorPulseRing          = (vector_float4){config.pulseRingColor.x, config.pulseRingColor.y, config.pulseRingColor.z, 1.0};
+    } else {
+        // 默认颜色（未分析或 API 未返回时）
+        uniforms->aiParams1 = (vector_float4){1.2, 0.7, 0.7, 0.7};
+        uniforms->aiParams2 = (vector_float4){1.0, 1.0, 1.0, 0.45};
+        
+        uniforms->aiColorAtmosphere         = (vector_float4){0.06, 0.055, 0.08, 1.0};
+        uniforms->aiColorVolumetricBeam     = (vector_float4){1.0, 0.88, 0.72, 1.0};
+        uniforms->aiColorTopLightArray      = (vector_float4){0.3, 0.6, 1.0, 1.0};
+        uniforms->aiColorLaserFanBlue       = (vector_float4){0.25, 0.55, 1.0, 1.0};
+        uniforms->aiColorLaserFanGreen      = (vector_float4){0.35, 1.0, 0.45, 1.0};
+        uniforms->aiColorRotatingBeam       = (vector_float4){1.0, 0.4, 0.8, 1.0};
+        uniforms->aiColorRotatingBeamExtra  = (vector_float4){1.0, 0.5, 0.9, 1.0};
+        uniforms->aiColorEdgeLight          = (vector_float4){1.0, 0.75, 0.35, 1.0};
+        uniforms->aiColorCoronaFilaments    = (vector_float4){0.9, 0.6, 0.8, 1.0};
+        uniforms->aiColorPulseRing          = (vector_float4){0.8, 0.3, 1.0, 1.0};
+    }
+}
+
+- (void)encodeRenderCommands:(id<MTLRenderCommandEncoder>)encoder {
+    if (!self.pipelineState) return;
+    [encoder setRenderPipelineState:self.pipelineState];
+    [encoder setVertexBuffer:self.uniformBuffer offset:0 atIndex:0];
+    [encoder setFragmentBuffer:self.uniformBuffer offset:0 atIndex:0];
+    [encoder drawPrimitives:MTLPrimitiveTypeTriangleStrip vertexStart:0 vertexCount:4];
+}
+
+@end
+
 #pragma mark - 渲染器工厂
 
 @implementation MetalRendererFactory
@@ -1593,6 +1787,9 @@ typedef struct {
             
         case VisualEffectTypeCherryBlossomSnow:
             return [[CherryBlossomSnowRenderer alloc] initWithMetalView:metalView];
+            
+        case VisualEffectTypeTyndallBeam:
+            return [[TyndallBeamRenderer alloc] initWithMetalView:metalView];
             
         default:
             return [[DefaultEffectRenderer alloc] initWithMetalView:metalView];

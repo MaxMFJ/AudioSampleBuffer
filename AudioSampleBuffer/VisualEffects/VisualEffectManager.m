@@ -607,6 +607,7 @@
         case VisualEffectTypeStarVortex:
         case VisualEffectTypeNeonSpringLines:
         case VisualEffectTypeCherryBlossomSnow:
+        case VisualEffectTypeTyndallBeam:
             return YES;
             
         case VisualEffectTypeClassicSpectrum:

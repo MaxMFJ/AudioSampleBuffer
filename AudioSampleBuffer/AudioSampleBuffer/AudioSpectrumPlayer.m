@@ -6,6 +6,7 @@
 #import "RealtimeAnalyzer.h"
 #import "LyricsManager.h"
 #import "LRCParser.h"
+#import "MusicAIAnalyzer.h"
 
 @interface AudioSpectrumPlayer ()
 {
@@ -13,6 +14,8 @@
     dispatch_source_t _sometimer;
     dispatch_queue_t _queue;
     BOOL _isSeeking;  // 是否正在跳转中，防止触发 didFinishPlay
+    BOOL _isPaused;   // 🔧 是否处于暂停状态
+    BOOL _enginePaused; // 🔧 引擎是否被暂停（后台时）
 }
 @property (nonatomic, strong) AVAudioEngine *engine;
 @property (nonatomic, strong) AVAudioPlayerNode *player;
@@ -24,6 +27,7 @@
 @property (nonatomic, assign) BOOL timeBegining;
 @property (nonatomic, strong) NSString *currentFilePath;  // 当前播放文件路径
 @property (nonatomic, strong, readwrite) LRCParser *lyricsParser;  // 歌词解析器
+@property (nonatomic, assign) NSTimeInterval pausedTime; // 🔧 暂停时的播放时间
 
 @end
 
@@ -125,7 +129,32 @@
 //        [self.player play]; // 恢复播放
 //    }
 //}
+// 🎨 新方法：支持 AI 分析的播放
+- (void)playWithFileName:(NSString *)fileName songName:(NSString *)songName artist:(NSString *)artist {
+    // 调用核心播放逻辑
+    [self _playWithFileName:fileName];
+    
+    // 🎨 触发 AI 分析（如果提供了歌曲名）
+    if (songName.length > 0) {
+        [[MusicAIAnalyzer sharedAnalyzer] analyzeSong:songName
+                                               artist:artist
+                                           completion:^(AIColorConfiguration * _Nullable config, NSError * _Nullable error) {
+            if (error) {
+                NSLog(@"⚠️ AI 分析失败: %@", error.localizedDescription);
+            } else if (config) {
+                NSLog(@"🎨 AI 分析已应用: %@ - %@", config.songName, config.artist ?: @"");
+            }
+        }];
+    }
+}
+
+// 兼容旧版本的方法
 - (void)playWithFileName:(NSString *)fileName {
+    [self _playWithFileName:fileName];
+}
+
+// 核心播放逻辑（内部方法）
+- (void)_playWithFileName:(NSString *)fileName {
     // 🔊 关键修复：每次播放前重新配置音频会话，确保设置生效
     [self configureAudioSession];
     
@@ -280,9 +309,137 @@
 }
 - (void)stop {
     [self.player stop];
+    _isPaused = NO;
+    self.pausedTime = 0;
+    
+    // 停止计时器
+    [self cancelTimer];
     
     // 停止时清除歌词
     self.lyricsParser = nil;
+}
+
+#pragma mark - 🎵 暂停/恢复控制
+
+- (BOOL)isPaused {
+    return _isPaused;
+}
+
+/// 暂停播放（保持播放位置，暂停计时器）
+- (void)pause {
+    if (self.player.isPlaying) {
+        // 1. 记录当前时间
+        self.pausedTime = self.currentTime;
+        _isPaused = YES;
+        
+        // 2. 暂停 playerNode
+        [self.player pause];
+        
+        // 3. 暂停计时器
+        [self cancelTimer];
+        
+        NSLog(@"⏸️ AudioPlayer 已暂停（位置: %.2fs / %.2fs）", self.pausedTime, self.duration);
+    }
+}
+
+/// 恢复播放（从暂停位置重新调度）
+- (void)resume {
+    if (_isPaused && self.file) {
+        NSTimeInterval resumeTime = self.pausedTime;
+        NSLog(@"▶️ AudioPlayer 恢复播放（位置: %.2fs）", resumeTime);
+        _isPaused = NO;
+        
+        // 🔧 如果引擎被暂停过（后台），需要先恢复引擎
+        if (_enginePaused) {
+            [self resumeEngine];
+        }
+        
+        // 🔧 关键：手动重新调度播放（不通过 seekToTime，因为 seekToTime 检查 isPlaying 来决定是否 play）
+        _isSeeking = YES;
+        
+        // 停止当前 playerNode（清除旧 buffer）
+        [self.player stop];
+        
+        // 取消旧计时器
+        [self cancelTimer];
+        
+        // 计算目标帧位置
+        double sampleRate = self.file.processingFormat.sampleRate;
+        AVAudioFramePosition startingFrame = (AVAudioFramePosition)(resumeTime * sampleRate);
+        startingFrame = MAX(0, MIN(startingFrame, self.file.length - 1));
+        AVAudioFrameCount frameCount = (AVAudioFrameCount)(self.file.length - startingFrame);
+        
+        if (frameCount <= 1000) {
+            startingFrame = MAX(0, self.file.length - 1000);
+            frameCount = (AVAudioFrameCount)(self.file.length - startingFrame);
+        }
+        
+        lastStartFramePosition = startingFrame;
+        _currentTime = resumeTime;
+        
+        // 调度播放
+        __weak typeof(self) weakSelf = self;
+        [self.player scheduleSegment:self.file
+                       startingFrame:startingFrame
+                          frameCount:frameCount
+                              atTime:nil
+                   completionCallbackType:AVAudioPlayerNodeCompletionDataPlayedBack
+                   completionHandler:^(AVAudioPlayerNodeCompletionCallbackType callbackType) {
+            __strong typeof(weakSelf) strongSelf = weakSelf;
+            if (strongSelf && !strongSelf->_isSeeking) {
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    if (!strongSelf->_isSeeking && strongSelf.player.isPlaying == NO) {
+                        [strongSelf.delegate didFinishPlay];
+                    }
+                });
+            }
+        }];
+        
+        _isSeeking = NO;
+        
+        // 🔧 关键：无论什么状态都要开始播放和启动计时器
+        [self.player play];
+        [self countDownBeginFromTime:resumeTime duration:self.duration];
+        
+        NSLog(@"✅ AudioPlayer 已恢复播放（%.2fs / %.2fs）", resumeTime, self.duration);
+        
+        // 通知代理
+        if ([self.delegate respondsToSelector:@selector(playerDidStartPlaying)]) {
+            [self.delegate playerDidStartPlaying];
+        }
+    }
+}
+
+/// 暂停音频引擎（进入后台时调用）
+- (void)pauseEngine {
+    if (!_enginePaused && self.engine.isRunning) {
+        [self.engine pause];
+        _enginePaused = YES;
+        NSLog(@"🔧 AudioEngine 已暂停（后台节省资源）");
+    }
+}
+
+/// 恢复音频引擎
+- (void)resumeEngine {
+    if (_enginePaused) {
+        NSError *error = nil;
+        if (![self.engine startAndReturnError:&error]) {
+            NSLog(@"❌ AudioEngine 恢复失败: %@", error);
+        } else {
+            NSLog(@"✅ AudioEngine 已恢复");
+        }
+        _enginePaused = NO;
+    }
+}
+
+/// 取消计时器
+- (void)cancelTimer {
+    if (_sometimer != nil) {
+        dispatch_source_cancel(_sometimer);
+        _queue = nil;
+        _sometimer = nil;
+        _timeBegining = NO;
+    }
 }
 
 #pragma mark - 进度跳转

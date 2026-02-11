@@ -26,6 +26,7 @@
 #import "ViewController+PlaybackProgress.h"  // 🆕 播放进度条功能
 #import "VinylRecordView.h"  // 🎵 黑胶唱片动画视图
 #import "LyricsEditorViewController.h"  // 🎼 歌词打轴编辑器
+#import "MusicAIAnalyzer.h"  // 🎨 AI 音乐分析（丁达尔等效果动态颜色）
 #import <AVFoundation/AVFoundation.h>
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>  // 用于文件类型识别
 #import <MediaPlayer/MediaPlayer.h>  // 🎵 系统媒体控制
@@ -51,6 +52,7 @@
 @property (nonatomic, strong) UIButton *sortButton;  // 排序按钮
 @property (nonatomic, strong) UIButton *reloadButton;  // 刷新音乐库按钮
 @property (nonatomic, strong) UIButton *importButton;  // 导入音乐按钮
+@property (nonatomic, strong) UIButton *clearAICacheButton;  // 清除 AI 缓存按钮
 @property (nonatomic, assign) MusicSortType currentSortType;  // 当前排序方式
 @property (nonatomic, assign) BOOL sortAscending;  // 排序方向
 
@@ -120,22 +122,25 @@
 
 // 🔧 播放状态跟踪（用于防止意外恢复播放）
 @property (nonatomic, assign) BOOL wasPlayingBeforeInterruption;  // 中断前是否正在播放
+@property (nonatomic, assign) BOOL wasPlayingBeforeBackground;    // 进入后台前是否正在播放
 @property (nonatomic, assign) BOOL shouldPreventAutoResume;  // 是否禁止自动恢复播放
 @end
 
 @implementation ViewController
 - (void)hadEnterBackGround{
-    NSLog(@"进入后台");
+    NSLog(@"🔄 进入后台，停止所有GPU渲染...");
     enterBackground =  YES;
     [self.animationCoordinator applicationDidEnterBackground];
     
     // 🔋 关键修复：进入后台时完全停止Metal渲染，避免持续发热和耗电
     [self.visualEffectManager pauseRendering];
     
-    // 暂停Metal视图的更新
+    // 🔥 新增：强制暂停Metal视图并清空渲染队列
     if (self.visualEffectManager.metalView) {
         self.visualEffectManager.metalView.paused = YES;
-        NSLog(@"✅ Metal视图已暂停");
+        // 移除delegate以确保不再触发渲染回调
+        self.visualEffectManager.metalView.delegate = nil;
+        NSLog(@"✅ Metal视图已暂停并移除delegate");
     }
     
     // 停止FPS监控以节省资源
@@ -150,23 +155,27 @@
         NSLog(@"✅ 频谱视图已暂停");
     }
     
-    // 🎵 关键：进入后台时确保音频会话保持激活，更新播放信息
-    NSLog(@"🎵 检查播放状态: isPlaying=%@", self.player.isPlaying ? @"YES" : @"NO");
+    // 🎵 进入后台时的音频处理
+    NSLog(@"🎵 检查播放状态: isPlaying=%@, isPaused=%@",
+          self.player.isPlaying ? @"YES" : @"NO",
+          self.player.isPaused ? @"YES" : @"NO");
+    
+    // 🔧 记录进入后台前的播放状态（用于恢复播放）
+    self.wasPlayingBeforeBackground = self.player.isPlaying;
+    NSLog(@"🔖 记录后台前播放状态: %@", self.wasPlayingBeforeBackground ? @"播放中" : @"已暂停/停止");
     
     if (self.player && self.player.isPlaying) {
         NSLog(@"🎵 后台音乐播放: 保持音频会话激活");
         
-        // 🔊 重要：不要在这里直接设置音频会话，避免覆盖混音设置
-        // 音频会话由 AudioSpectrumPlayer 管理，已经在播放时正确配置
-        
         // 更新播放信息，确保控制中心显示
         [self updateNowPlayingInfo];
         
-        // 验证播放信息
         NSDictionary *nowPlaying = [MPNowPlayingInfoCenter defaultCenter].nowPlayingInfo;
         NSLog(@"✅ 后台播放信息已更新:");
         NSLog(@"   - 标题: %@", nowPlaying[MPMediaItemPropertyTitle]);
         NSLog(@"   - 播放速率: %@", nowPlaying[MPNowPlayingInfoPropertyPlaybackRate]);
+    } else if (self.player.isPaused) {
+        NSLog(@"🎵 播放已暂停，进入后台（engine和session已在暂停时处理）");
     } else {
         NSLog(@"⚠️ 进入后台时没有音乐在播放");
     }
@@ -176,19 +185,24 @@
         [self.vinylRecordView pauseSpinning];
         NSLog(@"✅ 黑胶唱片动画已暂停");
     }
+    
+    NSLog(@"✅ 后台处理完成，GPU渲染已完全停止");
 }
 
 - (void)hadEnterForeGround{
-    NSLog(@"回到app");
+    NSLog(@"🔄 回到前台，恢复GPU渲染...");
     enterBackground = NO;
     [self.animationCoordinator applicationDidBecomeActive];
-    [self.visualEffectManager resumeRendering];
     
-    // 恢复Metal视图的更新
+    // 🔥 先恢复delegate，再恢复渲染
     if (self.visualEffectManager.metalView) {
+        // 注意：resumeRendering 内部会重新设置 delegate
         self.visualEffectManager.metalView.paused = NO;
-        NSLog(@"✅ Metal视图已恢复");
+        NSLog(@"✅ Metal视图已准备恢复");
     }
+    
+    // 恢复渲染（会自动重新设置delegate）
+    [self.visualEffectManager resumeRendering];
     
     // 恢复FPS监控
     if (self.fpsDisplayLink) {
@@ -207,6 +221,17 @@
         [self.vinylRecordView resumeSpinning];
         NSLog(@"✅ 黑胶唱片动画已恢复");
     }
+    
+    // 🔧 如果播放器处于暂停状态，恢复 AudioEngine（不自动播放，等用户操作）
+    // 注意：不自动恢复播放，由用户通过控制中心或APP内按钮手动恢复
+    if (self.player.isPaused) {
+        NSLog(@"🎵 播放器处于暂停状态，等待用户手动恢复");
+    }
+    
+    // 清除后台状态标志
+    self.wasPlayingBeforeBackground = NO;
+    
+    NSLog(@"✅ 前台恢复完成，GPU渲染已重新启动");
 }
 
 - (void)karaokeModeDidStart {
@@ -739,6 +764,12 @@
             self.importButton.userInteractionEnabled = !self.isUIHidden;
         }
         
+        // 清除 AI 缓存按钮
+        if (self.clearAICacheButton) {
+            self.clearAICacheButton.alpha = self.isUIHidden ? 0.0 : 1.0;
+            self.clearAICacheButton.userInteractionEnabled = !self.isUIHidden;
+        }
+        
         // 📝 导入歌词按钮
         if (self.importLyricsButton) {
             self.importLyricsButton.alpha = self.isUIHidden ? 0.0 : 1.0;
@@ -1214,8 +1245,22 @@
     [self.importButton addTarget:self action:@selector(importMusicButtonTapped:) forControlEvents:UIControlEventTouchUpInside];
     [self.view addSubview:self.importButton];
     
-    // 🎵 播放控制按钮 - 放在导入按钮下方，纵向排列4个按钮
-    CGFloat controlButtonsY = importButtonY + buttonHeight + spacing;
+    // 🎨 清除 AI 缓存按钮 - 放在导入按钮下方
+    CGFloat clearAICacheButtonY = importButtonY + buttonHeight + spacing;
+    self.clearAICacheButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    [self.clearAICacheButton setTitle:@"🗑️ 清除 AI" forState:UIControlStateNormal];
+    [self.clearAICacheButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+    self.clearAICacheButton.titleLabel.font = [UIFont boldSystemFontOfSize:13];
+    self.clearAICacheButton.backgroundColor = [UIColor colorWithRed:0.9 green:0.3 blue:0.3 alpha:0.85];
+    self.clearAICacheButton.layer.cornerRadius = 8;
+    self.clearAICacheButton.layer.borderWidth = 1.5;
+    self.clearAICacheButton.layer.borderColor = [UIColor colorWithRed:1.0 green:0.4 blue:0.4 alpha:0.8].CGColor;
+    self.clearAICacheButton.frame = CGRectMake(leftX, clearAICacheButtonY, buttonWidth, buttonHeight);
+    [self.clearAICacheButton addTarget:self action:@selector(clearAICacheButtonTapped:) forControlEvents:UIControlEventTouchUpInside];
+    [self.view addSubview:self.clearAICacheButton];
+    
+    // 🎵 播放控制按钮 - 放在清除 AI 缓存按钮下方，纵向排列4个按钮
+    CGFloat controlButtonsY = clearAICacheButtonY + buttonHeight + spacing;
     CGFloat controlButtonWidth = buttonWidth;  // 使用完整宽度
     CGFloat controlButtonHeight = 32;  // 按钮高度
     CGFloat controlSpacing = 4;  // 按钮之间的间距
@@ -1658,7 +1703,19 @@
     // 🎵 先设置基本的播放信息（立即设置，让控制中心显示）
     [self updateNowPlayingInfoImmediate];
     
-    [self.player playWithFileName:playPath];
+    // 🎨 准备歌曲信息用于 AI 分析
+    NSString *songName = musicItem.displayName ?: [musicItem.fileName stringByDeletingPathExtension];
+    NSString *artist = musicItem.artist ?: @"";
+    if (artist.length == 0 && songName.length > 0 && [songName containsString:@" - "]) {
+        NSArray *parts = [songName componentsSeparatedByString:@" - "];
+        if (parts.count >= 2) {
+            artist = [parts[0] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
+            songName = [parts[1] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
+        }
+    }
+    
+    // 🎵 使用新方法播放（会自动触发 AI 分析）
+    [self.player playWithFileName:playPath songName:songName artist:artist];
     
     // 🎵 注意：完整的播放信息将在 playerDidStartPlaying 回调中更新
 }
@@ -1742,9 +1799,11 @@
                     // 刷新 cell
                     [self.tableView reloadRowsAtIndexPaths:@[indexPath] withRowAnimation:UITableViewRowAnimationAutomatic];
                     
-                    // 🆕 自动播放解密后的文件
+                    // 🆕 自动播放解密后的文件（带 AI 分析）
                     NSLog(@"🎵 开始播放解密后的文件: %@", result);
-                    [self.player playWithFileName:result];
+                    NSString *songName = musicItem.displayName ?: [musicItem.fileName stringByDeletingPathExtension];
+                    NSString *artist = musicItem.artist ?: @"";
+                    [self.player playWithFileName:result songName:songName artist:artist];
                     
                     // 显示成功提示
                     [self showAlert:@"✅ 转换成功" message:[NSString stringWithFormat:@"已成功转换并开始播放: %@", musicItem.displayName ?: musicItem.fileName]];
@@ -1960,7 +2019,10 @@
         NSMutableDictionary *nowPlayingInfo = [[MPNowPlayingInfoCenter defaultCenter].nowPlayingInfo mutableCopy];
         if (nowPlayingInfo) {
             nowPlayingInfo[MPNowPlayingInfoPropertyElapsedPlaybackTime] = @(currentTime);
-            nowPlayingInfo[MPNowPlayingInfoPropertyPlaybackRate] = @(self.player.isPlaying ? 1.0 : 0.0);
+            // 🔧 只在播放时设置 playbackRate，停止时不设置（避免隐藏播放按钮）
+            if (self.player.isPlaying) {
+                nowPlayingInfo[MPNowPlayingInfoPropertyPlaybackRate] = @(1.0);
+            }
             [MPNowPlayingInfoCenter defaultCenter].nowPlayingInfo = nowPlayingInfo;
         }
     }
@@ -2929,6 +2991,47 @@
     [self presentViewController:documentPicker animated:YES completion:nil];
 }
 
+- (void)clearAICacheButtonTapped:(UIButton *)sender {
+    // 🔧 隐藏键盘
+    [self.searchBar resignFirstResponder];
+    
+    NSLog(@"🗑️ 准备清除 AI 缓存...");
+    
+    // 显示确认对话框
+    UIAlertController *confirmAlert = [UIAlertController alertControllerWithTitle:@"清除 AI 缓存"
+                                                                          message:@"确定要清除所有 DeepSeek AI 音乐分析缓存吗？\n清除后，下次播放歌曲将重新进行 AI 分析。"
+                                                                   preferredStyle:UIAlertControllerStyleAlert];
+    
+    // 取消按钮
+    UIAlertAction *cancelAction = [UIAlertAction actionWithTitle:@"取消"
+                                                           style:UIAlertActionStyleCancel
+                                                         handler:nil];
+    [confirmAlert addAction:cancelAction];
+    
+    // 确认清除按钮
+    UIAlertAction *confirmAction = [UIAlertAction actionWithTitle:@"清除"
+                                                           style:UIAlertActionStyleDestructive
+                                                         handler:^(UIAlertAction * _Nonnull action) {
+        // 调用 MusicAIAnalyzer 的清除缓存方法
+        [[MusicAIAnalyzer sharedAnalyzer] clearCache];
+        
+        // 显示成功提示
+        UIAlertController *successAlert = [UIAlertController alertControllerWithTitle:@"✅ 清除成功"
+                                                                              message:@"AI 缓存已清除，下次播放将重新分析"
+                                                                       preferredStyle:UIAlertControllerStyleAlert];
+        UIAlertAction *okAction = [UIAlertAction actionWithTitle:@"好的"
+                                                           style:UIAlertActionStyleDefault
+                                                         handler:nil];
+        [successAlert addAction:okAction];
+        [self presentViewController:successAlert animated:YES completion:nil];
+        
+        NSLog(@"✅ AI 缓存清除完成");
+    }];
+    [confirmAlert addAction:confirmAction];
+    
+    [self presentViewController:confirmAlert animated:YES completion:nil];
+}
+
 #pragma mark - 🎵 播放控制按钮事件处理
 
 /// 上一首按钮点击
@@ -2947,18 +3050,20 @@
 - (void)playPauseButtonTapped:(UIButton *)sender {
     if (self.player.isPlaying) {
         NSLog(@"⏸️ 暂停播放");
-        [self stopPlayback];
-        [self.playPauseButton setTitle:@"▶️" forState:UIControlStateNormal];
-        self.playPauseButton.backgroundColor = [UIColor colorWithRed:0.2 green:0.7 blue:0.3 alpha:0.85];
+        [self pausePlayback];
+    } else if (self.player.isPaused) {
+        // 🔧 有暂停的音频，恢复播放
+        NSLog(@"▶️ 恢复播放（从暂停位置 %.2fs）", self.player.currentTime);
+        [self resumePlayback];
     } else {
-        NSLog(@"▶️ 开始播放");
+        NSLog(@"▶️ 开始播放新曲目");
         if (self.displayedMusicItems.count > 0) {
-            // 如果有选中的歌曲，播放当前选中的歌曲
             [self playCurrentTrack];
             [self.playPauseButton setTitle:@"⏸️" forState:UIControlStateNormal];
             self.playPauseButton.backgroundColor = [UIColor colorWithRed:0.8 green:0.3 blue:0.2 alpha:0.85];
         } else {
             NSLog(@"⚠️ 播放列表为空");
+            return;
         }
     }
 }
@@ -3426,9 +3531,17 @@
                 NSLog(@"   ⚠️ 已禁止播放（用户在其他页面）");
                 return;
             }
-            if (!self.player.isPlaying) {
+            if (self.player.isPaused) {
+                // 🔧 有暂停的音频，恢复播放
+                NSLog(@"   从暂停位置恢复播放（%.2fs）", self.player.currentTime);
+                [self resumePlayback];
+            } else if (!self.player.isPlaying) {
+                // 没有暂停的音频，开始播放
+                NSLog(@"   开始播放当前曲目");
                 [self playCurrentTrack];
             }
+            // 清除后台播放状态标志
+            self.wasPlayingBeforeBackground = NO;
         });
         return MPRemoteCommandHandlerStatusSuccess;
     }];
@@ -3437,7 +3550,11 @@
     [commandCenter.pauseCommand addTargetWithHandler:^MPRemoteCommandHandlerStatus(MPRemoteCommandEvent * _Nonnull event) {
         NSLog(@"🎵 系统控制: 暂停");
         dispatch_async(dispatch_get_main_queue(), ^{
-            [self stopPlayback];
+            if (self.player.isPlaying) {
+                [self pausePlayback];
+            }
+            // 🔧 清除后台播放状态（用户主动暂停，不应自动恢复）
+            self.wasPlayingBeforeBackground = NO;
         });
         return MPRemoteCommandHandlerStatusSuccess;
     }];
@@ -3710,8 +3827,11 @@
     // 当前播放时间
     nowPlayingInfo[MPNowPlayingInfoPropertyElapsedPlaybackTime] = @(self.player.currentTime);
     
-    // 播放速率（1.0 = 正常播放）
-    nowPlayingInfo[MPNowPlayingInfoPropertyPlaybackRate] = @(self.player.isPlaying ? 1.0 : 0.0);
+    // 🔧 播放速率：只在播放时设置为 1.0，停止时不设置（避免隐藏播放按钮）
+    if (self.player.isPlaying) {
+        nowPlayingInfo[MPNowPlayingInfoPropertyPlaybackRate] = @(1.0);
+    }
+    // ⚠️ 不设置 0.0，让系统根据命令启用状态自动显示播放/暂停按钮
     
     // 更新到系统
     [MPNowPlayingInfoCenter defaultCenter].nowPlayingInfo = nowPlayingInfo;
@@ -3721,25 +3841,84 @@
 
 #pragma mark - 🎮 外部播放控制接口
 
-/// 停止当前播放
+/// 暂停当前播放（保留播放位置）
+- (void)pausePlayback {
+    NSLog(@"⏸️ 暂停播放");
+    [self.player pause];
+    
+    // 🎵 如果正在显示黑胶唱片，暂停旋转动画
+    if (self.isShowingVinylRecord) {
+        [self.vinylRecordView pauseSpinning];
+    }
+    
+    // 🔧 更新UI按钮
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [self.playPauseButton setTitle:@"▶️" forState:UIControlStateNormal];
+        self.playPauseButton.backgroundColor = [UIColor colorWithRed:0.2 green:0.7 blue:0.3 alpha:0.85];
+    });
+    
+    // 🔧 关键：暂停 AudioEngine 并 deactivate AudioSession
+    // 这是 iOS 上唯一能让控制中心/锁屏按钮从"暂停"变成"播放"的方法
+    [self.player pauseEngine];
+    [self deactivateAudioSessionForPause];
+    
+    NSLog(@"✅ 已暂停播放（engine已暂停，session已deactivate，控制中心将显示播放按钮）");
+}
+
+/// 🔧 暂停时 deactivate AudioSession，让系统知道播放已暂停
+- (void)deactivateAudioSessionForPause {
+    NSError *error = nil;
+    BOOL success = [[AVAudioSession sharedInstance] setActive:NO
+                                                  withOptions:AVAudioSessionSetActiveOptionNotifyOthersOnDeactivation
+                                                        error:&error];
+    if (success) {
+        NSLog(@"✅ AudioSession 已 deactivate（系统将更新播放按钮）");
+    } else {
+        // AVAudioSessionErrorCodeIsBusy 是预期的，但系统仍会更新按钮
+        NSLog(@"⚠️ AudioSession deactivate 返回: %@ (按钮仍会更新)", error.localizedDescription);
+    }
+}
+
+/// 恢复播放（从暂停位置继续）
+- (void)resumePlayback {
+    NSLog(@"▶️ 恢复播放");
+    
+    // 🔧 关键：先重新激活 AudioSession
+    [self.player configureAudioSession];
+    
+    // 🔧 然后恢复播放（内部会恢复 engine 并 seekToTime）
+    [self.player resume];
+    
+    // 🎵 如果正在显示黑胶唱片，恢复旋转动画
+    if (self.isShowingVinylRecord) {
+        [self.vinylRecordView resumeSpinning];
+    }
+    
+    // 🔧 更新UI按钮
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [self.playPauseButton setTitle:@"⏸️" forState:UIControlStateNormal];
+        self.playPauseButton.backgroundColor = [UIColor colorWithRed:0.8 green:0.3 blue:0.2 alpha:0.85];
+    });
+    
+    // 🔧 更新播放信息
+    NSMutableDictionary *nowPlayingInfo = [[MPNowPlayingInfoCenter defaultCenter].nowPlayingInfo mutableCopy];
+    if (nowPlayingInfo) {
+        nowPlayingInfo[MPNowPlayingInfoPropertyPlaybackRate] = @(1.0);
+        nowPlayingInfo[MPNowPlayingInfoPropertyElapsedPlaybackTime] = @(self.player.currentTime);
+        [MPNowPlayingInfoCenter defaultCenter].nowPlayingInfo = nowPlayingInfo;
+    }
+    
+    NSLog(@"✅ 已恢复播放（从 %.2fs 继续）", self.player.currentTime);
+}
+
+/// 停止当前播放（完全停止，清除状态）
 - (void)stopPlayback {
-    NSLog(@"⏹️ 外部控制: 停止播放");
+    NSLog(@"⏹️ 停止播放");
     [self.player stop];
     
     // 🎵 如果正在显示黑胶唱片，停止旋转动画
     if (self.isShowingVinylRecord) {
         [self.vinylRecordView stopSpinning];
-    }
-    
-    // 🎵 iOS 16+: 更新播放状态为暂停（不清除信息）
-    NSMutableDictionary *nowPlayingInfo = [[MPNowPlayingInfoCenter defaultCenter].nowPlayingInfo mutableCopy];
-    if (nowPlayingInfo) {
-        // 关键：将播放速率设置为 0.0 表示暂停状态
-        nowPlayingInfo[MPNowPlayingInfoPropertyPlaybackRate] = @(0.0);
-        // 保持当前播放时间
-        nowPlayingInfo[MPNowPlayingInfoPropertyElapsedPlaybackTime] = @(self.player.currentTime);
-        [MPNowPlayingInfoCenter defaultCenter].nowPlayingInfo = nowPlayingInfo;
-        NSLog(@"✅ 播放状态已更新为暂停 (playbackRate = 0.0)");
     }
 }
 
@@ -3848,7 +4027,19 @@
     // 🎵 先设置基本的播放信息（立即设置，让控制中心显示）
     [self updateNowPlayingInfoImmediate];
     
-    [self.player playWithFileName:playPath];
+    // 🎨 准备歌曲信息用于 AI 分析
+    NSString *songName = musicItem.displayName ?: [musicItem.fileName stringByDeletingPathExtension];
+    NSString *artist = musicItem.artist ?: @"";
+    if (artist.length == 0 && songName.length > 0 && [songName containsString:@" - "]) {
+        NSArray *parts = [songName componentsSeparatedByString:@" - "];
+        if (parts.count >= 2) {
+            artist = [parts[0] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
+            songName = [parts[1] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
+        }
+    }
+    
+    // 🎵 使用新方法播放（会自动触发 AI 分析）
+    [self.player playWithFileName:playPath songName:songName artist:artist];
     
     // 🎵 如果正在显示黑胶唱片，开始旋转动画
     if (self.isShowingVinylRecord) {
@@ -3872,21 +4063,9 @@
         self.wasPlayingBeforeInterruption = self.player.isPlaying;
         NSLog(@"   中断前播放状态: %@", self.wasPlayingBeforeInterruption ? @"播放中" : @"已暂停");
         
-        // 系统会自动暂停音频，我们只需要更新UI状态
+        // 🔧 如果正在播放，执行暂停（系统会自动暂停音频，但我们也需要更新自己的状态）
         if (self.player.isPlaying) {
-            // 更新播放/暂停按钮状态
-            dispatch_async(dispatch_get_main_queue(), ^{
-                [self.playPauseButton setTitle:@"▶️" forState:UIControlStateNormal];
-                self.playPauseButton.backgroundColor = [UIColor colorWithRed:0.2 green:0.7 blue:0.3 alpha:0.85];
-            });
-            
-            // 更新系统媒体信息为暂停状态
-            NSMutableDictionary *nowPlayingInfo = [[MPNowPlayingInfoCenter defaultCenter].nowPlayingInfo mutableCopy];
-            if (nowPlayingInfo) {
-                nowPlayingInfo[MPNowPlayingInfoPropertyPlaybackRate] = @(0.0);
-                nowPlayingInfo[MPNowPlayingInfoPropertyElapsedPlaybackTime] = @(self.player.currentTime);
-                [MPNowPlayingInfoCenter defaultCenter].nowPlayingInfo = nowPlayingInfo;
-            }
+            [self pausePlayback];
         }
         
     } else if (interruptionType == AVAudioSessionInterruptionTypeEnded) {
@@ -3992,7 +4171,7 @@
                     
                     // 耳机拔出时自动暂停播放
                     if (self.player.isPlaying) {
-                        [self stopPlayback];
+                        [self pausePlayback];
                         NSLog(@"✅ 已自动暂停播放");
                     }
                 }

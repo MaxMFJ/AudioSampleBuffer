@@ -29,7 +29,7 @@ NS_ASSUME_NONNULL_BEGIN
 /**
  * 批量解密目录中的 NCM 文件
  * @param directoryPath 目录路径
- * @param recursive 是否递归子目录
+ * @param recursive 是否递归子目录ˉ
  * @param progressBlock 进度回调 (当前索引, 总数, 文件名, 成功/失败)
  * @return 成功解密的文件数量
  */

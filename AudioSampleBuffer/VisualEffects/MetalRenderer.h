@@ -215,6 +215,13 @@ NS_ASSUME_NONNULL_BEGIN
 @end
 
 /**
+ * 丁达尔光束渲染器 - 实验性效果
+ * 舞台灯光照射感，随频谱高度分层解锁光柱与尘埃
+ */
+@interface TyndallBeamRenderer : BaseMetalRenderer
+@end
+
+/**
  * 默认效果渲染器
  */
 @interface DefaultEffectRenderer : BaseMetalRenderer

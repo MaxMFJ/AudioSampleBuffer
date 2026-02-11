@@ -27,6 +27,9 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic, assign) NSTimeInterval duration;  // 总时长
 @property (nonatomic, assign, readonly) NSTimeInterval currentTime;  // 当前播放时间
 
+/// 🎵 是否处于暂停状态（区分暂停和未播放）
+@property (nonatomic, assign, readonly) BOOL isPaused;
+
 /// 是否启用歌词功能（默认YES）
 @property (nonatomic, assign) BOOL enableLyrics;
 
@@ -45,7 +48,26 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic, assign) BOOL allowMixWithOthers;
 
 - (void)playWithFileName:(NSString *)fileName;
+
+/// 🎨 播放音频文件（支持 AI 分析）
+/// @param fileName 文件名或完整路径
+/// @param songName 歌曲名（用于 AI 分析）
+/// @param artist 艺术家（用于 AI 分析，可为 nil）
+- (void)playWithFileName:(NSString *)fileName songName:(nullable NSString *)songName artist:(nullable NSString *)artist;
+
 - (void)stop;
+
+/// 🎵 暂停播放（保持播放位置，暂停计时器）
+- (void)pause;
+
+/// 🎵 恢复播放（从暂停位置继续，恢复计时器）
+- (void)resume;
+
+/// 🎵 暂停音频引擎（进入后台时调用，以便系统更新控制中心按钮状态）
+- (void)pauseEngine;
+
+/// 🎵 恢复音频引擎（从后台回到前台时调用）
+- (void)resumeEngine;
 
 /// 跳转到指定时间播放
 /// @param time 目标时间（秒）

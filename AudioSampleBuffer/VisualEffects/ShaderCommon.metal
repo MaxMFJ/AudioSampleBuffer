@@ -40,6 +40,37 @@ struct Uniforms {
     float4 cyberpunkBackgroundParams; // 赛博朋克背景参数: (solidColorR, solidColorG, solidColorB, intensity)
 };
 
+// AI 增强的 Uniforms（用于丁达尔效应等需要动态颜色的效果）
+struct UniformsAI {
+    float4x4 projectionMatrix;
+    float4x4 modelViewMatrix;
+    float4 time;
+    float4 resolution;
+    float4 audioData[80];
+    float4 galaxyParams1;
+    float4 galaxyParams2;
+    float4 galaxyParams3;
+    float4 cyberpunkControls;
+    float4 cyberpunkFrequencyControls;
+    float4 cyberpunkBackgroundParams;
+    
+    // AI 音乐分析参数
+    float4 aiParams1;  // (bpm/100, energy, danceability, valence)
+    float4 aiParams2;  // (animSpeed, brightness, triggerSens, atmoIntensity)
+    
+    // AI 动态颜色（RGB + reserved）
+    float4 aiColorAtmosphere;
+    float4 aiColorVolumetricBeam;
+    float4 aiColorTopLightArray;
+    float4 aiColorLaserFanBlue;
+    float4 aiColorLaserFanGreen;
+    float4 aiColorRotatingBeam;
+    float4 aiColorRotatingBeamExtra;   // 额外6条旋转细丝颜色
+    float4 aiColorEdgeLight;           // 底部边缘描绘光颜色
+    float4 aiColorCoronaFilaments;     // 外围长丝 + 放射日冕丝颜色
+    float4 aiColorPulseRing;           // 脉冲环颜色
+};
+
 #pragma mark - 辅助函数（使用static inline避免重复符号）
 
 // 宽高比校正 + 缩放函数

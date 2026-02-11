@@ -171,6 +171,12 @@
                                                category:EffectCategoryExperimental
                                        performanceLevel:PerformanceLevelHigh]];
     
+    [effects addObject:[VisualEffectInfo effectWithType:VisualEffectTypeTyndallBeam
+                                                   name:@"丁达尔光束"
+                                            description:@"舞台灯光照射感，随频谱高度解锁多层光柱与尘埃感"
+                                               category:EffectCategoryExperimental
+                                       performanceLevel:PerformanceLevelHigh]];
+    
     self.effects = [effects copy];
 }
 
