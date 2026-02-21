@@ -55,6 +55,7 @@
 @property (nonatomic, strong) UIButton *clearAICacheButton;  // 清除 AI 缓存按钮
 @property (nonatomic, assign) MusicSortType currentSortType;  // 当前排序方式
 @property (nonatomic, assign) BOOL sortAscending;  // 排序方向
+@property (nonatomic, strong) UIScrollView *leftFunctionScrollView;  // 🆕 左侧功能栏滚动容器
 
 // 🎵 播放控制按钮
 @property (nonatomic, strong) UIButton *previousButton;  // 上一首按钮
@@ -739,35 +740,10 @@
             self.fpsLabel.alpha = self.isUIHidden ? 0.0 : 1.0;
         }
         
-        // 🎵 隐藏歌曲列表相关的UI控件
-        // 分类按钮
-        for (UIButton *categoryBtn in self.categoryButtons) {
-            categoryBtn.alpha = self.isUIHidden ? 0.0 : 1.0;
-            categoryBtn.userInteractionEnabled = !self.isUIHidden;
-        }
-        
-        // 排序按钮
-        if (self.sortButton) {
-            self.sortButton.alpha = self.isUIHidden ? 0.0 : 1.0;
-            self.sortButton.userInteractionEnabled = !self.isUIHidden;
-        }
-        
-        // 重新扫描按钮
-        if (self.reloadButton) {
-            self.reloadButton.alpha = self.isUIHidden ? 0.0 : 1.0;
-            self.reloadButton.userInteractionEnabled = !self.isUIHidden;
-        }
-        
-        // 导入按钮
-        if (self.importButton) {
-            self.importButton.alpha = self.isUIHidden ? 0.0 : 1.0;
-            self.importButton.userInteractionEnabled = !self.isUIHidden;
-        }
-        
-        // 清除 AI 缓存按钮
-        if (self.clearAICacheButton) {
-            self.clearAICacheButton.alpha = self.isUIHidden ? 0.0 : 1.0;
-            self.clearAICacheButton.userInteractionEnabled = !self.isUIHidden;
+        // 🆕 左侧功能栏滚动视图（包含分类按钮、排序、导入等）
+        if (self.leftFunctionScrollView) {
+            self.leftFunctionScrollView.alpha = self.isUIHidden ? 0.0 : 1.0;
+            self.leftFunctionScrollView.userInteractionEnabled = !self.isUIHidden;
         }
         
         // 📝 导入歌词按钮
@@ -776,7 +752,7 @@
             self.importLyricsButton.userInteractionEnabled = !self.isUIHidden;
         }
         
-        // 🎵 播放控制按钮
+        // 🎵 右侧播放控制按钮
         if (self.previousButton) {
             self.previousButton.alpha = self.isUIHidden ? 0.0 : 1.0;
             self.previousButton.userInteractionEnabled = !self.isUIHidden;
@@ -789,10 +765,6 @@
             self.nextButton.alpha = self.isUIHidden ? 0.0 : 1.0;
             self.nextButton.userInteractionEnabled = !self.isUIHidden;
         }
-        if (self.loopButton) {
-            self.loopButton.alpha = self.isUIHidden ? 0.0 : 1.0;
-            self.loopButton.userInteractionEnabled = !self.isUIHidden;
-        }
         
         // 搜索框
         if (self.searchBar) {
@@ -803,18 +775,6 @@
             }
         }
         
-        // 云端按钮
-        if (self.cloudButton) {
-            self.cloudButton.alpha = self.isUIHidden ? 0.0 : 1.0;
-            self.cloudButton.userInteractionEnabled = !self.isUIHidden;
-        }
-        
-        // 🎼 歌词打轴按钮
-        if (self.lyricsTimingButton) {
-            self.lyricsTimingButton.alpha = self.isUIHidden ? 0.0 : 1.0;
-            self.lyricsTimingButton.userInteractionEnabled = !self.isUIHidden;
-        }
-        
         // 🎵 进度条
         [self setProgressViewHidden:self.isUIHidden animated:NO];
     }];
@@ -823,6 +783,14 @@
 - (void)bringControlButtonsToFront {
     // 将UI切换按钮提到最前面（始终可见）
     [self.view bringSubviewToFront:self.toggleUIButton];
+    
+    // 将左侧功能栏滚动视图提到前面
+    [self.view bringSubviewToFront:self.leftFunctionScrollView];
+    
+    // 将右侧播放控制按钮提到前面
+    [self.view bringSubviewToFront:self.previousButton];
+    [self.view bringSubviewToFront:self.playPauseButton];
+    [self.view bringSubviewToFront:self.nextButton];
     
     // 将所有控制按钮提到最前面
     [self.view bringSubviewToFront:self.performanceControlButton];
@@ -842,6 +810,9 @@
             subview != self.cyberpunkControlButton &&
             subview != self.karaokeButton &&
             subview != self.lyricsEffectButton &&
+            subview != self.previousButton &&
+            subview != self.playPauseButton &&
+            subview != self.nextButton &&
             subview.tag >= 0 && subview.tag < VisualEffectTypeCount) {
             [self.view bringSubviewToFront:subview];
         }
@@ -1161,11 +1132,24 @@
     CGFloat statusBarHeight = [[UIApplication sharedApplication] statusBarFrame].size.height;
     CGFloat topOffset = MAX(safeTop, statusBarHeight + navigationBarHeight) + 140;
     
-    // 🆕 左侧分类按钮组 - 竖向排列
+    // 🆕 左侧可滑动功能栏 - 使用 UIScrollView 包裹按钮
     CGFloat leftX = 10;
     CGFloat buttonWidth = 70;
     CGFloat buttonHeight = 40;
     CGFloat spacing = 8;
+    CGFloat scrollViewWidth = buttonWidth + 20;  // 按钮宽度 + 左右边距
+    CGFloat scrollViewHeight = self.view.frame.size.height - topOffset - 20;  // 屏幕剩余高度
+    
+    // 创建左侧滚动容器
+    self.leftFunctionScrollView = [[UIScrollView alloc] initWithFrame:CGRectMake(0, topOffset, scrollViewWidth, scrollViewHeight)];
+    self.leftFunctionScrollView.showsVerticalScrollIndicator = YES;
+    self.leftFunctionScrollView.showsHorizontalScrollIndicator = NO;
+    self.leftFunctionScrollView.bounces = YES;
+    self.leftFunctionScrollView.backgroundColor = [UIColor clearColor];
+    [self.view addSubview:self.leftFunctionScrollView];
+    
+    // 左侧分类按钮组 - 竖向排列（放入 ScrollView）
+    CGFloat contentY = 0;  // ScrollView 内部的 Y 坐标
     
     self.categoryButtons = [NSMutableArray array];
     
@@ -1189,11 +1173,11 @@
         button.layer.borderColor = [UIColor colorWithWhite:0.4 alpha:0.6].CGColor;
         button.tag = [catInfo[@"category"] integerValue];
         
-        CGFloat yPos = topOffset + i * (buttonHeight + spacing);
+        CGFloat yPos = contentY + i * (buttonHeight + spacing);
         button.frame = CGRectMake(leftX, yPos, buttonWidth, buttonHeight);
         
         [button addTarget:self action:@selector(categoryButtonTapped:) forControlEvents:UIControlEventTouchUpInside];
-        [self.view addSubview:button];
+        [self.leftFunctionScrollView addSubview:button];
         [self.categoryButtons addObject:button];
         
         // 默认选中"全部"
@@ -1203,8 +1187,8 @@
         }
     }
     
-    // 🆕 排序按钮 - 放在分类按钮下方
-    CGFloat sortButtonY = topOffset + categories.count * (buttonHeight + spacing) + 15;
+    // 排序按钮 - 放在分类按钮下方
+    CGFloat sortButtonY = contentY + categories.count * (buttonHeight + spacing) + 15;
     self.sortButton = [UIButton buttonWithType:UIButtonTypeSystem];
     [self.sortButton setTitle:@"🔄 排序" forState:UIControlStateNormal];
     [self.sortButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
@@ -1215,9 +1199,9 @@
     self.sortButton.layer.borderColor = [UIColor colorWithRed:0.4 green:0.8 blue:0.4 alpha:0.8].CGColor;
     self.sortButton.frame = CGRectMake(leftX, sortButtonY, buttonWidth, buttonHeight);
     [self.sortButton addTarget:self action:@selector(sortButtonTapped:) forControlEvents:UIControlEventTouchUpInside];
-    [self.view addSubview:self.sortButton];
+    [self.leftFunctionScrollView addSubview:self.sortButton];
     
-    // 🆕 刷新音乐库按钮 - 放在排序按钮下方
+    // 刷新音乐库按钮 - 放在排序按钮下方
     CGFloat reloadButtonY = sortButtonY + buttonHeight + spacing;
     self.reloadButton = [UIButton buttonWithType:UIButtonTypeSystem];
     [self.reloadButton setTitle:@"🔄 重新扫描" forState:UIControlStateNormal];
@@ -1229,9 +1213,9 @@
     self.reloadButton.layer.borderColor = [UIColor colorWithRed:1.0 green:0.5 blue:0.3 alpha:0.8].CGColor;
     self.reloadButton.frame = CGRectMake(leftX, reloadButtonY, buttonWidth, buttonHeight);
     [self.reloadButton addTarget:self action:@selector(reloadMusicLibraryButtonTapped:) forControlEvents:UIControlEventTouchUpInside];
-    [self.view addSubview:self.reloadButton];
+    [self.leftFunctionScrollView addSubview:self.reloadButton];
     
-    // 🆕 导入音乐按钮 - 放在重新扫描按钮下方
+    // 导入音乐按钮 - 放在重新扫描按钮下方
     CGFloat importButtonY = reloadButtonY + buttonHeight + spacing;
     self.importButton = [UIButton buttonWithType:UIButtonTypeSystem];
     [self.importButton setTitle:@"📥 导入" forState:UIControlStateNormal];
@@ -1243,9 +1227,9 @@
     self.importButton.layer.borderColor = [UIColor colorWithRed:0.3 green:0.7 blue:1.0 alpha:0.8].CGColor;
     self.importButton.frame = CGRectMake(leftX, importButtonY, buttonWidth, buttonHeight);
     [self.importButton addTarget:self action:@selector(importMusicButtonTapped:) forControlEvents:UIControlEventTouchUpInside];
-    [self.view addSubview:self.importButton];
+    [self.leftFunctionScrollView addSubview:self.importButton];
     
-    // 🎨 清除 AI 缓存按钮 - 放在导入按钮下方
+    // 清除 AI 缓存按钮 - 放在导入按钮下方
     CGFloat clearAICacheButtonY = importButtonY + buttonHeight + spacing;
     self.clearAICacheButton = [UIButton buttonWithType:UIButtonTypeSystem];
     [self.clearAICacheButton setTitle:@"🗑️ 清除 AI" forState:UIControlStateNormal];
@@ -1257,57 +1241,14 @@
     self.clearAICacheButton.layer.borderColor = [UIColor colorWithRed:1.0 green:0.4 blue:0.4 alpha:0.8].CGColor;
     self.clearAICacheButton.frame = CGRectMake(leftX, clearAICacheButtonY, buttonWidth, buttonHeight);
     [self.clearAICacheButton addTarget:self action:@selector(clearAICacheButtonTapped:) forControlEvents:UIControlEventTouchUpInside];
-    [self.view addSubview:self.clearAICacheButton];
+    [self.leftFunctionScrollView addSubview:self.clearAICacheButton];
     
-    // 🎵 播放控制按钮 - 放在清除 AI 缓存按钮下方，纵向排列4个按钮
-    CGFloat controlButtonsY = clearAICacheButtonY + buttonHeight + spacing;
-    CGFloat controlButtonWidth = buttonWidth;  // 使用完整宽度
-    CGFloat controlButtonHeight = 32;  // 按钮高度
-    CGFloat controlSpacing = 4;  // 按钮之间的间距
-    
-    // 上一首按钮
-    self.previousButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    [self.previousButton setTitle:@"⏮️" forState:UIControlStateNormal];
-    self.previousButton.titleLabel.font = [UIFont systemFontOfSize:20];
-    [self.previousButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-    self.previousButton.backgroundColor = [UIColor colorWithRed:0.3 green:0.5 blue:0.7 alpha:0.85];
-    self.previousButton.layer.cornerRadius = 6;
-    self.previousButton.layer.borderWidth = 1.0;
-    self.previousButton.layer.borderColor = [UIColor colorWithRed:0.4 green:0.6 blue:0.8 alpha:0.8].CGColor;
-    self.previousButton.frame = CGRectMake(leftX, controlButtonsY, controlButtonWidth, controlButtonHeight);
-    [self.previousButton addTarget:self action:@selector(previousButtonTapped:) forControlEvents:UIControlEventTouchUpInside];
-    [self.view addSubview:self.previousButton];
-    
-    // 播放/暂停按钮
-    CGFloat playButtonY = controlButtonsY + controlButtonHeight + controlSpacing;
-    self.playPauseButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    [self.playPauseButton setTitle:@"▶️" forState:UIControlStateNormal];
-    self.playPauseButton.titleLabel.font = [UIFont systemFontOfSize:20];
-    [self.playPauseButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-    self.playPauseButton.backgroundColor = [UIColor colorWithRed:0.2 green:0.7 blue:0.3 alpha:0.85];
-    self.playPauseButton.layer.cornerRadius = 6;
-    self.playPauseButton.layer.borderWidth = 1.0;
-    self.playPauseButton.layer.borderColor = [UIColor colorWithRed:0.3 green:0.8 blue:0.4 alpha:0.8].CGColor;
-    self.playPauseButton.frame = CGRectMake(leftX, playButtonY, controlButtonWidth, controlButtonHeight);
-    [self.playPauseButton addTarget:self action:@selector(playPauseButtonTapped:) forControlEvents:UIControlEventTouchUpInside];
-    [self.view addSubview:self.playPauseButton];
-    
-    // 下一首按钮
-    CGFloat nextButtonY = playButtonY + controlButtonHeight + controlSpacing;
-    self.nextButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    [self.nextButton setTitle:@"⏭️" forState:UIControlStateNormal];
-    self.nextButton.titleLabel.font = [UIFont systemFontOfSize:20];
-    [self.nextButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-    self.nextButton.backgroundColor = [UIColor colorWithRed:0.3 green:0.5 blue:0.7 alpha:0.85];
-    self.nextButton.layer.cornerRadius = 6;
-    self.nextButton.layer.borderWidth = 1.0;
-    self.nextButton.layer.borderColor = [UIColor colorWithRed:0.4 green:0.6 blue:0.8 alpha:0.8].CGColor;
-    self.nextButton.frame = CGRectMake(leftX, nextButtonY, controlButtonWidth, controlButtonHeight);
-    [self.nextButton addTarget:self action:@selector(nextButtonTapped:) forControlEvents:UIControlEventTouchUpInside];
-    [self.view addSubview:self.nextButton];
+    // 左侧功能栏中的其他按钮（循环、云端、歌词打轴）
+    CGFloat controlButtonHeight = 32;
+    CGFloat controlSpacing = 4;
     
     // 单曲循环按钮
-    CGFloat loopButtonY = nextButtonY + controlButtonHeight + controlSpacing;
+    CGFloat loopButtonY = clearAICacheButtonY + buttonHeight + spacing + 10;
     self.loopButton = [UIButton buttonWithType:UIButtonTypeSystem];
     [self.loopButton setTitle:@"🔁" forState:UIControlStateNormal];
     self.loopButton.titleLabel.font = [UIFont systemFontOfSize:20];
@@ -1316,9 +1257,9 @@
     self.loopButton.layer.cornerRadius = 6;
     self.loopButton.layer.borderWidth = 1.0;
     self.loopButton.layer.borderColor = [UIColor colorWithRed:0.7 green:0.5 blue:0.8 alpha:0.8].CGColor;
-    self.loopButton.frame = CGRectMake(leftX, loopButtonY, controlButtonWidth, controlButtonHeight);
+    self.loopButton.frame = CGRectMake(leftX, loopButtonY, buttonWidth, controlButtonHeight);
     [self.loopButton addTarget:self action:@selector(loopButtonTapped:) forControlEvents:UIControlEventTouchUpInside];
-    [self.view addSubview:self.loopButton];
+    [self.leftFunctionScrollView addSubview:self.loopButton];
     
     // 初始化循环模式
     self.isSingleLoopMode = NO;
@@ -1333,11 +1274,11 @@
     self.cloudButton.layer.cornerRadius = 6;
     self.cloudButton.layer.borderWidth = 1.0;
     self.cloudButton.layer.borderColor = [UIColor colorWithRed:0.3 green:0.7 blue:1.0 alpha:0.8].CGColor;
-    self.cloudButton.frame = CGRectMake(leftX, cloudButtonY, controlButtonWidth, controlButtonHeight);
+    self.cloudButton.frame = CGRectMake(leftX, cloudButtonY, buttonWidth, controlButtonHeight);
     [self.cloudButton addTarget:self action:@selector(cloudDownloadButtonTapped:) forControlEvents:UIControlEventTouchUpInside];
-    [self.view addSubview:self.cloudButton];
+    [self.leftFunctionScrollView addSubview:self.cloudButton];
     
-    // 🎼 歌词打轴按钮 - 放在云端按钮下方
+    // 歌词打轴按钮 - 放在云端按钮下方
     CGFloat timingButtonY = cloudButtonY + controlButtonHeight + controlSpacing;
     self.lyricsTimingButton = [UIButton buttonWithType:UIButtonTypeSystem];
     [self.lyricsTimingButton setTitle:@"🎼" forState:UIControlStateNormal];
@@ -1347,13 +1288,67 @@
     self.lyricsTimingButton.layer.cornerRadius = 6;
     self.lyricsTimingButton.layer.borderWidth = 1.0;
     self.lyricsTimingButton.layer.borderColor = [UIColor colorWithRed:1.0 green:0.7 blue:0.3 alpha:0.8].CGColor;
-    self.lyricsTimingButton.frame = CGRectMake(leftX, timingButtonY, controlButtonWidth, controlButtonHeight);
+    self.lyricsTimingButton.frame = CGRectMake(leftX, timingButtonY, buttonWidth, controlButtonHeight);
     [self.lyricsTimingButton addTarget:self action:@selector(lyricsTimingButtonTapped:) forControlEvents:UIControlEventTouchUpInside];
-    [self.view addSubview:self.lyricsTimingButton];
+    [self.leftFunctionScrollView addSubview:self.lyricsTimingButton];
     
-    // 🆕 添加搜索栏 - 放在右侧
-    CGFloat searchBarX = leftX + buttonWidth + 15;
-    CGFloat searchBarWidth = self.view.frame.size.width - searchBarX - 10;
+    // 设置 ScrollView 的内容大小
+    CGFloat totalContentHeight = timingButtonY + controlButtonHeight + 20;
+    self.leftFunctionScrollView.contentSize = CGSizeMake(scrollViewWidth, totalContentHeight);
+    
+    // 🎵 右侧播放控制按钮 - 上一首、播放/暂停、下一首（横向排列）
+    CGFloat screenWidth = self.view.frame.size.width;
+    CGFloat playControlWidth = 50;  // 每个按钮宽度
+    CGFloat playControlHeight = 40;
+    CGFloat playControlSpacing = 8;
+    CGFloat totalPlayControlWidth = playControlWidth * 3 + playControlSpacing * 2;
+    CGFloat playControlX = screenWidth - totalPlayControlWidth - 15;  // 右侧边距 15
+    CGFloat playControlY = topOffset;  // 与左侧按钮同高
+    
+    // 上一首按钮
+    self.previousButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    [self.previousButton setTitle:@"⏮️" forState:UIControlStateNormal];
+    self.previousButton.titleLabel.font = [UIFont systemFontOfSize:20];
+    [self.previousButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+    self.previousButton.backgroundColor = [UIColor colorWithRed:0.3 green:0.5 blue:0.7 alpha:0.85];
+    self.previousButton.layer.cornerRadius = 6;
+    self.previousButton.layer.borderWidth = 1.0;
+    self.previousButton.layer.borderColor = [UIColor colorWithRed:0.4 green:0.6 blue:0.8 alpha:0.8].CGColor;
+    self.previousButton.frame = CGRectMake(playControlX, playControlY, playControlWidth, playControlHeight);
+    [self.previousButton addTarget:self action:@selector(previousButtonTapped:) forControlEvents:UIControlEventTouchUpInside];
+    [self.view addSubview:self.previousButton];
+    
+    // 播放/暂停按钮
+    CGFloat playButtonX = playControlX + playControlWidth + playControlSpacing;
+    self.playPauseButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    [self.playPauseButton setTitle:@"▶️" forState:UIControlStateNormal];
+    self.playPauseButton.titleLabel.font = [UIFont systemFontOfSize:20];
+    [self.playPauseButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+    self.playPauseButton.backgroundColor = [UIColor colorWithRed:0.2 green:0.7 blue:0.3 alpha:0.85];
+    self.playPauseButton.layer.cornerRadius = 6;
+    self.playPauseButton.layer.borderWidth = 1.0;
+    self.playPauseButton.layer.borderColor = [UIColor colorWithRed:0.3 green:0.8 blue:0.4 alpha:0.8].CGColor;
+    self.playPauseButton.frame = CGRectMake(playButtonX, playControlY, playControlWidth, playControlHeight);
+    [self.playPauseButton addTarget:self action:@selector(playPauseButtonTapped:) forControlEvents:UIControlEventTouchUpInside];
+    [self.view addSubview:self.playPauseButton];
+    
+    // 下一首按钮
+    CGFloat nextButtonX = playButtonX + playControlWidth + playControlSpacing;
+    self.nextButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    [self.nextButton setTitle:@"⏭️" forState:UIControlStateNormal];
+    self.nextButton.titleLabel.font = [UIFont systemFontOfSize:20];
+    [self.nextButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+    self.nextButton.backgroundColor = [UIColor colorWithRed:0.3 green:0.5 blue:0.7 alpha:0.85];
+    self.nextButton.layer.cornerRadius = 6;
+    self.nextButton.layer.borderWidth = 1.0;
+    self.nextButton.layer.borderColor = [UIColor colorWithRed:0.4 green:0.6 blue:0.8 alpha:0.8].CGColor;
+    self.nextButton.frame = CGRectMake(nextButtonX, playControlY, playControlWidth, playControlHeight);
+    [self.nextButton addTarget:self action:@selector(nextButtonTapped:) forControlEvents:UIControlEventTouchUpInside];
+    [self.view addSubview:self.nextButton];
+    
+    // 🆕 添加搜索栏 - 放在左侧功能栏右边
+    CGFloat searchBarX = scrollViewWidth + 5;
+    CGFloat searchBarWidth = playControlX - searchBarX - 10;  // 在左侧滚动区和播放按钮之间
     self.searchBar = [[UISearchBar alloc] initWithFrame:CGRectMake(searchBarX, topOffset, searchBarWidth, 50)];
     self.searchBar.delegate = self;
     self.searchBar.placeholder = @"搜索歌曲、艺术家...";
@@ -1370,7 +1365,7 @@
     // 更新 TableView 位置
     CGFloat tableY = topOffset + 60;
     CGFloat tableX = searchBarX;
-    CGFloat tableWidth = searchBarWidth;
+    CGFloat tableWidth = self.view.frame.size.width - searchBarX - 10;
     self.tableView = [[UITableView alloc] initWithFrame:CGRectMake(tableX, tableY, tableWidth, self.view.frame.size.height - tableY) style:UITableViewStylePlain];
     self.tableView.delegate = self;
     self.tableView.dataSource = self;
@@ -2096,7 +2091,6 @@
     AVURLAsset*mp3Asset = [AVURLAsset URLAssetWithURL:url options:nil];
     
     NSLog(@"🔍 [封面读取] 文件: %@", url.path.lastPathComponent);
-    NSLog(@"   可用格式数: %lu", (unsigned long)[mp3Asset availableMetadataFormats].count);
 
     // 读取文件中的数据
     for(NSString*format in [mp3Asset availableMetadataFormats]) {
