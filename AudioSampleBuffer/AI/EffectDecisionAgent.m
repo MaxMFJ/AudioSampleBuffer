@@ -131,8 +131,8 @@ NSString *const kEffectDecisionAgentDidLearnNotification = @"EffectDecisionAgent
     config.localRulesConfidenceThreshold = 0.7;
     config.userPreferenceConfidenceThreshold = 0.6;
     config.selfLearningWeight = 0.3;
-    config.maxLLMRetries = 3;
-    config.llmTimeout = 10.0;
+    config.maxLLMRetries = 4;           // DeepSeek 响应较慢，多给几次机会
+    config.llmTimeout = 35.0;          // 单次请求超时 35 秒（DeepSeek 通常 10-25 秒返回）
     config.enableSelfLearning = YES;
     config.enableDirectLLMCall = YES;
     config.historyRecordLimit = 1000;
@@ -238,9 +238,11 @@ NSString *const kEffectDecisionAgentDidLearnNotification = @"EffectDecisionAgent
 
 - (void)setupURLSession {
     NSURLSessionConfiguration *config = [NSURLSessionConfiguration defaultSessionConfiguration];
-    config.timeoutIntervalForRequest = self.configuration.llmTimeout;
-    config.timeoutIntervalForResource = self.configuration.llmTimeout * 2;
+    NSTimeInterval timeout = MAX(25.0, self.configuration.llmTimeout);  // 至少 25 秒
+    config.timeoutIntervalForRequest = timeout;
+    config.timeoutIntervalForResource = timeout * 2;  // 整体资源超时
     self.urlSession = [NSURLSession sessionWithConfiguration:config];
+    NSLog(@"🌐 LLM 请求超时设置: %.0f 秒", timeout);
 }
 
 - (void)setupStyleEffectMapping {
@@ -548,7 +550,8 @@ NSString *const kEffectDecisionAgentDidLearnNotification = @"EffectDecisionAgent
            additionalContext:(nullable NSDictionary *)additionalContext
                   completion:(LLMAnalysisCompletion)completion {
     
-    NSLog(@"🔗 直接调用 DeepSeek API: %@ - %@", songName, artist ?: @"Unknown");
+    NSLog(@"🔗 直接调用 DeepSeek API: %@ - %@（单次超时 %.0f 秒，请耐心等待）", 
+          songName, artist ?: @"Unknown", self.configuration.llmTimeout);
     
     self.isCallingLLM = YES;
     [self incrementStatistic:@"llmCalls"];
@@ -639,9 +642,10 @@ NSString *const kEffectDecisionAgentDidLearnNotification = @"EffectDecisionAgent
     
     [self callDeepSeekDirectly:songName artist:artist additionalContext:nil completion:^(NSDictionary *response, NSError *error) {
         if (error) {
-            // 延迟后重试
-            NSTimeInterval delay = pow(2, retryCount) * 0.5;  // 指数退避: 0.5s, 1s, 2s...
-            NSLog(@"⏳ %.1f秒后重试...", delay);
+            // 指数退避：3s, 6s, 12s, 24s（给 DeepSeek 足够时间）
+            NSTimeInterval delay = pow(2, retryCount) * 3.0;
+            NSLog(@"❌ LLM 本次失败: %@", error.localizedDescription);
+            NSLog(@"⏳ %.0f 秒后重试 (第 %ld 次重试)...", delay, (long)(retryCount + 1));
             
             dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(delay * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
                 [self callDeepSeekWithRetry:songName artist:artist retryCount:retryCount + 1 completion:completion];

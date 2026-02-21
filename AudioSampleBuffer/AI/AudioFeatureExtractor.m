@@ -394,66 +394,68 @@ static const float kEMAAlpha = 0.3f;
     NSTimeInterval timeSinceStart = currentTime - self.startTime;
     NSTimeInterval timeSinceSegmentStart = currentTime - self.segmentStartTime;
     
-    // === 防抖动：段落必须保持最小时间 ===
-    static const NSTimeInterval kMinSegmentDuration = 10.0;  // 最少10秒
-    static const NSTimeInterval kMinChorusDuration = 15.0;   // 副歌至少15秒
-    static const NSInteger kMaxChorusCount = 4;              // 一首歌最多4个副歌
+    // === 参数配置 ===
+    static const NSTimeInterval kMinSegmentDuration = 6.0;   // 段落至少6秒
+    static const NSTimeInterval kMinChorusDuration = 8.0;    // 副歌至少8秒
+    static const NSInteger kMaxChorusCount = 5;              // 一首歌最多5个副歌
     
-    if (timeSinceSegmentStart < kMinSegmentDuration && self.previousSegment != MusicSegmentUnknown) {
-        return self.previousSegment;
-    }
-    
-    // 更新能量统计 (多时间尺度)
-    float alphaLong = 0.005f;      // 长期 (~3秒)
-    float alphaShort = 0.08f;      // 短期 (~0.2秒)
+    // 更新能量统计 (每帧都更新)
+    float alphaLong = 0.008f;
+    float alphaShort = 0.1f;
     
     self.longTermEnergy = alphaLong * features.energy + (1 - alphaLong) * self.longTermEnergy;
     self.shortTermEnergy = alphaShort * features.energy + (1 - alphaShort) * self.shortTermEnergy;
     
     // 更新能量包络历史
     [self.energyEnvelope addObject:@(features.energy)];
-    if (self.energyEnvelope.count > 600) {  // 约10秒数据
+    if (self.energyEnvelope.count > 300) {
         [self.energyEnvelope removeObjectAtIndex:0];
     }
     
     // 更新频谱对比历史
     float contrast = features.highEnergy - features.bassEnergy;
     [self.spectralContrast addObject:@(contrast)];
-    if (self.spectralContrast.count > 600) {
+    if (self.spectralContrast.count > 300) {
         [self.spectralContrast removeObjectAtIndex:0];
     }
     
     // 计算统计量
     [self updateSegmentStatistics:features];
     
-    // === 检测音乐类型：低能量音乐 vs 高能量音乐 ===
-    BOOL isLowEnergyMusic = (self.peakEnergy < 0.4);
+    // === 防抖动：前几秒不切换 ===
+    if (timeSinceSegmentStart < kMinSegmentDuration && self.previousSegment != MusicSegmentUnknown) {
+        return self.previousSegment;
+    }
+    
+    // === 检测音乐类型 ===
+    BOOL isLowEnergyMusic = (self.peakEnergy < 0.35);
+    BOOL isVeryLowEnergyMusic = (self.peakEnergy < 0.2);
     
     // === 智能段落检测 ===
     
-    // 1. 前奏检测 (开头15-30秒)
-    if (!self.introDetected && timeSinceStart < 30.0) {
-        // 前奏条件：时间早 + 能量相对较低
-        float introThreshold = isLowEnergyMusic ? 
-            (self.averageEnergy + 0.05) : 
-            (self.chorusEnergyThreshold * 0.6);
-        
-        if (features.energy < introThreshold || timeSinceStart < 10.0) {
+    // 1. 前奏检测 (开头8-20秒)
+    if (!self.introDetected) {
+        if (timeSinceStart < 8.0) {
             return MusicSegmentIntro;
+        }
+        if (timeSinceStart < 20.0) {
+            // 能量还在上升阶段
+            float energyRatio = (self.averageEnergy > 0.01) ? 
+                (features.energy / self.averageEnergy) : 1.0;
+            if (energyRatio < 1.15) {
+                return MusicSegmentIntro;
+            }
         }
         self.introDetected = YES;
     }
     
-    // 2. 尾奏检测 (歌曲后期，能量持续下降)
-    if (timeSinceStart > 90.0) {  // 至少1.5分钟后
+    // 2. 尾奏检测
+    if (timeSinceStart > 120.0) {
         float recentEnergyTrend = [self calculateRecentEnergyTrend];
-        
-        // 能量持续下降
-        if (recentEnergyTrend < -0.02 && 
-            self.shortTermEnergy < self.averageEnergy * 0.6) {
-            
+        if (recentEnergyTrend < -0.01 && 
+            self.shortTermEnergy < self.averageEnergy * 0.7) {
             self.stableFrameCount++;
-            if (self.stableFrameCount > 60) {  // 约1秒稳定
+            if (self.stableFrameCount > 90) {
                 return MusicSegmentOutro;
             }
         } else {
@@ -461,87 +463,79 @@ static const float kEMAAlpha = 0.3f;
         }
     }
     
-    // 3. 副歌/高潮检测
-    // 对于低能量音乐，使用相对能量比较
-    float energyRatio = (self.averageEnergy > 0.01) ? 
+    // 3. 计算副歌评分
+    float energyRatio = (self.averageEnergy > 0.005) ? 
         (features.energy / self.averageEnergy) : 1.0;
+    float shortLongRatio = (self.longTermEnergy > 0.005) ?
+        (self.shortTermEnergy / self.longTermEnergy) : 1.0;
     
-    float energyDelta = features.energy - self.averageEnergy;
-    
-    // 副歌特征评分
     float chorusScore = 0;
     
-    if (isLowEnergyMusic) {
-        // 低能量音乐：基于相对变化
-        if (energyRatio > 1.3) chorusScore += 0.4;        // 能量比平均高30%
-        if (energyDelta > 0.03) chorusScore += 0.3;       // 绝对差值
-        if (features.spectralFlux > 0.2) chorusScore += 0.3;  // 频谱变化
+    if (isVeryLowEnergyMusic) {
+        // 非常低能量音乐（如氛围音乐）：主要看相对变化
+        if (energyRatio > 1.15) chorusScore += 0.4;
+        if (shortLongRatio > 1.1) chorusScore += 0.3;
+        if (features.spectralFlux > 0.1) chorusScore += 0.3;
+    } else if (isLowEnergyMusic) {
+        // 低能量音乐：混合策略
+        if (energyRatio > 1.2) chorusScore += 0.35;
+        if (shortLongRatio > 1.15) chorusScore += 0.25;
+        if (features.spectralFlux > 0.15) chorusScore += 0.2;
+        if (features.bassEnergy > self.averageEnergy) chorusScore += 0.2;
     } else {
-        // 高能量音乐：基于绝对值
-        if (features.energy > self.chorusEnergyThreshold) chorusScore += 0.35;
-        if (self.shortTermEnergy > self.longTermEnergy * 1.25) chorusScore += 0.25;
-        if (features.highEnergy > 0.3) chorusScore += 0.2;
-        if (features.bassEnergy > self.averageEnergy * 0.8) chorusScore += 0.2;
+        // 正常/高能量音乐
+        if (features.energy > self.chorusEnergyThreshold) chorusScore += 0.3;
+        if (energyRatio > 1.25) chorusScore += 0.25;
+        if (shortLongRatio > 1.2) chorusScore += 0.2;
+        if (features.highEnergy > 0.25) chorusScore += 0.15;
+        if (features.bassEnergy > 0.3) chorusScore += 0.1;
     }
     
-    // 副歌检测阈值 (使用滞后效应防止震荡)
-    float enterChorusThreshold = 0.7;   // 进入副歌需要高分
-    float exitChorusThreshold = 0.4;    // 退出副歌需要低分
+    // 滞后阈值
+    float enterThreshold = 0.55;  // 进入副歌
+    float exitThreshold = 0.35;   // 退出副歌
     
     BOOL inChorus = (self.previousSegment == MusicSegmentChorus);
     BOOL shouldBeChorus = inChorus ? 
-        (chorusScore >= exitChorusThreshold) : 
-        (chorusScore >= enterChorusThreshold);
+        (chorusScore >= exitThreshold) : 
+        (chorusScore >= enterThreshold);
     
-    // 限制副歌数量
+    // 副歌数量限制
     if (shouldBeChorus && !inChorus && self.chorusCount >= kMaxChorusCount) {
-        shouldBeChorus = NO;  // 已经有足够多的副歌了
+        shouldBeChorus = NO;
     }
     
-    // 副歌持续时间检查
+    // 副歌最小持续时间
     if (inChorus && timeSinceSegmentStart < kMinChorusDuration) {
-        return MusicSegmentChorus;  // 副歌还没持续够时间
+        return MusicSegmentChorus;
     }
     
+    // 副歌判定
     if (shouldBeChorus) {
         if (!inChorus) {
             self.chorusCount++;
             if (!self.firstChorusDetected) {
                 self.firstChorusDetected = YES;
                 self.firstChorusTime = currentTime;
-                // 动态调整阈值
-                self.chorusEnergyThreshold = features.energy * 0.9;
+                self.chorusEnergyThreshold = features.energy * 0.85;
             }
         }
         return MusicSegmentChorus;
     }
     
     // 4. 过渡段检测
-    // 从副歌出来后的短暂过渡
-    if (self.previousSegment == MusicSegmentChorus && 
-        timeSinceSegmentStart >= kMinSegmentDuration) {
-        
-        // 能量下降明显
-        if (chorusScore < 0.35 && energyRatio < 1.1) {
-            return MusicSegmentBridge;
-        }
+    if (self.previousSegment == MusicSegmentChorus && !shouldBeChorus) {
+        // 从副歌出来，先进入过渡段
+        return MusicSegmentBridge;
     }
     
-    // 5. 主歌（默认状态）
-    // 从前奏进入主歌
-    if (self.previousSegment == MusicSegmentIntro && timeSinceSegmentStart >= kMinSegmentDuration) {
+    // 5. 从过渡段进入主歌
+    if (self.previousSegment == MusicSegmentBridge && timeSinceSegmentStart >= 4.0) {
         return MusicSegmentVerse;
     }
     
-    // 从过渡段进入主歌
-    if (self.previousSegment == MusicSegmentBridge && timeSinceSegmentStart >= kMinSegmentDuration) {
-        return MusicSegmentVerse;
-    }
-    
-    // 从副歌回到主歌（经过过渡段或直接）
-    if (self.previousSegment == MusicSegmentChorus && 
-        timeSinceSegmentStart >= kMinSegmentDuration &&
-        !shouldBeChorus) {
+    // 6. 从前奏进入主歌
+    if (self.previousSegment == MusicSegmentIntro) {
         return MusicSegmentVerse;
     }
     
