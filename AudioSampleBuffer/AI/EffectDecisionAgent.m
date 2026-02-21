@@ -2,17 +2,21 @@
 //  EffectDecisionAgent.m
 //  AudioSampleBuffer
 //
-//  完全自主的AI决策引擎实现
+//  Planning + Reflection Agent 实现
 //
 
 #import "EffectDecisionAgent.h"
 #import "MusicAIAnalyzer.h"
 #import "AIColorConfiguration.h"
+#import "AgentGoalManager.h"
+#import "AgentPlanner.h"
+#import "AgentReflectionEngine.h"
+#import "AgentMetricsCollector.h"
 
 #pragma mark - Constants
 
-static NSString *const kDeepSeekAPIKey = @"sk-004d32e67f2440c48b3684774d489f12";
-static NSString *const kDeepSeekAPIEndpoint = @"https://api.deepseek.com/chat/completions";
+static NSString *const kDeepSeekAPIKey = @"sk-daef0e2cc0f94c5a8473aa63c5026cd1";
+static NSString *const kDeepSeekAPIEndpoint = @"https://api.deepseek.com/v1/chat/completions";
 
 static NSString *const kLLMDecisionCacheFile = @"LLMDecisionCache.plist";
 static NSString *const kHistoryRecordsFile = @"DecisionHistory.plist";
@@ -143,11 +147,22 @@ NSString *const kEffectDecisionAgentDidLearnNotification = @"EffectDecisionAgent
 
 #pragma mark - EffectDecisionAgent
 
-@interface EffectDecisionAgent ()
+@interface EffectDecisionAgent () <StrategyManagerProtocol>
 
 @property (nonatomic, strong) EffectDecision *currentDecision;
 @property (nonatomic, assign) BOOL isDeciding;
 @property (nonatomic, assign) BOOL isCallingLLM;
+
+// Planning + Reflection 组件
+@property (nonatomic, strong) AgentGoalManager *goalManager;
+@property (nonatomic, strong) AgentPlanner *planner;
+@property (nonatomic, strong) AgentReflectionEngine *reflectionEngine;
+@property (nonatomic, strong) AgentMetricsCollector *metricsCollector;
+@property (nonatomic, strong) ExecutionPlan *currentPlan;
+
+// 策略优先级
+@property (nonatomic, assign) float llmPriority;
+@property (nonatomic, assign) float rulePriority;
 
 // 规则映射表
 @property (nonatomic, strong) NSDictionary<NSNumber *, NSArray<NSNumber *> *> *styleEffectMapping;
@@ -163,6 +178,7 @@ NSString *const kEffectDecisionAgentDidLearnNotification = @"EffectDecisionAgent
 @property (nonatomic, strong) NSString *currentSongName;
 @property (nonatomic, copy) NSString *currentArtist;
 @property (nonatomic, strong) NSDate *songStartTime;
+@property (nonatomic, strong) NSDate *decisionStartTime;
 
 // 当前状态
 @property (nonatomic, assign) MusicStyle currentStyle;
@@ -201,6 +217,10 @@ NSString *const kEffectDecisionAgentDidLearnNotification = @"EffectDecisionAgent
         _currentStyle = MusicStyleUnknown;
         _currentSegment = MusicSegmentUnknown;
         
+        // 初始化策略优先级
+        _llmPriority = 0.5;
+        _rulePriority = 0.5;
+        
         _llmDecisionCache = [NSMutableDictionary dictionary];
         _historyRecords = [NSMutableArray array];
         _learnedWeights = [NSMutableDictionary dictionary];
@@ -219,8 +239,35 @@ NSString *const kEffectDecisionAgentDidLearnNotification = @"EffectDecisionAgent
         [self setupStyleEffectMapping];
         [self setupSegmentEffectBias];
         [self loadAllCaches];
+        
+        // 初始化 Planning + Reflection 组件
+        [self setupPlanningReflectionComponents];
     }
     return self;
+}
+
+#pragma mark - Planning + Reflection Setup
+
+- (void)setupPlanningReflectionComponents {
+    // 获取各组件单例
+    _goalManager = [AgentGoalManager sharedManager];
+    _planner = [AgentPlanner sharedPlanner];
+    _reflectionEngine = [AgentReflectionEngine sharedEngine];
+    _metricsCollector = [AgentMetricsCollector sharedCollector];
+    
+    // 设置反思引擎的策略管理器
+    _reflectionEngine.strategyManager = self;
+    
+    // 加载保存的策略状态
+    [self loadStrategyState];
+    
+    NSLog(@"🧠 Planning + Reflection Agent 初始化完成");
+    NSLog(@"   GoalManager: %@", _goalManager.currentWeights);
+    NSLog(@"   Planner: 历史计划 %lu 条", (unsigned long)_planner.planHistory.count);
+    NSLog(@"   ReflectionEngine: 决策记录 %lu 条 (紧急模式: %@)", 
+          (unsigned long)_reflectionEngine.decisionRecords.count,
+          _reflectionEngine.isEmergencyMode ? @"是" : @"否");
+    NSLog(@"   策略权重: LLM=%.2f, Rule=%.2f", self.llmPriority, self.rulePriority);
 }
 
 #pragma mark - Setup
@@ -375,11 +422,11 @@ NSString *const kEffectDecisionAgentDidLearnNotification = @"EffectDecisionAgent
     return [self.statistics copy];
 }
 
-#pragma mark - Autonomous Decision
+#pragma mark - Planning + Reflection Agent 主流程
 
-- (void)autonomousDecisionForSong:(NSString *)songName
-                           artist:(nullable NSString *)artist
-                       completion:(EffectDecisionCompletion)completion {
+- (void)runAgentForSong:(NSString *)songName
+                 artist:(nullable NSString *)artist
+             completion:(EffectDecisionCompletion)completion {
     
     if (self.isDeciding) {
         NSLog(@"⚠️ Agent 已在决策中，跳过");
@@ -390,57 +437,445 @@ NSString *const kEffectDecisionAgentDidLearnNotification = @"EffectDecisionAgent
     self.currentSongName = songName;
     self.currentArtist = artist;
     self.songStartTime = [NSDate date];
+    self.decisionStartTime = [NSDate date];
     
-    NSLog(@"🤖 Agent 开始自主决策: %@ - %@", songName, artist ?: @"Unknown");
+    NSLog(@"🧠 Planning Agent 开始: %@ - %@", songName, artist ?: @"Unknown");
     
-    [[NSNotificationCenter defaultCenter] postNotificationName:kEffectDecisionAgentDidStartAnalysisNotification
-                                                        object:self
-                                                      userInfo:@{@"songName": songName}];
+    // 记录决策开始事件
+    [self.metricsCollector recordDecisionStartedForSong:songName];
     
-    // Step 1: 检查缓存
-    NSString *cacheKey = [self cacheKeyForSong:songName artist:artist];
-    EffectDecision *cachedDecision = self.llmDecisionCache[cacheKey];
-    
-    if (cachedDecision) {
-        [self incrementStatistic:@"cacheHits"];
-        cachedDecision.source = DecisionSourceLLMCache;
-        NSLog(@"📦 使用缓存决策: %@", [[VisualEffectRegistry sharedRegistry] effectInfoForType:cachedDecision.effectType].name);
-        [self finalizeDecision:cachedDecision completion:completion];
+    // 1️⃣ 检查成本控制
+    if ([self.metricsCollector shouldForceLocalStrategy]) {
+        NSLog(@"💰 成本预算已超限，强制使用本地策略");
+        EffectDecision *localDecision = [self makeLocalRulesDecisionForSong:songName artist:artist];
+        localDecision.reasoning = @"成本控制：今日 LLM 预算已用完";
+        [self finalizePlanningDecision:localDecision completion:completion];
         return;
     }
     
-    // Step 2: 检查自学习结果
-    if (self.configuration.enableSelfLearning) {
-        EffectDecision *learnedDecision = [self decisionFromSelfLearning:songName artist:artist];
-        if (learnedDecision && learnedDecision.confidence >= 0.75) {
-            [self incrementStatistic:@"selfLearningUsed"];
-            NSLog(@"🧠 使用自学习决策: %@", [[VisualEffectRegistry sharedRegistry] effectInfoForType:learnedDecision.effectType].name);
-            [self finalizeDecision:learnedDecision completion:completion];
-            return;
+    // 2️⃣ 生成执行计划
+    PlanContext *context = [PlanContext contextWithSongName:songName artist:artist];
+    context.hasCachedDecision = (self.llmDecisionCache[[self cacheKeyForSong:songName artist:artist]] != nil);
+    context.hasUserPreference = YES;
+    
+    // 决定是否需要 LLM：
+    // - 紧急模式下强制使用 LLM
+    // - LLM 优先级高于规则优先级
+    // - 没有缓存且配置允许直接 LLM 调用
+    BOOL isEmergencyMode = self.reflectionEngine.isEmergencyMode;
+    BOOL llmHasPriority = (self.llmPriority > self.rulePriority);
+    BOOL noCacheAndLLMEnabled = !context.hasCachedDecision && self.configuration.enableDirectLLMCall;
+    
+    context.requiresLLM = isEmergencyMode || llmHasPriority || noCacheAndLLMEnabled;
+    context.urgency = isEmergencyMode ? 0.9 : 0.5;
+    
+    NSLog(@"📊 策略状态: LLM=%.2f, Rule=%.2f, 紧急模式=%@, 需要LLM=%@",
+          self.llmPriority, self.rulePriority,
+          isEmergencyMode ? @"是" : @"否",
+          context.requiresLLM ? @"是" : @"否");
+    
+    ExecutionPlan *plan = [self.planner generatePlanWithContext:context];
+    self.currentPlan = plan;
+    
+    // 3️⃣ 执行计划
+    [self executePlan:plan completion:^(EffectDecision *decision) {
+        // 4️⃣ 记录决策完成
+        NSTimeInterval duration = [[NSDate date] timeIntervalSinceDate:self.decisionStartTime];
+        [self.metricsCollector recordDecisionCompletedWithSource:decision.source
+                                                          effect:decision.effectType
+                                                      confidence:decision.confidence
+                                                        duration:duration];
+        
+        // 5️⃣ 记录到反思引擎
+        ReflectionDecisionRecord *reflectionRecord = [ReflectionDecisionRecord recordWithSource:decision.source
+                                                                                     wasCorrect:YES
+                                                                                          style:self.currentStyle
+                                                                                         effect:decision.effectType];
+        reflectionRecord.confidence = decision.confidence;
+        reflectionRecord.decisionTime = duration;
+        reflectionRecord.songName = songName;
+        [self.reflectionEngine recordDecision:reflectionRecord];
+        
+        // 6️⃣ 评估计划
+        NSDictionary *planEval = [self.planner evaluatePlan:plan];
+        NSLog(@"📋 计划评估: 成功率=%.1f%%, 耗时=%.2fs",
+              [planEval[@"successRate"] floatValue] * 100,
+              [planEval[@"totalDuration"] floatValue]);
+        
+        // 7️⃣ 收集指标并调整目标权重
+        AgentMetrics *metrics = [self.metricsCollector collectCurrentMetrics];
+        [self.goalManager adjustWeightsWithMetrics:metrics];
+        [self.goalManager recordMetrics:metrics];
+        
+        // 8️⃣ 定期执行反思（每 20 次决策）
+        NSInteger totalDecisions = [self.statistics[@"totalDecisions"] integerValue];
+        if (totalDecisions > 0 && totalDecisions % 20 == 0) {
+            [self performReflectionAndUpdate];
         }
+        
+        // 完成
+        [self finalizePlanningDecision:decision completion:completion];
+    }];
+}
+
+- (void)executePlan:(ExecutionPlan *)plan completion:(void(^)(EffectDecision *))completion {
+    __block EffectDecision *finalDecision = nil;
+    
+    // 获取下一个待执行步骤
+    PlanStep *nextStep = [plan nextPendingStep];
+    
+    if (!nextStep) {
+        // 所有步骤完成，使用本地规则作为 fallback
+        finalDecision = [self makeLocalRulesDecisionForSong:self.currentSongName artist:self.currentArtist];
+        completion(finalDecision);
+        return;
     }
     
-    // Step 3: 直接调用 DeepSeek 进行分析
-    if (self.configuration.enableDirectLLMCall) {
-        [self callDeepSeekWithRetry:songName artist:artist retryCount:0 completion:^(EffectDecision *decision) {
-            if (decision) {
-                // 缓存成功的决策
-                self.llmDecisionCache[cacheKey] = decision;
-                [self saveLLMCacheToDisk];
-                [self finalizeDecision:decision completion:completion];
+    [self.planner markStepInProgress:nextStep.stepId inPlan:plan];
+    
+    switch (nextStep.type) {
+        case PlanStepTypeCacheLookup: {
+            // 缓存查找
+            NSString *cacheKey = [self cacheKeyForSong:self.currentSongName artist:self.currentArtist];
+            EffectDecision *cached = self.llmDecisionCache[cacheKey];
+            
+            if (cached) {
+                [self.planner markStepDone:nextStep.stepId inPlan:plan withOutput:@{@"hit": @YES}];
+                [self.metricsCollector recordCacheHit];
+                cached.source = DecisionSourceLLMCache;
+                completion(cached);
+                return;
             } else {
-                // 降级到本地规则
-                EffectDecision *fallback = [self makeLocalRulesDecisionForSong:songName artist:artist];
-                fallback.source = DecisionSourceFallback;
-                fallback.reasoning = @"LLM 调用失败，使用本地规则";
-                [self finalizeDecision:fallback completion:completion];
+                [self.planner markStepDone:nextStep.stepId inPlan:plan withOutput:@{@"hit": @NO}];
             }
-        }];
-    } else {
-        // 直接使用本地规则
-        EffectDecision *localDecision = [self makeLocalRulesDecisionForSong:songName artist:artist];
-        [self finalizeDecision:localDecision completion:completion];
+            break;
+        }
+        case PlanStepTypeClassifyStyle: {
+            // 风格分类
+            MusicStyleClassifier *classifier = [MusicStyleClassifier sharedClassifier];
+            MusicStyleResult *result = [classifier preclassifyWithSongName:self.currentSongName artist:self.currentArtist];
+            
+            if (result) {
+                self.currentStyle = result.primaryStyle;
+                [self.planner markStepDone:nextStep.stepId inPlan:plan withOutput:@{
+                    @"style": @(result.primaryStyle),
+                    @"confidence": @(result.primaryConfidence)
+                }];
+            } else {
+                self.currentStyle = MusicStylePop;
+                [self.planner markStepDone:nextStep.stepId inPlan:plan withOutput:@{@"style": @(MusicStylePop)}];
+            }
+            break;
+        }
+        case PlanStepTypeApplyUserPreferences: {
+            // 用户偏好
+            UserPreferenceEngine *prefEngine = [UserPreferenceEngine sharedEngine];
+            UserContext *context = [UserContext currentContext];
+            PreferenceQueryResult *prefResult = [prefEngine preferredEffectForStyle:self.currentStyle context:context];
+            
+            if (prefResult.confidence >= self.configuration.userPreferenceConfidenceThreshold && prefResult.sampleCount >= 3) {
+                [self.planner markStepDone:nextStep.stepId inPlan:plan withOutput:@{
+                    @"effect": @(prefResult.preferredEffect),
+                    @"confidence": @(prefResult.confidence)
+                }];
+                
+                finalDecision = [EffectDecision decisionWithEffect:prefResult.preferredEffect
+                                                        confidence:prefResult.confidence
+                                                            source:DecisionSourceUserPreference];
+                finalDecision.reasoning = @"基于用户历史偏好";
+                completion(finalDecision);
+                return;
+            } else {
+                [self.planner skipStep:nextStep.stepId inPlan:plan reason:@"偏好数据不足"];
+            }
+            break;
+        }
+        case PlanStepTypeAssignEffects: {
+            // 分配特效
+            finalDecision = [self makeLocalRulesDecisionForSong:self.currentSongName artist:self.currentArtist];
+            [self.planner markStepDone:nextStep.stepId inPlan:plan withOutput:@{
+                @"effect": @(finalDecision.effectType),
+                @"confidence": @(finalDecision.confidence)
+            }];
+            
+            // 如果置信度够高，直接返回
+            if (finalDecision.confidence >= self.configuration.localRulesConfidenceThreshold) {
+                [self incrementStatistic:@"localRulesUsed"];
+                completion(finalDecision);
+                return;
+            }
+            break;
+        }
+        case PlanStepTypeLLMQuery: {
+            // LLM 查询
+            [self callDeepSeekWithRetry:self.currentSongName artist:self.currentArtist retryCount:0 completion:^(EffectDecision *llmDecision) {
+                if (llmDecision) {
+                    [self.planner markStepDone:nextStep.stepId inPlan:plan withOutput:@{
+                        @"effect": @(llmDecision.effectType),
+                        @"confidence": @(llmDecision.confidence)
+                    }];
+                    
+                    // 缓存 LLM 决策
+                    NSString *cacheKey = [self cacheKeyForSong:self.currentSongName artist:self.currentArtist];
+                    self.llmDecisionCache[cacheKey] = llmDecision;
+                    [self saveLLMCacheToDisk];
+                    
+                    completion(llmDecision);
+                } else {
+                    [self.planner markStepFailed:nextStep.stepId inPlan:plan withError:[NSError errorWithDomain:@"LLM" code:-1 userInfo:@{NSLocalizedDescriptionKey: @"LLM 调用失败"}]];
+                    
+                    // 继续执行下一步
+                    [self executePlan:plan completion:completion];
+                }
+            }];
+            return;  // 异步返回
+        }
+        case PlanStepTypeValidateTransitions:
+        case PlanStepTypeOptimizeParameters: {
+            // 验证/优化步骤 - 简单标记完成
+            [self.planner markStepDone:nextStep.stepId inPlan:plan withOutput:@{@"validated": @YES}];
+            break;
+        }
+        case PlanStepTypeFallbackDecision: {
+            // 降级决策
+            finalDecision = [self makeLocalRulesDecisionForSong:self.currentSongName artist:self.currentArtist];
+            finalDecision.source = DecisionSourceFallback;
+            finalDecision.reasoning = @"降级到本地规则";
+            [self.planner markStepDone:nextStep.stepId inPlan:plan withOutput:@{@"fallback": @YES}];
+            completion(finalDecision);
+            return;
+        }
+        default:
+            [self.planner skipStep:nextStep.stepId inPlan:plan reason:@"未知步骤类型"];
+            break;
     }
+    
+    // 递归执行下一步
+    [self executePlan:plan completion:completion];
+}
+
+- (void)runQuickAgentForSong:(NSString *)songName
+                      artist:(nullable NSString *)artist
+                  completion:(EffectDecisionCompletion)completion {
+    
+    if (self.isDeciding) {
+        NSLog(@"⚠️ Agent 已在决策中，跳过");
+        return;
+    }
+    
+    self.isDeciding = YES;
+    self.currentSongName = songName;
+    self.currentArtist = artist;
+    self.decisionStartTime = [NSDate date];
+    
+    NSLog(@"⚡ Quick Agent 开始: %@ - %@", songName, artist ?: @"Unknown");
+    
+    // 1. 检查缓存
+    NSString *cacheKey = [self cacheKeyForSong:songName artist:artist];
+    EffectDecision *cached = self.llmDecisionCache[cacheKey];
+    
+    if (cached) {
+        [self.metricsCollector recordCacheHit];
+        cached.source = DecisionSourceLLMCache;
+        [self finalizePlanningDecision:cached completion:completion];
+        return;
+    }
+    
+    // 2. 快速本地规则
+    EffectDecision *decision = [self makeLocalRulesDecisionForSong:songName artist:artist];
+    [self incrementStatistic:@"localRulesUsed"];
+    [self finalizePlanningDecision:decision completion:completion];
+}
+
+- (void)finalizePlanningDecision:(EffectDecision *)decision completion:(EffectDecisionCompletion)completion {
+    self.currentDecision = decision;
+    self.isDeciding = NO;
+    
+    // 记录用于学习
+    if (self.currentSongName) {
+        [self recordDecision:decision forSongName:self.currentSongName artist:self.currentArtist style:self.currentStyle];
+    }
+    
+    NSTimeInterval duration = [[NSDate date] timeIntervalSinceDate:self.decisionStartTime];
+    NSLog(@"✅ Agent 决策完成: %@ (来源=%ld, 耗时=%.2fs)",
+          [[VisualEffectRegistry sharedRegistry] effectInfoForType:decision.effectType].name ?: @"Unknown",
+          (long)decision.source, duration);
+    
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [[NSNotificationCenter defaultCenter] postNotificationName:kEffectDecisionAgentDidCompleteNotification
+                                                            object:self
+                                                          userInfo:@{@"decision": decision}];
+        
+        if (completion) {
+            completion(decision);
+        }
+    });
+}
+
+- (void)performReflectionAndUpdate {
+    NSLog(@"🔍 开始执行反思与策略更新...");
+    [self.reflectionEngine reflectAndUpdatePolicy];
+    
+    // 输出策略建议
+    AgentMetrics *metrics = [self.metricsCollector collectCurrentMetrics];
+    NSArray *recommendations = [self.goalManager getStrategyRecommendations:metrics];
+    
+    for (NSString *rec in recommendations) {
+        NSLog(@"💡 策略建议: %@", rec);
+    }
+}
+
+- (AgentMetrics *)getCurrentMetrics {
+    return [self.metricsCollector collectCurrentMetrics];
+}
+
+- (NSArray<NSString *> *)getStrategyRecommendations {
+    AgentMetrics *metrics = [self.metricsCollector collectCurrentMetrics];
+    return [self.goalManager getStrategyRecommendations:metrics];
+}
+
+#pragma mark - StrategyManagerProtocol
+
+- (void)reduceLLMPriority:(float)amount {
+    self.llmPriority = MAX(0.1, self.llmPriority - amount);
+    self.rulePriority = MIN(0.9, self.rulePriority + amount);
+    NSLog(@"🔧 策略调整: LLM 优先级 -> %.2f, 规则优先级 -> %.2f", self.llmPriority, self.rulePriority);
+}
+
+- (void)increaseLLMPriority:(float)amount {
+    self.llmPriority = MIN(0.9, self.llmPriority + amount);
+    self.rulePriority = MAX(0.1, self.rulePriority - amount);
+    NSLog(@"🔧 策略调整: LLM 优先级 -> %.2f, 规则优先级 -> %.2f", self.llmPriority, self.rulePriority);
+}
+
+- (void)increaseRulePriority:(float)amount {
+    self.rulePriority = MIN(0.9, self.rulePriority + amount);
+    self.llmPriority = MAX(0.1, self.llmPriority - amount);
+    NSLog(@"🔧 策略调整: 规则优先级 -> %.2f, LLM 优先级 -> %.2f", self.rulePriority, self.llmPriority);
+}
+
+- (void)setLLMCallEnabled:(BOOL)enabled {
+    self.configuration.enableDirectLLMCall = enabled;
+    NSLog(@"🔧 LLM 调用: %@", enabled ? @"启用" : @"禁用");
+}
+
+- (float)currentLLMPriority {
+    return self.llmPriority;
+}
+
+- (float)currentRulePriority {
+    return self.rulePriority;
+}
+
+- (void)reduceRulePriority:(float)amount {
+    self.rulePriority = MAX(0.1, self.rulePriority - amount);
+    NSLog(@"🔧 策略调整: 规则优先级 -> %.2f", self.rulePriority);
+}
+
+- (void)increaseUserPreferenceWeight:(float)amount {
+    UserPreferenceEngine *prefEngine = [UserPreferenceEngine sharedEngine];
+    [prefEngine boostUserPreferenceWeight:amount];
+    NSLog(@"🔧 策略调整: 用户偏好权重 +%.2f", amount);
+}
+
+- (void)enterEmergencyMode {
+    NSLog(@"🚨 进入紧急模式: 最大化 LLM 和用户偏好权重");
+    self.llmPriority = 0.8;
+    self.rulePriority = 0.3;
+    UserPreferenceEngine *prefEngine = [UserPreferenceEngine sharedEngine];
+    [prefEngine boostUserPreferenceWeight:0.3];
+}
+
+- (void)exitEmergencyMode {
+    NSLog(@"✅ 退出紧急模式: 恢复默认策略权重");
+    self.llmPriority = 0.5;
+    self.rulePriority = 0.5;
+}
+
+- (void)saveStrategyState {
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    [defaults setFloat:self.llmPriority forKey:@"EffectDecisionAgent_LLMPriority"];
+    [defaults setFloat:self.rulePriority forKey:@"EffectDecisionAgent_RulePriority"];
+    [defaults synchronize];
+    NSLog(@"💾 策略状态已保存: LLM=%.2f, Rule=%.2f", self.llmPriority, self.rulePriority);
+}
+
+- (void)loadStrategyState {
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    if ([defaults objectForKey:@"EffectDecisionAgent_LLMPriority"]) {
+        self.llmPriority = [defaults floatForKey:@"EffectDecisionAgent_LLMPriority"];
+        self.rulePriority = [defaults floatForKey:@"EffectDecisionAgent_RulePriority"];
+        NSLog(@"📂 策略状态已加载: LLM=%.2f, Rule=%.2f", self.llmPriority, self.rulePriority);
+    }
+}
+
+- (NSString *)exportStrategyReport {
+    NSMutableString *report = [NSMutableString string];
+    
+    [report appendString:@"======================================\n"];
+    [report appendString:@"   Agent 策略状态报告\n"];
+    [report appendFormat:@"   生成时间: %@\n", [NSDate date]];
+    [report appendString:@"======================================\n\n"];
+    
+    // 策略权重
+    [report appendString:@"--- 当前策略权重 ---\n"];
+    [report appendFormat:@"  LLM 优先级: %.2f\n", self.llmPriority];
+    [report appendFormat:@"  规则优先级: %.2f\n", self.rulePriority];
+    [report appendFormat:@"  用户偏好权重: %.2f\n", [UserPreferenceEngine sharedEngine].preferenceWeight];
+    [report appendFormat:@"  紧急模式: %@\n\n", self.reflectionEngine.isEmergencyMode ? @"是" : @"否"];
+    
+    // 成本控制
+    [report appendString:@"--- 成本控制 ---\n"];
+    [report appendFormat:@"  今日 LLM 调用: %ld / %ld\n",
+     (long)self.metricsCollector.costControl.currentLLMCalls,
+     (long)self.metricsCollector.costControl.dailyLLMBudget];
+    [report appendFormat:@"  剩余预算: %ld\n", (long)[self.metricsCollector remainingLLMBudgetToday]];
+    [report appendFormat:@"  超限强制本地: %@\n\n", self.metricsCollector.costControl.forceLocalOnBudgetExceeded ? @"是" : @"否"];
+    
+    // 决策统计
+    [report appendString:@"--- 决策统计 ---\n"];
+    [report appendFormat:@"  总决策数: %@\n", self.statistics[@"totalDecisions"]];
+    [report appendFormat:@"  LLM 调用: %@\n", self.statistics[@"llmCalls"]];
+    [report appendFormat:@"  LLM 成功: %@\n", self.statistics[@"llmSuccesses"]];
+    [report appendFormat:@"  LLM 失败: %@\n", self.statistics[@"llmFailures"]];
+    [report appendFormat:@"  缓存命中: %@\n", self.statistics[@"cacheHits"]];
+    [report appendFormat:@"  本地规则: %@\n", self.statistics[@"localRulesUsed"]];
+    [report appendFormat:@"  自学习: %@\n\n", self.statistics[@"selfLearningUsed"]];
+    
+    // 反思阈值
+    ReflectionThresholds *thresholds = self.reflectionEngine.thresholds;
+    [report appendString:@"--- 反思阈值配置 ---\n"];
+    [report appendFormat:@"  紧急模式触发: <%.0f%%\n", thresholds.emergencyAccuracyThreshold * 100];
+    [report appendFormat:@"  高覆盖率阈值: >%.0f%%\n", thresholds.highOverrideRateThreshold * 100];
+    [report appendFormat:@"  低来源准确率: <%.0f%%\n", thresholds.lowSourceAccuracyThreshold * 100];
+    [report appendFormat:@"  调整步长: %.2f\n\n", thresholds.adjustmentStep];
+    
+    // LLM 是否会被调用
+    BOOL llmEnabled = self.configuration.enableDirectLLMCall;
+    BOOL llmHasPriority = (self.llmPriority > self.rulePriority);
+    BOOL budgetOK = ![self.metricsCollector shouldForceLocalStrategy];
+    [report appendString:@"--- LLM 调用条件 ---\n"];
+    [report appendFormat:@"  配置启用: %@\n", llmEnabled ? @"✅" : @"❌"];
+    [report appendFormat:@"  优先级高于规则: %@\n", llmHasPriority ? @"✅" : @"❌"];
+    [report appendFormat:@"  预算充足: %@\n", budgetOK ? @"✅" : @"❌"];
+    [report appendFormat:@"  紧急模式: %@\n", self.reflectionEngine.isEmergencyMode ? @"✅ (强制 LLM)" : @"否"];
+    
+    BOOL willUseLLM = self.reflectionEngine.isEmergencyMode || (llmEnabled && llmHasPriority && budgetOK);
+    [report appendFormat:@"\n  ➡️ LLM 将被调用: %@\n", willUseLLM ? @"是" : @"否"];
+    
+    [report appendString:@"\n======================================\n"];
+    
+    return report;
+}
+
+#pragma mark - Autonomous Decision (兼容旧 API)
+
+- (void)autonomousDecisionForSong:(NSString *)songName
+                           artist:(nullable NSString *)artist
+                       completion:(EffectDecisionCompletion)completion {
+    
+    // 使用新的 Planning Agent 流程
+    [self runAgentForSong:songName artist:artist completion:completion];
 }
 
 #pragma mark - Primary Effect Decision
@@ -593,12 +1028,42 @@ NSString *const kEffectDecisionAgentDidLearnNotification = @"EffectDecisionAgent
                 return;
             }
             
+            // 先检查 HTTP 状态码
+            NSHTTPURLResponse *httpResponse = (NSHTTPURLResponse *)response;
+            NSInteger statusCode = httpResponse.statusCode;
+            NSLog(@"📡 DeepSeek HTTP 状态码: %ld", (long)statusCode);
+            
+            // 打印原始响应（调试用）
+            if (data) {
+                NSString *rawResponse = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
+                if (rawResponse.length > 500) {
+                    NSLog(@"📥 DeepSeek 原始响应 (前500字符): %@...", [rawResponse substringToIndex:500]);
+                } else {
+                    NSLog(@"📥 DeepSeek 原始响应: %@", rawResponse);
+                }
+            } else {
+                NSLog(@"❌ DeepSeek 响应数据为空");
+                completion(nil, [NSError errorWithDomain:@"DeepSeek" code:-1 userInfo:@{NSLocalizedDescriptionKey: @"No data received"}]);
+                return;
+            }
+            
             NSError *parseError;
             NSDictionary *responseDict = [NSJSONSerialization JSONObjectWithData:data options:0 error:&parseError];
             if (parseError || !responseDict) {
                 NSLog(@"❌ JSON 解析错误: %@", parseError.localizedDescription);
                 [self incrementStatistic:@"llmFailures"];
                 completion(nil, parseError);
+                return;
+            }
+            
+            // 检查是否有 API 错误信息
+            if (responseDict[@"error"]) {
+                NSDictionary *errorInfo = responseDict[@"error"];
+                NSString *errorMsg = errorInfo[@"message"] ?: @"Unknown API error";
+                NSString *errorType = errorInfo[@"type"] ?: @"unknown";
+                NSLog(@"❌ DeepSeek API 返回错误: [%@] %@", errorType, errorMsg);
+                [self incrementStatistic:@"llmFailures"];
+                completion(nil, [NSError errorWithDomain:@"DeepSeek" code:statusCode userInfo:@{NSLocalizedDescriptionKey: errorMsg}]);
                 return;
             }
             
@@ -615,11 +1080,13 @@ NSString *const kEffectDecisionAgentDidLearnNotification = @"EffectDecisionAgent
                     [self incrementStatistic:@"llmSuccesses"];
                     completion(parsedContent, nil);
                 } else {
-                    NSLog(@"⚠️ 无法解析 DeepSeek 响应内容");
+                    NSLog(@"⚠️ 无法解析 DeepSeek 响应内容，使用原始内容");
                     completion(@{@"raw_content": content ?: @""}, nil);
                 }
             } else {
-                completion(nil, [NSError errorWithDomain:@"DeepSeek" code:-1 userInfo:@{NSLocalizedDescriptionKey: @"Empty response"}]);
+                NSLog(@"❌ DeepSeek 响应中没有 choices 数组");
+                NSLog(@"📋 完整响应字典: %@", responseDict);
+                completion(nil, [NSError errorWithDomain:@"DeepSeek" code:-1 userInfo:@{NSLocalizedDescriptionKey: @"Empty choices in response"}]);
             }
         });
     }];
@@ -634,13 +1101,18 @@ NSString *const kEffectDecisionAgentDidLearnNotification = @"EffectDecisionAgent
     
     if (retryCount >= self.configuration.maxLLMRetries) {
         NSLog(@"❌ LLM 重试次数已达上限 (%ld)", (long)self.configuration.maxLLMRetries);
+        // 记录失败的 LLM 调用
+        [self.metricsCollector recordLLMCall:NO duration:0];
         completion(nil);
         return;
     }
     
     NSLog(@"🔄 LLM 调用 (尝试 %ld/%ld)", (long)(retryCount + 1), (long)self.configuration.maxLLMRetries);
+    NSDate *callStartTime = [NSDate date];
     
     [self callDeepSeekDirectly:songName artist:artist additionalContext:nil completion:^(NSDictionary *response, NSError *error) {
+        NSTimeInterval duration = [[NSDate date] timeIntervalSinceDate:callStartTime];
+        
         if (error) {
             // 指数退避：3s, 6s, 12s, 24s（给 DeepSeek 足够时间）
             NSTimeInterval delay = pow(2, retryCount) * 3.0;
@@ -652,6 +1124,11 @@ NSString *const kEffectDecisionAgentDidLearnNotification = @"EffectDecisionAgent
             });
             return;
         }
+        
+        // 记录成功的 LLM 调用
+        [self.metricsCollector recordLLMCall:YES duration:duration];
+        NSLog(@"💰 成本控制: LLM 调用已记录 (耗时 %.2fs, 剩余预算 %ld)",
+              duration, (long)[self.metricsCollector remainingLLMBudgetToday]);
         
         // 解析响应并创建决策
         EffectDecision *decision = [self createDecisionFromLLMResponse:response songName:songName artist:artist];
@@ -675,16 +1152,38 @@ NSString *const kEffectDecisionAgentDidLearnNotification = @"EffectDecisionAgent
     [prompt appendString:@"  \"emotion\": \"情感(calm/happy/sad/energetic/intense)\",\n"];
     [prompt appendString:@"  \"energy\": 0.0-1.0,\n"];
     [prompt appendString:@"  \"bpm\": 估计BPM,\n"];
-    [prompt appendString:@"  \"recommended_effect\": \"推荐特效ID(0-20)\",\n"];
+    [prompt appendString:@"  \"recommended_effect\": 推荐特效ID(0-20的数字),\n"];
     [prompt appendString:@"  \"effect_name\": \"特效名称\",\n"];
     [prompt appendString:@"  \"animation_speed\": 0.5-2.0,\n"];
     [prompt appendString:@"  \"brightness\": 0.5-1.5,\n"];
     [prompt appendString:@"  \"color_scheme\": \"warm/cool/neutral/vibrant\",\n"];
+    
+    // 新增：特效颜色配置参数
+    [prompt appendString:@"  \"effect_color\": {\n"];
+    [prompt appendString:@"    \"color_mode\": 0-3 (0=彩虹渐变, 1=单色渐变, 2=双色渐变, 3=自定义主题),\n"];
+    [prompt appendString:@"    \"primary_color\": [R,G,B] (0-1范围，如[1.0,0.5,0.2]代表橙色),\n"];
+    [prompt appendString:@"    \"secondary_color\": [R,G,B] (用于双色渐变和自定义主题),\n"];
+    [prompt appendString:@"    \"saturation\": 0.0-1.0 (颜色饱和度),\n"];
+    [prompt appendString:@"    \"brightness_mult\": 0.5-2.0 (亮度倍数),\n"];
+    [prompt appendString:@"    \"hue_shift\": 0.0-1.0 (彩虹模式的色相偏移)\n"];
+    [prompt appendString:@"  },\n"];
+    
     [prompt appendString:@"  \"reasoning\": \"选择原因\"\n"];
     [prompt appendString:@"}\n\n"];
-    [prompt appendString:@"可用特效：0-经典频谱,1-霓虹,2-流体,3-粒子,4-极光,5-银河,6-闪电,7-3D波形,"];
-    [prompt appendString:@"8-圆环波,9-樱花,10-星漩,11-量子场,12-赛博朋克,13-烟花,14-全息,15-丁达尔,"];
-    [prompt appendString:@"16-弹簧线,17-液态金属,18-流星雨,19-频谱波,20-迷幻渐变"];
+    [prompt appendString:@"可用特效ID与名称（请直接返回数字ID）：\n"];
+    [prompt appendString:@"0-经典频谱(支持颜色配置), 1-环形波浪, 2-粒子流, 3-霓虹发光, 4-3D波形, 5-流体模拟, "];
+    [prompt appendString:@"6-量子场, 7-全息效果, 8-赛博朋克, 9-音频响应3D, 10-星系银河, 11-闪电, "];
+    [prompt appendString:@"12-漂浮光点, 13-液态金属, 14-几何变形, 15-分形图案, 16-极光波纹, "];
+    [prompt appendString:@"17-恒星涡旋, 18-霓虹弹簧线, 19-樱花飘雪, 20-丁达尔光束(支持颜色配置)"];
+    
+    // 颜色配置建议
+    [prompt appendString:@"\n\n颜色配置建议：\n"];
+    [prompt appendString:@"- 欢快/流行歌曲: 彩虹模式(0)或暖色单色渐变，高饱和度(0.9-1.0)\n"];
+    [prompt appendString:@"- 抒情/慢歌: 单色渐变(1)，柔和暖色如[1.0,0.6,0.3]或[0.8,0.5,0.7]\n"];
+    [prompt appendString:@"- 电子/舞曲: 彩虹模式(0)或自定义主题(3)，冷色如青蓝[0,0.8,1.0]\n"];
+    [prompt appendString:@"- 摇滚/金属: 双色渐变(2)，红黑或橙紫配色，高亮度(1.2-1.5)\n"];
+    [prompt appendString:@"- 古典/氛围: 单色渐变(1)，低饱和度(0.5-0.7)，金色或紫色\n"];
+    [prompt appendString:@"- 嘻哈/R&B: 自定义主题(3)，紫金或粉蓝配色"];
     
     if (context) {
         [prompt appendFormat:@"\n\n额外上下文: %@", context];
@@ -715,6 +1214,26 @@ NSString *const kEffectDecisionAgentDidLearnNotification = @"EffectDecisionAgent
     return nil;
 }
 
+// 辅助方法：安全解析整数值（兼容字符串和数字）
+- (NSInteger)parseIntegerValue:(id)value {
+    if ([value isKindOfClass:[NSNumber class]]) {
+        return [value integerValue];
+    } else if ([value isKindOfClass:[NSString class]]) {
+        return [value integerValue];
+    }
+    return 0;
+}
+
+// 辅助方法：安全解析浮点值（兼容字符串和数字）
+- (CGFloat)parseFloatValue:(id)value {
+    if ([value isKindOfClass:[NSNumber class]]) {
+        return [value floatValue];
+    } else if ([value isKindOfClass:[NSString class]]) {
+        return [value floatValue];
+    }
+    return 0.0;
+}
+
 - (EffectDecision *)createDecisionFromLLMResponse:(NSDictionary *)response
                                          songName:(NSString *)songName
                                            artist:(NSString *)artist {
@@ -723,22 +1242,107 @@ NSString *const kEffectDecisionAgentDidLearnNotification = @"EffectDecisionAgent
     decision.source = DecisionSourceLLMRealtime;
     decision.llmRawResponse = response;
     
-    // 解析推荐特效
-    NSNumber *effectNum = response[@"recommended_effect"];
-    if (effectNum) {
-        decision.effectType = [effectNum unsignedIntegerValue];
+    // 解析推荐特效（可能是字符串 "4" 或数字 4）
+    id effectValue = response[@"recommended_effect"];
+    if (effectValue) {
+        if ([effectValue isKindOfClass:[NSString class]]) {
+            decision.effectType = (VisualEffectType)[effectValue integerValue];
+        } else if ([effectValue isKindOfClass:[NSNumber class]]) {
+            decision.effectType = [effectValue unsignedIntegerValue];
+        } else {
+            decision.effectType = VisualEffectTypeTyndallBeam;
+        }
     } else {
         decision.effectType = VisualEffectTypeTyndallBeam;  // 默认
     }
     
-    // 解析参数
+    // 解析参数（同样处理字符串/数字兼容）
     NSMutableDictionary *params = [NSMutableDictionary dictionary];
-    if (response[@"animation_speed"]) {
-        params[@"animationSpeed"] = response[@"animation_speed"];
+    
+    id animSpeed = response[@"animation_speed"];
+    if (animSpeed) {
+        if ([animSpeed isKindOfClass:[NSString class]]) {
+            params[@"animationSpeed"] = @([animSpeed floatValue]);
+        } else {
+            params[@"animationSpeed"] = animSpeed;
+        }
     }
-    if (response[@"brightness"]) {
-        params[@"brightness"] = response[@"brightness"];
+    
+    id brightness = response[@"brightness"];
+    if (brightness) {
+        if ([brightness isKindOfClass:[NSString class]]) {
+            params[@"brightness"] = @([brightness floatValue]);
+        } else {
+            params[@"brightness"] = brightness;
+        }
     }
+    
+    // === 解析颜色配置 ===
+    NSDictionary *effectColor = response[@"effect_color"];
+    if (effectColor && [effectColor isKindOfClass:[NSDictionary class]]) {
+        NSMutableDictionary *colorConfig = [NSMutableDictionary dictionary];
+        
+        // 颜色模式 (0=彩虹, 1=单色渐变, 2=双色渐变, 3=自定义主题)
+        id colorMode = effectColor[@"color_mode"];
+        if (colorMode) {
+            NSInteger mode = [self parseIntegerValue:colorMode];
+            colorConfig[@"colorMode"] = @(MIN(3, MAX(0, mode)));
+        }
+        
+        // 主色 RGB 数组
+        id primaryColor = effectColor[@"primary_color"];
+        if (primaryColor && [primaryColor isKindOfClass:[NSArray class]]) {
+            NSArray *rgb = primaryColor;
+            if (rgb.count >= 3) {
+                colorConfig[@"primaryColor"] = @[
+                    @([self parseFloatValue:rgb[0]]),
+                    @([self parseFloatValue:rgb[1]]),
+                    @([self parseFloatValue:rgb[2]])
+                ];
+            }
+        }
+        
+        // 副色 RGB 数组
+        id secondaryColor = effectColor[@"secondary_color"];
+        if (secondaryColor && [secondaryColor isKindOfClass:[NSArray class]]) {
+            NSArray *rgb = secondaryColor;
+            if (rgb.count >= 3) {
+                colorConfig[@"secondaryColor"] = @[
+                    @([self parseFloatValue:rgb[0]]),
+                    @([self parseFloatValue:rgb[1]]),
+                    @([self parseFloatValue:rgb[2]])
+                ];
+            }
+        }
+        
+        // 饱和度
+        id saturation = effectColor[@"saturation"];
+        if (saturation) {
+            CGFloat sat = [self parseFloatValue:saturation];
+            colorConfig[@"colorSaturation"] = @(MIN(1.0, MAX(0.0, sat)));
+        }
+        
+        // 亮度倍数
+        id brightnessMult = effectColor[@"brightness_mult"];
+        if (brightnessMult) {
+            CGFloat bm = [self parseFloatValue:brightnessMult];
+            colorConfig[@"colorBrightness"] = @(MIN(2.0, MAX(0.5, bm)));
+        }
+        
+        // 色相偏移
+        id hueShift = effectColor[@"hue_shift"];
+        if (hueShift) {
+            CGFloat hs = [self parseFloatValue:hueShift];
+            colorConfig[@"hueShift"] = @(fmod(hs, 1.0));
+        }
+        
+        if (colorConfig.count > 0) {
+            params[@"effectColor"] = colorConfig;
+            NSLog(@"🎨 解析到颜色配置: 模式=%@, 主色=%@",
+                  colorConfig[@"colorMode"], colorConfig[@"primaryColor"]);
+        }
+    }
+    
     decision.parameters = params;
     
     // 置信度
@@ -748,7 +1352,9 @@ NSString *const kEffectDecisionAgentDidLearnNotification = @"EffectDecisionAgent
     decision.reasoning = response[@"reasoning"] ?: [NSString stringWithFormat:@"DeepSeek 推荐特效: %@", response[@"effect_name"] ?: @"Unknown"];
     
     NSString *effectName = [[VisualEffectRegistry sharedRegistry] effectInfoForType:decision.effectType].name ?: @"Unknown";
-    NSLog(@"🎯 LLM 推荐特效: %@ (ID:%lu)", effectName, (unsigned long)decision.effectType);
+    NSLog(@"🎯 LLM 推荐特效: %@ (ID:%lu), 参数包含颜色配置: %@",
+          effectName, (unsigned long)decision.effectType,
+          decision.parameters[@"effectColor"] ? @"是" : @"否");
     
     return decision;
 }
@@ -829,15 +1435,22 @@ NSString *const kEffectDecisionAgentDidLearnNotification = @"EffectDecisionAgent
     }
     
     // 正常调用
+    NSDate *llmStartTime = [NSDate date];
     [analyzer analyzeSong:songName artist:artist completion:^(AIColorConfiguration *config, NSError *error) {
+        NSTimeInterval duration = [[NSDate date] timeIntervalSinceDate:llmStartTime];
+        
         if (error || !config) {
             NSLog(@"❌ LLM调用失败: %@", error.localizedDescription);
             [self incrementStatistic:@"llmFailures"];
+            [self.metricsCollector recordLLMCall:NO duration:duration];
             completion(nil);
             return;
         }
         
         [self incrementStatistic:@"llmSuccesses"];
+        [self.metricsCollector recordLLMCall:YES duration:duration];
+        NSLog(@"💰 成本控制: LLM 调用已记录 (耗时 %.2fs, 剩余预算 %ld)",
+              duration, (long)[self.metricsCollector remainingLLMBudgetToday]);
         [self processAIConfig:config style:styleResult completion:completion];
     }];
 }
@@ -1074,8 +1687,14 @@ NSString *const kEffectDecisionAgentDidLearnNotification = @"EffectDecisionAgent
                         forSongName:(NSString *)songName
                              artist:(nullable NSString *)artist {
     
+    // 确定旧特效：优先从历史记录获取，否则从当前决策获取
+    VisualEffectType oldEffect = 0;  // 默认值，仅用于指标记录
     DecisionHistoryRecord *record = [self findRecentRecord:songName artist:artist];
+    
     if (record) {
+        oldEffect = record.selectedEffect;
+        
+        // 更新学习记录
         record.wasManuallyChanged = YES;
         record.userSatisfaction = 0.3;  // 手动更改表示不太满意
         [self updateLearnedWeightsFromRecord:record negative:YES];
@@ -1095,8 +1714,20 @@ NSString *const kEffectDecisionAgentDidLearnNotification = @"EffectDecisionAgent
         [self updateLearnedWeightsFromRecord:newRecord negative:NO];
         [self saveHistoryToDisk];
         
-        NSLog(@"📊 学习: 用户手动切换到特效 %lu", (unsigned long)newEffect);
+        NSLog(@"📊 学习: 用户手动切换到特效 %lu (来自历史记录)", (unsigned long)newEffect);
+    } else if (self.currentDecision) {
+        // 没有历史记录但有当前决策
+        oldEffect = self.currentDecision.effectType;
+        NSLog(@"📊 用户手动切换到特效 %lu (来自当前决策)", (unsigned long)newEffect);
+    } else {
+        NSLog(@"📊 用户手动切换到特效 %lu (无法确定旧特效)", (unsigned long)newEffect);
     }
+    
+    // 📊 无论是否找到记录，都要记录到指标采集器（独立于学习系统）
+    [self.metricsCollector recordUserOverrideFromEffect:oldEffect toEffect:newEffect];
+    
+    // 🔍 无论是否找到记录，都要更新反思引擎
+    [self.reflectionEngine recordDecisionOutcome:songName userOverrode:YES newEffect:newEffect];
 }
 
 - (void)userDidFinishListening:(NSString *)songName

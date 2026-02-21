@@ -104,6 +104,17 @@ NS_ASSUME_NONNULL_BEGIN
 /// 导出偏好数据（用于调试）
 - (NSDictionary *)exportPreferences;
 
+#pragma mark - 策略调整
+
+/// 用户偏好权重（决策时应用）
+@property (nonatomic, assign) float preferenceWeight;
+
+/// 增加用户偏好权重
+- (void)boostUserPreferenceWeight:(float)amount;
+
+/// 保存偏好权重
+- (void)savePreferenceWeight;
+
 @end
 
 NS_ASSUME_NONNULL_END

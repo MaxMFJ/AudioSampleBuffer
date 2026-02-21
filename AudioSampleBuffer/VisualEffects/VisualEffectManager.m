@@ -552,6 +552,9 @@
 - (void)effectSelector:(EffectSelectorView *)selector didSelectEffect:(VisualEffectType)effectType {
     [self setCurrentEffect:effectType animated:YES];
     [self hideEffectSelector];
+    
+    // 📊 记录用户手动选择特效（通知 AI Controller）
+    [_aiController userDidManuallySelectEffect:effectType];
 }
 
 - (void)effectSelector:(EffectSelectorView *)selector didChangeSettings:(NSDictionary *)settings {
@@ -706,6 +709,22 @@
     // 应用AI推荐的参数
     if (decision.parameters) {
         [self setRenderParameters:decision.parameters];
+        
+        // === 应用颜色配置到经典频谱 ===
+        NSDictionary *colorConfig = decision.parameters[@"effectColor"];
+        NSLog(@"🔍 颜色配置检查: colorConfig=%@, effect=%lu, spectrumView=%@",
+              colorConfig ? @"有" : @"无", (unsigned long)effect, _originalSpectrumView ? @"有" : @"无");
+        
+        if (colorConfig && effect == VisualEffectTypeClassicSpectrum) {
+            if (_originalSpectrumView) {
+                [_originalSpectrumView applyTheme:colorConfig];
+                NSLog(@"🎨 已应用AI颜色配置到经典频谱: %@", colorConfig);
+            } else {
+                NSLog(@"⚠️ _originalSpectrumView 为空，无法应用颜色配置");
+            }
+        }
+    } else {
+        NSLog(@"⚠️ decision.parameters 为空");
     }
     
     // 通知代理

@@ -2,9 +2,11 @@
 //  EffectDecisionAgent.h
 //  AudioSampleBuffer
 //
-//  特效决策Agent - 完全自主的AI决策引擎
-//  - 自主触发分析和决策
-//  - 多轮重试和动态权重
+//  特效决策Agent - Planning + Reflection 架构
+//  - 多步规划与执行追踪
+//  - 目标管理与权重调节
+//  - 决策复盘与策略优化
+//  - 指标采集与闭环优化
 //  - 历史表现学习
 //  - 磁盘持久化缓存
 //
@@ -14,6 +16,14 @@
 #import "MusicStyleClassifier.h"
 #import "UserPreferenceEngine.h"
 #import "VisualEffectType.h"
+
+@class AgentGoalManager;
+@class AgentPlanner;
+@class AgentReflectionEngine;
+@class AgentMetricsCollector;
+@class ExecutionPlan;
+@class PlanContext;
+@class AgentMetrics;
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -126,7 +136,48 @@ typedef void(^LLMAnalysisCompletion)(NSDictionary * _Nullable response, NSError 
 /// 决策统计
 @property (nonatomic, readonly) NSDictionary<NSString *, NSNumber *> *decisionStatistics;
 
-#pragma mark - 主要决策接口
+#pragma mark - Planning + Reflection 组件
+
+/// 目标管理器
+@property (nonatomic, strong, readonly) AgentGoalManager *goalManager;
+
+/// 规划器
+@property (nonatomic, strong, readonly) AgentPlanner *planner;
+
+/// 反思引擎
+@property (nonatomic, strong, readonly) AgentReflectionEngine *reflectionEngine;
+
+/// 指标采集器
+@property (nonatomic, strong, readonly) AgentMetricsCollector *metricsCollector;
+
+/// 当前执行计划
+@property (nonatomic, strong, readonly, nullable) ExecutionPlan *currentPlan;
+
+#pragma mark - Planning + Reflection 主接口
+
+/// 运行 Planning Agent（完整的规划-执行-反思流程）
+/// @param songName 歌曲名
+/// @param artist 艺术家
+/// @param completion 决策完成回调
+- (void)runAgentForSong:(NSString *)songName
+                 artist:(nullable NSString *)artist
+             completion:(EffectDecisionCompletion)completion;
+
+/// 运行快速 Agent（简化流程，低延迟）
+- (void)runQuickAgentForSong:(NSString *)songName
+                      artist:(nullable NSString *)artist
+                  completion:(EffectDecisionCompletion)completion;
+
+/// 执行反思与策略更新
+- (void)performReflectionAndUpdate;
+
+/// 获取当前 Agent 指标
+- (AgentMetrics *)getCurrentMetrics;
+
+/// 获取策略建议
+- (NSArray<NSString *> *)getStrategyRecommendations;
+
+#pragma mark - 主要决策接口（兼容旧 API）
 
 /// 完全自主的特效决策（Agent 自己触发分析）
 /// @param songName 歌曲名
@@ -216,6 +267,11 @@ typedef void(^LLMAnalysisCompletion)(NSDictionary * _Nullable response, NSError 
 
 @property (nonatomic, assign) float localRulesConfidenceThreshold;
 @property (nonatomic, assign) float userPreferenceConfidenceThreshold;
+
+#pragma mark - 调试报告
+
+/// 导出策略状态报告
+- (NSString *)exportStrategyReport;
 
 @end
 

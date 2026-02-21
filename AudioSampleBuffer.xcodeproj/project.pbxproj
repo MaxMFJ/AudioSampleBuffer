@@ -19,6 +19,10 @@
 		4C110D562EAD200000D59E12 /* NeonSpringLinesShader.metal in Sources */ = {isa = PBXBuildFile; fileRef = 4C110D572EAD200000D59E12 /* NeonSpringLinesShader.metal */; };
 		4C110D582EAD300000D59E12 /* CherryBlossomShader.metal in Sources */ = {isa = PBXBuildFile; fileRef = 4C110D592EAD300000D59E12 /* CherryBlossomShader.metal */; };
 		4C110D5A2EAD400000D59E12 /* TyndallBeamShader.metal in Sources */ = {isa = PBXBuildFile; fileRef = 4C110D5B2EAD400000D59E12 /* TyndallBeamShader.metal */; };
+		4C2A51832F499DC700094D15 /* AgentMetricsCollector.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C2A517E2F499DC700094D15 /* AgentMetricsCollector.m */; };
+		4C2A51842F499DC700094D15 /* AgentReflectionEngine.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C2A51822F499DC700094D15 /* AgentReflectionEngine.m */; };
+		4C2A51852F499DC700094D15 /* AgentGoalManager.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C2A517C2F499DC700094D15 /* AgentGoalManager.m */; };
+		4C2A51862F499DC700094D15 /* AgentPlanner.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C2A51802F499DC700094D15 /* AgentPlanner.m */; };
 		4C2C69F02EA216AF00D18118 /* 队长 - 楼顶上的小斑鸠.ncm in Resources */ = {isa = PBXBuildFile; fileRef = 4C2C69EC2EA216AF00D18118 /* 队长 - 楼顶上的小斑鸠.ncm */; };
 		4C2C69F12EA216AF00D18118 /* 小霞,海洋Bo - 向云端.ncm in Resources */ = {isa = PBXBuildFile; fileRef = 4C2C69EF2EA216AF00D18118 /* 小霞,海洋Bo - 向云端.ncm */; };
 		4C2C69F22EA216AF00D18118 /* 郭顶 - 凄美地.ncm in Resources */ = {isa = PBXBuildFile; fileRef = 4C2C69ED2EA216AF00D18118 /* 郭顶 - 凄美地.ncm */; };
@@ -162,6 +166,14 @@
 		4C110D572EAD200000D59E12 /* NeonSpringLinesShader.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = NeonSpringLinesShader.metal; sourceTree = "<group>"; };
 		4C110D592EAD300000D59E12 /* CherryBlossomShader.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = CherryBlossomShader.metal; sourceTree = "<group>"; };
 		4C110D5B2EAD400000D59E12 /* TyndallBeamShader.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = TyndallBeamShader.metal; sourceTree = "<group>"; };
+		4C2A517B2F499DC700094D15 /* AgentGoalManager.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AgentGoalManager.h; sourceTree = "<group>"; };
+		4C2A517C2F499DC700094D15 /* AgentGoalManager.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AgentGoalManager.m; sourceTree = "<group>"; };
+		4C2A517D2F499DC700094D15 /* AgentMetricsCollector.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AgentMetricsCollector.h; sourceTree = "<group>"; };
+		4C2A517E2F499DC700094D15 /* AgentMetricsCollector.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AgentMetricsCollector.m; sourceTree = "<group>"; };
+		4C2A517F2F499DC700094D15 /* AgentPlanner.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AgentPlanner.h; sourceTree = "<group>"; };
+		4C2A51802F499DC700094D15 /* AgentPlanner.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AgentPlanner.m; sourceTree = "<group>"; };
+		4C2A51812F499DC700094D15 /* AgentReflectionEngine.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AgentReflectionEngine.h; sourceTree = "<group>"; };
+		4C2A51822F499DC700094D15 /* AgentReflectionEngine.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AgentReflectionEngine.m; sourceTree = "<group>"; };
 		4C2C69EC2EA216AF00D18118 /* 队长 - 楼顶上的小斑鸠.ncm */ = {isa = PBXFileReference; lastKnownFileType = file; path = "队长 - 楼顶上的小斑鸠.ncm"; sourceTree = "<group>"; };
 		4C2C69ED2EA216AF00D18118 /* 郭顶 - 凄美地.ncm */ = {isa = PBXFileReference; lastKnownFileType = file; path = "郭顶 - 凄美地.ncm"; sourceTree = "<group>"; };
 		4C2C69EE2EA216AF00D18118 /* 黄绮珊 - 离不开你 (Live).ncm */ = {isa = PBXFileReference; lastKnownFileType = file; path = "黄绮珊 - 离不开你 (Live).ncm"; sourceTree = "<group>"; };
@@ -722,6 +734,14 @@
 				4CCDEFC52F497C7C00A2DB9C /* UserPreferenceEngine.m */,
 				4CCDEFC62F497C7C00A2DB9C /* VisualEffectAIController.h */,
 				4CCDEFC72F497C7C00A2DB9C /* VisualEffectAIController.m */,
+				4C2A517B2F499DC700094D15 /* AgentGoalManager.h */,
+				4C2A517C2F499DC700094D15 /* AgentGoalManager.m */,
+				4C2A517D2F499DC700094D15 /* AgentMetricsCollector.h */,
+				4C2A517E2F499DC700094D15 /* AgentMetricsCollector.m */,
+				4C2A517F2F499DC700094D15 /* AgentPlanner.h */,
+				4C2A51802F499DC700094D15 /* AgentPlanner.m */,
+				4C2A51812F499DC700094D15 /* AgentReflectionEngine.h */,
+				4C2A51822F499DC700094D15 /* AgentReflectionEngine.m */,
 			);
 			path = AI;
 			sourceTree = "<group>";
@@ -917,6 +937,10 @@
 				4CCDEFCB2F497C7C00A2DB9C /* UserContext.m in Sources */,
 				4CCDEFCC2F497C7C00A2DB9C /* MusicStyleClassifier.m in Sources */,
 				4CCDEFCD2F497C7C00A2DB9C /* AudioFeatureExtractor.m in Sources */,
+				4C2A51832F499DC700094D15 /* AgentMetricsCollector.m in Sources */,
+				4C2A51842F499DC700094D15 /* AgentReflectionEngine.m in Sources */,
+				4C2A51852F499DC700094D15 /* AgentGoalManager.m in Sources */,
+				4C2A51862F499DC700094D15 /* AgentPlanner.m in Sources */,
 				4CCDEFCE2F497C7C00A2DB9C /* RealtimeParameterTuner.m in Sources */,
 				4CCDEFCF2F497C7C00A2DB9C /* EffectTransitionController.m in Sources */,
 				4C699F8E2E9F951A009090AB /* SoundTouchBridge.cpp in Sources */,

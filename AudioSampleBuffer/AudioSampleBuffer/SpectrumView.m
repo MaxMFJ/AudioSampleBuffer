@@ -13,8 +13,8 @@
 // 与 SpectrumViewShader.metal 中 SpectrumUniforms 完全对齐
 // resolution = (drawableW, drawableH, aspectRatio, 0)，与 Galaxy/Lightning 一致
 typedef struct {
-    simd_float4 resolution;  // (drawableWidth, drawableHeight, aspectRatio, 0)
-    float       innerRadius; // 归一化 [0, 0.5]，与逻辑正方形一致
+    simd_float4 resolution;      // (drawableWidth, drawableHeight, aspectRatio, 0)
+    float       innerRadius;     // 归一化 [0, 0.5]，与逻辑正方形一致
     float       barWidth;
     float       time;
     float       rotationSpeed;
@@ -22,7 +22,23 @@ typedef struct {
     float       glowIntensity;
     int         bandCount;
     float       amplitudeScale;
+    
+    // === 新增：颜色配置 ===
+    int         colorMode;       // 0=彩虹(默认), 1=单色渐变, 2=双色渐变, 3=自定义主题
+    simd_float3 primaryColor;    // 主色 (RGB, 0-1)
+    simd_float3 secondaryColor;  // 副色 (RGB, 0-1)
+    float       colorSaturation; // 饱和度 (0-1)
+    float       colorBrightness; // 亮度倍数 (0.5-2.0)
+    float       hueShift;        // 色相偏移 (0-1)
 } SpectrumUniforms;
+
+// 颜色模式枚举
+typedef NS_ENUM(NSInteger, SpectrumColorMode) {
+    SpectrumColorModeRainbow = 0,      // 彩虹渐变（默认）
+    SpectrumColorModeSingleGradient,   // 单色渐变
+    SpectrumColorModeDualGradient,     // 双色渐变
+    SpectrumColorModeCustomTheme       // 自定义主题
+};
 
 #define kMaxBands 80
 
@@ -63,6 +79,14 @@ typedef struct {
         _space     = 2.0;
         _bottomSpace = 0;
         _topSpace    = -50;
+        
+        // 颜色配置默认值
+        _colorMode = ADSpectrumColorModeRainbow;  // 默认彩虹模式
+        _primaryColor = [UIColor colorWithRed:0.0 green:0.8 blue:1.0 alpha:1.0];    // 青色
+        _secondaryColor = [UIColor colorWithRed:1.0 green:0.2 blue:0.5 alpha:1.0];  // 粉红
+        _colorSaturation = 1.0;
+        _colorBrightness = 1.0;
+        _hueShift = 0.0;
         
         [self setupMetal];
         [self setupGradientLayers];
@@ -303,6 +327,22 @@ typedef struct {
     u->bandCount      = kMaxBands;
     u->amplitudeScale = (float)amplitudeScaleNorm;
     
+    // === 颜色配置参数 ===
+    u->colorMode = (int)_colorMode;
+    
+    // 转换 UIColor 到 simd_float3 (RGB)
+    CGFloat r1, g1, b1, a1;
+    [_primaryColor getRed:&r1 green:&g1 blue:&b1 alpha:&a1];
+    u->primaryColor = (simd_float3){ (float)r1, (float)g1, (float)b1 };
+    
+    CGFloat r2, g2, b2, a2;
+    [_secondaryColor getRed:&r2 green:&g2 blue:&b2 alpha:&a2];
+    u->secondaryColor = (simd_float3){ (float)r2, (float)g2, (float)b2 };
+    
+    u->colorSaturation = (float)_colorSaturation;
+    u->colorBrightness = (float)_colorBrightness;
+    u->hueShift = (float)_hueShift;
+    
     // ── 拷贝频谱数据到 GPU 缓冲 ──
     memcpy(_amplitudeBuffer.contents, _amplitudes, sizeof(float) * kMaxBands);
     
@@ -320,6 +360,123 @@ typedef struct {
     [encoder endEncoding];
     [cmdBuf presentDrawable:drawable];
     [cmdBuf commit];
+}
+
+#pragma mark - 颜色配置便捷方法
+
+- (void)applyTheme:(NSDictionary *)themeConfig {
+    if (!themeConfig) {
+        NSLog(@"⚠️ applyTheme: themeConfig 为 nil");
+        return;
+    }
+    
+    NSLog(@"🎨 applyTheme 收到配置: %@", themeConfig);
+    
+    // 解析颜色模式
+    NSNumber *modeNum = themeConfig[@"colorMode"];
+    if (modeNum) {
+        _colorMode = (ADSpectrumColorMode)[modeNum integerValue];
+        NSLog(@"🎨 设置颜色模式: %ld", (long)_colorMode);
+    }
+    
+    // 解析主色
+    id primaryColorValue = themeConfig[@"primaryColor"];
+    if (primaryColorValue) {
+        _primaryColor = [self colorFromValue:primaryColorValue];
+        CGFloat r, g, b, a;
+        [_primaryColor getRed:&r green:&g blue:&b alpha:&a];
+        NSLog(@"🎨 设置主色: RGB(%.2f, %.2f, %.2f)", r, g, b);
+    }
+    
+    // 解析副色
+    id secondaryColorValue = themeConfig[@"secondaryColor"];
+    if (secondaryColorValue) {
+        _secondaryColor = [self colorFromValue:secondaryColorValue];
+        CGFloat r, g, b, a;
+        [_secondaryColor getRed:&r green:&g blue:&b alpha:&a];
+        NSLog(@"🎨 设置副色: RGB(%.2f, %.2f, %.2f)", r, g, b);
+    }
+    
+    // 解析饱和度
+    NSNumber *saturation = themeConfig[@"colorSaturation"];
+    if (saturation) {
+        _colorSaturation = MAX(0.0, MIN(1.0, [saturation floatValue]));
+    }
+    
+    // 解析亮度
+    NSNumber *brightness = themeConfig[@"colorBrightness"];
+    if (brightness) {
+        _colorBrightness = MAX(0.5, MIN(2.0, [brightness floatValue]));
+    }
+    
+    // 解析色相偏移
+    NSNumber *hueShiftValue = themeConfig[@"hueShift"];
+    if (hueShiftValue) {
+        _hueShift = fmod([hueShiftValue floatValue], 1.0);
+        if (_hueShift < 0) _hueShift += 1.0;
+    }
+    
+    NSLog(@"🎨 频谱主题已应用: 模式=%ld, 饱和度=%.2f, 亮度=%.2f",
+          (long)_colorMode, _colorSaturation, _colorBrightness);
+}
+
+- (void)setSingleColor:(UIColor *)color brightness:(CGFloat)brightness {
+    _colorMode = ADSpectrumColorModeSingleGradient;
+    _primaryColor = color ?: [UIColor cyanColor];
+    _colorBrightness = MAX(0.5, MIN(2.0, brightness));
+    NSLog(@"🎨 频谱设为单色模式，亮度=%.2f", _colorBrightness);
+}
+
+- (void)setGradientFromColor:(UIColor *)fromColor toColor:(UIColor *)toColor {
+    _colorMode = ADSpectrumColorModeDualGradient;
+    _primaryColor = fromColor ?: [UIColor cyanColor];
+    _secondaryColor = toColor ?: [UIColor magentaColor];
+    NSLog(@"🎨 频谱设为双色渐变模式");
+}
+
+// 辅助方法：从多种格式解析颜色
+- (UIColor *)colorFromValue:(id)value {
+    if ([value isKindOfClass:[UIColor class]]) {
+        return value;
+    }
+    
+    // 支持 RGB 数组格式 [r, g, b] 或 [r, g, b, a]
+    if ([value isKindOfClass:[NSArray class]]) {
+        NSArray *arr = value;
+        if (arr.count >= 3) {
+            CGFloat r = [arr[0] floatValue];
+            CGFloat g = [arr[1] floatValue];
+            CGFloat b = [arr[2] floatValue];
+            CGFloat a = arr.count >= 4 ? [arr[3] floatValue] : 1.0;
+            return [UIColor colorWithRed:r green:g blue:b alpha:a];
+        }
+    }
+    
+    // 支持十六进制字符串格式 "#RRGGBB" 或 "RRGGBB"
+    if ([value isKindOfClass:[NSString class]]) {
+        NSString *hexString = value;
+        hexString = [hexString stringByReplacingOccurrencesOfString:@"#" withString:@""];
+        if (hexString.length == 6) {
+            unsigned int hexValue;
+            [[NSScanner scannerWithString:hexString] scanHexInt:&hexValue];
+            CGFloat r = ((hexValue >> 16) & 0xFF) / 255.0;
+            CGFloat g = ((hexValue >> 8) & 0xFF) / 255.0;
+            CGFloat b = (hexValue & 0xFF) / 255.0;
+            return [UIColor colorWithRed:r green:g blue:b alpha:1.0];
+        }
+    }
+    
+    // 支持字典格式 {r: 0.5, g: 0.5, b: 1.0}
+    if ([value isKindOfClass:[NSDictionary class]]) {
+        NSDictionary *dict = value;
+        CGFloat r = [dict[@"r"] floatValue];
+        CGFloat g = [dict[@"g"] floatValue];
+        CGFloat b = [dict[@"b"] floatValue];
+        CGFloat a = dict[@"a"] ? [dict[@"a"] floatValue] : 1.0;
+        return [UIColor colorWithRed:r green:g blue:b alpha:a];
+    }
+    
+    return [UIColor whiteColor];
 }
 
 #pragma mark - Layout

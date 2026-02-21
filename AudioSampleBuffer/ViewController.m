@@ -27,6 +27,11 @@
 #import "VinylRecordView.h"  // 🎵 黑胶唱片动画视图
 #import "LyricsEditorViewController.h"  // 🎼 歌词打轴编辑器
 #import "MusicAIAnalyzer.h"  // 🎨 AI 音乐分析（丁达尔等效果动态颜色）
+#import "EffectDecisionAgent.h"  // 🧠 Planning + Reflection Agent
+#import "AgentGoalManager.h"     // 🎯 目标管理器
+#import "AgentPlanner.h"         // 📋 规划器
+#import "AgentReflectionEngine.h" // 🔍 反思引擎
+#import "AgentMetricsCollector.h" // 📊 指标采集器
 #import <AVFoundation/AVFoundation.h>
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>  // 用于文件类型识别
 #import <MediaPlayer/MediaPlayer.h>  // 🎵 系统媒体控制
@@ -128,6 +133,14 @@
 @property (nonatomic, assign) BOOL wasPlayingBeforeInterruption;  // 中断前是否正在播放
 @property (nonatomic, assign) BOOL wasPlayingBeforeBackground;    // 进入后台前是否正在播放
 @property (nonatomic, assign) BOOL shouldPreventAutoResume;  // 是否禁止自动恢复播放
+
+// 🧠 Agent 状态面板
+@property (nonatomic, strong) UIButton *agentStatusButton;          // Agent 状态按钮
+@property (nonatomic, strong) UIView *agentStatusPanel;             // Agent 状态面板
+@property (nonatomic, strong) UILabel *agentMetricsLabel;           // 指标显示
+@property (nonatomic, strong) UILabel *agentRecommendationsLabel;   // 策略建议
+@property (nonatomic, strong) UILabel *agentCostLabel;              // 成本控制状态
+@property (nonatomic, strong) NSTimer *agentStatusTimer;            // 状态更新定时器
 @end
 
 @implementation ViewController
@@ -926,6 +939,9 @@
     
     // 🎵 设置播放进度条
     [self setupProgressView];
+    
+    // 🧠 设置 Agent 状态面板
+    [self setupAgentStatusPanel];
 }
 
 - (void)setupBackgroundLayers {
@@ -2314,6 +2330,9 @@
     if ([self.visualEffectManager isEffectSupported:effectType]) {
         [self.visualEffectManager setCurrentEffect:effectType animated:YES];
         
+        // 📊 记录用户手动切换特效（用于指标采集和学习）
+        [self recordUserManualEffectChange:effectType];
+        
         // 视觉反馈
         [UIView animateWithDuration:0.2 animations:^{
             sender.transform = CGAffineTransformMakeScale(1.2, 1.2);
@@ -2328,6 +2347,25 @@
         // 不支持的特效，显示提示
         [self showUnsupportedEffectAlert];
     }
+}
+
+// 📊 记录用户手动切换特效
+- (void)recordUserManualEffectChange:(VisualEffectType)newEffect {
+    // 通知 AI 系统用户手动选择了特效
+    EffectDecisionAgent *agent = [EffectDecisionAgent sharedAgent];
+    
+    // 获取当前歌曲信息
+    NSString *songName = @"Unknown";
+    NSString *artist = nil;
+    
+    if (index >= 0 && index < (NSInteger)self.displayedMusicItems.count) {
+        MusicItem *musicItem = self.displayedMusicItems[index];
+        songName = musicItem.displayName ?: musicItem.fileName ?: @"Unknown";
+        artist = musicItem.artist;
+    }
+    
+    // 记录用户覆盖（直接调用 Agent，Agent 会内部通知所有相关模块）
+    [agent userDidManuallyChangeEffect:newEffect forSongName:songName artist:artist];
 }
 
 - (void)showUnsupportedEffectAlert {
@@ -2930,6 +2968,238 @@
                           (long)targetFPS,
                           statusText,
                           loadText];
+}
+
+#pragma mark - Agent 状态面板
+
+- (void)setupAgentStatusPanel {
+    // 🧠 创建 Agent 状态按钮
+    CGFloat safeTop = 0;
+    if (@available(iOS 11.0, *)) {
+        safeTop = self.view.safeAreaInsets.top;
+    }
+    CGFloat topOffset = MAX(safeTop, 44) + 10;
+    
+    self.agentStatusButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    [self.agentStatusButton setTitle:@"🧠" forState:UIControlStateNormal];
+    [self.agentStatusButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+    self.agentStatusButton.titleLabel.font = [UIFont boldSystemFontOfSize:24];
+    self.agentStatusButton.backgroundColor = [UIColor colorWithRed:0.3 green:0.2 blue:0.5 alpha:0.9];
+    self.agentStatusButton.layer.cornerRadius = 25;
+    self.agentStatusButton.layer.borderWidth = 2.0;
+    self.agentStatusButton.layer.borderColor = [UIColor colorWithRed:0.6 green:0.4 blue:0.9 alpha:1.0].CGColor;
+    self.agentStatusButton.frame = CGRectMake(self.view.bounds.size.width - 60, topOffset + 80, 50, 50);
+    self.agentStatusButton.layer.shadowColor = [UIColor purpleColor].CGColor;
+    self.agentStatusButton.layer.shadowOffset = CGSizeMake(0, 2);
+    self.agentStatusButton.layer.shadowOpacity = 0.8;
+    self.agentStatusButton.layer.shadowRadius = 4;
+    
+    [self.agentStatusButton addTarget:self action:@selector(agentStatusButtonTapped:) forControlEvents:UIControlEventTouchUpInside];
+    [self.view addSubview:self.agentStatusButton];
+    [self.controlButtons addObject:self.agentStatusButton];
+    
+    // 🧠 创建 Agent 状态面板（初始隐藏）
+    CGFloat panelWidth = 320;
+    CGFloat panelHeight = 400;
+    self.agentStatusPanel = [[UIView alloc] initWithFrame:CGRectMake(
+        (self.view.bounds.size.width - panelWidth) / 2,
+        (self.view.bounds.size.height - panelHeight) / 2,
+        panelWidth, panelHeight)];
+    self.agentStatusPanel.backgroundColor = [UIColor colorWithRed:0.1 green:0.1 blue:0.15 alpha:0.95];
+    self.agentStatusPanel.layer.cornerRadius = 20;
+    self.agentStatusPanel.layer.borderWidth = 2;
+    self.agentStatusPanel.layer.borderColor = [UIColor colorWithRed:0.5 green:0.3 blue:0.8 alpha:1.0].CGColor;
+    self.agentStatusPanel.hidden = YES;
+    self.agentStatusPanel.layer.shadowColor = [UIColor blackColor].CGColor;
+    self.agentStatusPanel.layer.shadowOffset = CGSizeMake(0, 5);
+    self.agentStatusPanel.layer.shadowOpacity = 0.5;
+    self.agentStatusPanel.layer.shadowRadius = 10;
+    [self.view addSubview:self.agentStatusPanel];
+    
+    // 标题
+    UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(20, 15, panelWidth - 40, 30)];
+    titleLabel.text = @"🧠 Agent 状态面板";
+    titleLabel.font = [UIFont boldSystemFontOfSize:18];
+    titleLabel.textColor = [UIColor whiteColor];
+    titleLabel.textAlignment = NSTextAlignmentCenter;
+    [self.agentStatusPanel addSubview:titleLabel];
+    
+    // 关闭按钮
+    UIButton *closeButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    closeButton.frame = CGRectMake(panelWidth - 40, 10, 30, 30);
+    [closeButton setTitle:@"✕" forState:UIControlStateNormal];
+    [closeButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+    closeButton.titleLabel.font = [UIFont systemFontOfSize:20];
+    [closeButton addTarget:self action:@selector(closeAgentStatusPanel) forControlEvents:UIControlEventTouchUpInside];
+    [self.agentStatusPanel addSubview:closeButton];
+    
+    // 📊 指标标签
+    UILabel *metricsTitle = [[UILabel alloc] initWithFrame:CGRectMake(20, 50, panelWidth - 40, 20)];
+    metricsTitle.text = @"📊 运行指标";
+    metricsTitle.font = [UIFont boldSystemFontOfSize:14];
+    metricsTitle.textColor = [UIColor cyanColor];
+    [self.agentStatusPanel addSubview:metricsTitle];
+    
+    self.agentMetricsLabel = [[UILabel alloc] initWithFrame:CGRectMake(20, 75, panelWidth - 40, 80)];
+    self.agentMetricsLabel.font = [UIFont monospacedDigitSystemFontOfSize:12 weight:UIFontWeightRegular];
+    self.agentMetricsLabel.textColor = [UIColor lightGrayColor];
+    self.agentMetricsLabel.numberOfLines = 0;
+    self.agentMetricsLabel.text = @"加载中...";
+    [self.agentStatusPanel addSubview:self.agentMetricsLabel];
+    
+    // 💡 策略建议标签
+    UILabel *recTitle = [[UILabel alloc] initWithFrame:CGRectMake(20, 160, panelWidth - 40, 20)];
+    recTitle.text = @"💡 策略建议";
+    recTitle.font = [UIFont boldSystemFontOfSize:14];
+    recTitle.textColor = [UIColor yellowColor];
+    [self.agentStatusPanel addSubview:recTitle];
+    
+    self.agentRecommendationsLabel = [[UILabel alloc] initWithFrame:CGRectMake(20, 185, panelWidth - 40, 80)];
+    self.agentRecommendationsLabel.font = [UIFont systemFontOfSize:12];
+    self.agentRecommendationsLabel.textColor = [UIColor lightGrayColor];
+    self.agentRecommendationsLabel.numberOfLines = 0;
+    self.agentRecommendationsLabel.text = @"加载中...";
+    [self.agentStatusPanel addSubview:self.agentRecommendationsLabel];
+    
+    // 💰 成本控制标签
+    UILabel *costTitle = [[UILabel alloc] initWithFrame:CGRectMake(20, 270, panelWidth - 40, 20)];
+    costTitle.text = @"💰 成本控制";
+    costTitle.font = [UIFont boldSystemFontOfSize:14];
+    costTitle.textColor = [UIColor greenColor];
+    [self.agentStatusPanel addSubview:costTitle];
+    
+    self.agentCostLabel = [[UILabel alloc] initWithFrame:CGRectMake(20, 295, panelWidth - 40, 40)];
+    self.agentCostLabel.font = [UIFont monospacedDigitSystemFontOfSize:12 weight:UIFontWeightRegular];
+    self.agentCostLabel.textColor = [UIColor lightGrayColor];
+    self.agentCostLabel.numberOfLines = 0;
+    self.agentCostLabel.text = @"加载中...";
+    [self.agentStatusPanel addSubview:self.agentCostLabel];
+    
+    // 🔄 反思按钮
+    UIButton *reflectButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    reflectButton.frame = CGRectMake(20, 345, (panelWidth - 50) / 2, 40);
+    [reflectButton setTitle:@"🔄 执行反思" forState:UIControlStateNormal];
+    [reflectButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+    reflectButton.backgroundColor = [UIColor colorWithRed:0.3 green:0.5 blue:0.8 alpha:1.0];
+    reflectButton.layer.cornerRadius = 8;
+    reflectButton.titleLabel.font = [UIFont boldSystemFontOfSize:14];
+    [reflectButton addTarget:self action:@selector(performAgentReflection) forControlEvents:UIControlEventTouchUpInside];
+    [self.agentStatusPanel addSubview:reflectButton];
+    
+    // 📋 导出报告按钮
+    UIButton *reportButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    reportButton.frame = CGRectMake(panelWidth / 2 + 5, 345, (panelWidth - 50) / 2, 40);
+    [reportButton setTitle:@"📋 导出报告" forState:UIControlStateNormal];
+    [reportButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+    reportButton.backgroundColor = [UIColor colorWithRed:0.5 green:0.3 blue:0.6 alpha:1.0];
+    reportButton.layer.cornerRadius = 8;
+    reportButton.titleLabel.font = [UIFont boldSystemFontOfSize:14];
+    [reportButton addTarget:self action:@selector(exportAgentReport) forControlEvents:UIControlEventTouchUpInside];
+    [self.agentStatusPanel addSubview:reportButton];
+    
+    NSLog(@"🧠 Agent 状态面板已初始化");
+}
+
+- (void)agentStatusButtonTapped:(UIButton *)sender {
+    self.agentStatusPanel.hidden = NO;
+    [self.view bringSubviewToFront:self.agentStatusPanel];
+    [self updateAgentStatusDisplay];
+    
+    // 启动定时更新
+    [self.agentStatusTimer invalidate];
+    self.agentStatusTimer = [NSTimer scheduledTimerWithTimeInterval:2.0
+                                                             target:self
+                                                           selector:@selector(updateAgentStatusDisplay)
+                                                           userInfo:nil
+                                                            repeats:YES];
+}
+
+- (void)closeAgentStatusPanel {
+    self.agentStatusPanel.hidden = YES;
+    [self.agentStatusTimer invalidate];
+    self.agentStatusTimer = nil;
+}
+
+- (void)updateAgentStatusDisplay {
+    // 📊 获取当前指标
+    AgentMetrics *metrics = [[EffectDecisionAgent sharedAgent] getCurrentMetrics];
+    
+    NSString *metricsText = [NSString stringWithFormat:
+        @"用户满意度: %.1f%%\n"
+        @"LLM 调用率: %.1f%%\n"
+        @"缓存命中率: %.1f%%\n"
+        @"覆盖率: %.1f%%\n"
+        @"风格多样性: %.1f%%",
+        metrics.userSatisfaction * 100,
+        metrics.llmCallRate * 100,
+        metrics.cacheHitRate * 100,
+        metrics.overrideRate * 100,
+        metrics.styleDiversity * 100];
+    self.agentMetricsLabel.text = metricsText;
+    
+    // 💡 获取策略建议
+    NSArray<NSString *> *recommendations = [[EffectDecisionAgent sharedAgent] getStrategyRecommendations];
+    if (recommendations.count > 0) {
+        NSMutableString *recText = [NSMutableString string];
+        for (NSString *rec in recommendations) {
+            [recText appendFormat:@"• %@\n", rec];
+        }
+        self.agentRecommendationsLabel.text = recText;
+    } else {
+        self.agentRecommendationsLabel.text = @"当前策略表现良好，无需调整 ✓";
+        self.agentRecommendationsLabel.textColor = [UIColor greenColor];
+    }
+    
+    // 💰 获取成本控制状态
+    AgentMetricsCollector *collector = [AgentMetricsCollector sharedCollector];
+    NSDictionary *stats = [collector getRealTimeStats];
+    
+    NSInteger todayCalls = [stats[@"todayLLMCalls"] integerValue];
+    NSInteger budget = [stats[@"llmBudget"] integerValue];
+    BOOL exceeded = [stats[@"budgetExceeded"] boolValue];
+    
+    NSString *costText = [NSString stringWithFormat:@"今日 LLM 调用: %ld / %ld\n状态: %@",
+                          (long)todayCalls, (long)budget,
+                          exceeded ? @"🔴 已超预算（强制本地）" : @"🟢 正常"];
+    self.agentCostLabel.text = costText;
+    self.agentCostLabel.textColor = exceeded ? [UIColor redColor] : [UIColor greenColor];
+}
+
+- (void)performAgentReflection {
+    NSLog(@"🔄 手动触发 Agent 反思...");
+    [[EffectDecisionAgent sharedAgent] performReflectionAndUpdate];
+    
+    // 显示反思完成提示
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"🔍 反思完成"
+                                                                   message:@"Agent 已完成决策复盘，策略已更新。"
+                                                            preferredStyle:UIAlertControllerStyleAlert];
+    [alert addAction:[UIAlertAction actionWithTitle:@"确定" style:UIAlertActionStyleDefault handler:nil]];
+    [self presentViewController:alert animated:YES completion:nil];
+    
+    // 更新显示
+    [self updateAgentStatusDisplay];
+}
+
+- (void)exportAgentReport {
+    // 获取反思引擎报告
+    NSString *reflectionReport = [[AgentReflectionEngine sharedEngine] exportAnalysisReport];
+    
+    // 获取指标报告
+    NSString *metricsReport = [[AgentMetricsCollector sharedCollector] generateSummaryReport];
+    
+    // 合并报告
+    NSString *fullReport = [NSString stringWithFormat:@"%@\n\n%@", metricsReport, reflectionReport];
+    
+    // 显示报告
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"📋 Agent 分析报告"
+                                                                   message:fullReport
+                                                            preferredStyle:UIAlertControllerStyleAlert];
+    [alert addAction:[UIAlertAction actionWithTitle:@"复制" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
+        [UIPasteboard generalPasteboard].string = fullReport;
+        NSLog(@"📋 报告已复制到剪贴板");
+    }]];
+    [alert addAction:[UIAlertAction actionWithTitle:@"关闭" style:UIAlertActionStyleCancel handler:nil]];
+    [self presentViewController:alert animated:YES completion:nil];
 }
 
 #pragma mark - 音乐库管理器方法

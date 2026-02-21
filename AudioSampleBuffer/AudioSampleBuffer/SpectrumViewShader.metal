@@ -14,8 +14,8 @@ using namespace metal;
 // ─────────────────────────────────────────────────────────────────
 
 struct SpectrumUniforms {
-    float4 resolution;   // (drawableWidth, drawableHeight, 0, 0) 像素
-    float  innerRadius;   // 内圆半径，归一化：1.0 = 内接圆半径 (min/2 像素)
+    float4 resolution;      // (drawableWidth, drawableHeight, 0, 0) 像素
+    float  innerRadius;     // 内圆半径，归一化：1.0 = 内接圆半径 (min/2 像素)
     float  barWidth;
     float  time;
     float  rotationSpeed;
@@ -23,6 +23,14 @@ struct SpectrumUniforms {
     float  glowIntensity;
     int    bandCount;
     float  amplitudeScale;
+    
+    // === 新增：颜色配置 ===
+    int    colorMode;       // 0=彩虹(默认), 1=单色渐变, 2=双色渐变, 3=自定义主题
+    float3 primaryColor;    // 主色 (RGB, 0-1)
+    float3 secondaryColor;  // 副色 (RGB, 0-1)
+    float  colorSaturation; // 饱和度 (0-1)
+    float  colorBrightness; // 亮度倍数 (0.5-2.0)
+    float  hueShift;        // 色相偏移 (0-1)
 };
 
 struct SpectrumVertex {
@@ -70,6 +78,43 @@ static float3 hsv2rgb(float h, float s, float v) {
     return c.z * mix(float3(1.0), clamp(p - 1.0, 0.0, 1.0), c.y);
 }
 
+// 根据颜色模式计算频谱条颜色
+static float3 computeBarColor(int colorMode, float3 primaryColor, float3 secondaryColor,
+                              float saturation, float brightness, float hueShift,
+                              int bandIdx, int bandCount, float time, float rotationSpeed, float radialPos) {
+    float3 color;
+    float t = float(bandIdx) / float(bandCount);  // 频段位置 0-1
+    
+    switch (colorMode) {
+        case 1: {
+            // 单色渐变模式：主色按亮度渐变
+            float gradientFactor = mix(0.6, 1.0, radialPos);
+            color = primaryColor * gradientFactor * brightness;
+            break;
+        }
+        case 2: {
+            // 双色渐变模式：主色到副色的渐变
+            color = mix(primaryColor, secondaryColor, t) * brightness;
+            break;
+        }
+        case 3: {
+            // 自定义主题模式：主副色交替 + 亮度变化
+            float mixFactor = sin(t * M_PI_F * 4.0 + time * rotationSpeed) * 0.5 + 0.5;
+            color = mix(primaryColor, secondaryColor, mixFactor) * brightness;
+            color = mix(color, color * 1.3, radialPos);
+            break;
+        }
+        default: {
+            // 彩虹模式（默认）
+            float hueOffset = time * rotationSpeed + hueShift;
+            float hue = fract(t + hueOffset);
+            color = hsv2rgb(hue, saturation, brightness);
+            break;
+        }
+    }
+    return clamp(color, 0.0, 1.5);  // 允许少量过曝增加发光感
+}
+
 // ─────────────────────────────────────────────────────────────────
 #pragma mark - 片段着色器（UV + 归一化半径，圆心固定 0.5,0.5）
 // ─────────────────────────────────────────────────────────────────
@@ -103,10 +148,14 @@ fragment float4 spectrumFragmentShader(
     bool inRadius = (r >= u.innerRadius && r <= outerR);
 
     if (inBar && inRadius) {
-        float hueOffset = u.time * u.rotationSpeed;
-        float hue = fract(float(bandIdx) / float(bandCount) + hueOffset);
-        float brightness = mix(0.85, 1.0, (r - u.innerRadius) / max(barHeight, 0.001));
-        float3 rgb = hsv2rgb(hue, 1.0, brightness);
+        // 计算径向位置用于亮度渐变
+        float radialPos = (r - u.innerRadius) / max(barHeight, 0.001);
+        float baseBrightness = mix(0.85, 1.0, radialPos) * u.colorBrightness;
+        
+        // 使用新的颜色计算函数
+        float3 rgb = computeBarColor(u.colorMode, u.primaryColor, u.secondaryColor,
+                                     u.colorSaturation, baseBrightness, u.hueShift,
+                                     bandIdx, bandCount, u.time, u.rotationSpeed, radialPos);
 
         float edgeSoft = 0.008;
         float radialAlpha = smoothstep(u.innerRadius - edgeSoft, u.innerRadius, r)
@@ -131,9 +180,10 @@ fragment float4 spectrumFragmentShader(
         float outerR2 = u.innerRadius + barH;
         float glowRange = max(barH * 0.25, 0.01);
         if (r > outerR2 && r < outerR2 + glowRange) {
-            float hueOffset = u.time * u.rotationSpeed;
-            float hue = fract(float(bandIdx) / float(bandCount) + hueOffset);
-            float3 rgb = hsv2rgb(hue, 0.8, 1.0);
+            // 使用相同的颜色模式计算光晕颜色
+            float3 rgb = computeBarColor(u.colorMode, u.primaryColor, u.secondaryColor,
+                                         u.colorSaturation * 0.8, u.colorBrightness, u.hueShift,
+                                         bandIdx, bandCount, u.time, u.rotationSpeed, 1.0);
             float glowAlpha = (1.0 - (r - outerR2) / glowRange) * u.glowIntensity * amplitude2 * 0.4;
             return float4(rgb, glowAlpha);
         }

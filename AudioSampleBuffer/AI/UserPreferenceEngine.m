@@ -106,8 +106,10 @@ static const NSInteger kMaxRecords = 1000;
         _currentEffect = VisualEffectTypeClassicSpectrum;
         _currentStyle = MusicStyleUnknown;
         _effectStartTime = [NSDate date];
+        _preferenceWeight = 0.5;  // 默认权重
         
         [self loadPreferences];
+        [self loadPreferenceWeight];
     }
     return self;
 }
@@ -136,7 +138,7 @@ static const NSInteger kMaxRecords = 1000;
     // 加载全局特效分数
     NSDictionary *globalDict = [defaults objectForKey:kEffectGlobalScoresKey];
     if (globalDict) {
-        self.effectGlobalScores = [globalDict mutableCopy];
+        self.effectGlobalScores = [self mutableFlatDictionaryFromPersisted:globalDict];
     } else {
         self.effectGlobalScores = [NSMutableDictionary dictionary];
     }
@@ -151,15 +153,47 @@ static const NSInteger kMaxRecords = 1000;
     
     [defaults setObject:[self persistableDictionary:self.styleEffectScores] forKey:kStyleEffectScoresKey];
     [defaults setObject:[self persistableDictionary:self.sceneEffectScores] forKey:kSceneEffectScoresKey];
-    [defaults setObject:self.effectGlobalScores forKey:kEffectGlobalScoresKey];
+    [defaults setObject:[self persistableFlatDictionary:self.effectGlobalScores] forKey:kEffectGlobalScoresKey];
     
     [defaults synchronize];
 }
 
 - (NSDictionary *)persistableDictionary:(NSDictionary *)dict {
     NSMutableDictionary *result = [NSMutableDictionary dictionary];
-    for (NSNumber *key in dict) {
-        result[key.stringValue] = dict[key];
+    for (id key in dict) {
+        // 将键转换为字符串
+        NSString *stringKey = [key isKindOfClass:[NSNumber class]] ? [key stringValue] : key;
+        id value = dict[key];
+        
+        // 递归处理嵌套字典
+        if ([value isKindOfClass:[NSDictionary class]]) {
+            NSMutableDictionary *innerResult = [NSMutableDictionary dictionary];
+            for (id innerKey in value) {
+                NSString *innerStringKey = [innerKey isKindOfClass:[NSNumber class]] ? [innerKey stringValue] : innerKey;
+                innerResult[innerStringKey] = value[innerKey];
+            }
+            result[stringKey] = innerResult;
+        } else {
+            result[stringKey] = value;
+        }
+    }
+    return result;
+}
+
+- (NSDictionary *)persistableFlatDictionary:(NSDictionary *)dict {
+    NSMutableDictionary *result = [NSMutableDictionary dictionary];
+    for (id key in dict) {
+        NSString *stringKey = [key isKindOfClass:[NSNumber class]] ? [key stringValue] : key;
+        result[stringKey] = dict[key];
+    }
+    return result;
+}
+
+- (NSMutableDictionary *)mutableFlatDictionaryFromPersisted:(NSDictionary *)dict {
+    NSMutableDictionary *result = [NSMutableDictionary dictionary];
+    for (NSString *key in dict) {
+        NSNumber *numKey = @([key integerValue]);
+        result[numKey] = dict[key];
     }
     return result;
 }
@@ -425,6 +459,29 @@ static const NSInteger kMaxRecords = 1000;
             @"usageScene": [UserContext nameForScene:self.currentContext.usageScene],
         }
     };
+}
+
+#pragma mark - 策略调整
+
+static NSString * const kPreferenceWeightKey = @"UserPreferenceEngine_Weight";
+
+- (void)boostUserPreferenceWeight:(float)amount {
+    self.preferenceWeight = MIN(1.0, self.preferenceWeight + amount);
+    [self savePreferenceWeight];
+    NSLog(@"👤 用户偏好权重提升至 %.2f", self.preferenceWeight);
+}
+
+- (void)savePreferenceWeight {
+    [[NSUserDefaults standardUserDefaults] setFloat:self.preferenceWeight forKey:kPreferenceWeightKey];
+}
+
+- (void)loadPreferenceWeight {
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    if ([defaults objectForKey:kPreferenceWeightKey]) {
+        self.preferenceWeight = [defaults floatForKey:kPreferenceWeightKey];
+    } else {
+        self.preferenceWeight = 0.5;  // 默认权重
+    }
 }
 
 @end
