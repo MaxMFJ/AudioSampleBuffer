@@ -97,6 +97,12 @@ NSString *const kAIConfigurationKey = @"configuration";
     
     if (self.isAnalyzing) {
         NSLog(@"⏳ 正在分析中，跳过本次请求");
+        if (completion) {
+            NSError *error = [NSError errorWithDomain:@"MusicAIAnalyzer"
+                                                 code:-2
+                                             userInfo:@{NSLocalizedDescriptionKey: @"另一个分析正在进行中"}];
+            completion(nil, error);
+        }
         return;
     }
     

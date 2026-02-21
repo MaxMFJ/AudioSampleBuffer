@@ -85,6 +85,9 @@
 @property (nonatomic, strong) PerformanceControlPanel *performanceControlPanel;
 @property (nonatomic, strong) UIButton *performanceControlButton;
 
+// AI自动模式按钮
+@property (nonatomic, strong) UIButton *aiModeButton;
+
 // FPS显示器
 @property (nonatomic, strong) UILabel *fpsLabel;
 @property (nonatomic, strong) CADisplayLink *fpsDisplayLink;
@@ -388,6 +391,33 @@
     
     [self.view addSubview:self.effectSelectorButton];
     [self.controlButtons addObject:self.effectSelectorButton];
+    
+    // 创建AI自动模式按钮
+    self.aiModeButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    [self.aiModeButton setTitle:@"🤖 AI" forState:UIControlStateNormal];
+    [self.aiModeButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+    self.aiModeButton.titleLabel.font = [UIFont boldSystemFontOfSize:14];
+    self.aiModeButton.backgroundColor = [UIColor colorWithRed:0.6 green:0.2 blue:0.8 alpha:0.9];
+    self.aiModeButton.layer.cornerRadius = 25;
+    self.aiModeButton.layer.borderWidth = 2.0;
+    self.aiModeButton.layer.borderColor = [UIColor colorWithRed:0.8 green:0.4 blue:1.0 alpha:1.0].CGColor;
+    self.aiModeButton.frame = CGRectMake(230, topOffset, 70, 50);
+    
+    // 添加阴影效果
+    self.aiModeButton.layer.shadowColor = [UIColor purpleColor].CGColor;
+    self.aiModeButton.layer.shadowOffset = CGSizeMake(0, 2);
+    self.aiModeButton.layer.shadowOpacity = 0.8;
+    self.aiModeButton.layer.shadowRadius = 4;
+    
+    [self.aiModeButton addTarget:self 
+                          action:@selector(aiModeButtonTapped:) 
+                forControlEvents:UIControlEventTouchUpInside];
+    
+    [self.view addSubview:self.aiModeButton];
+    [self.controlButtons addObject:self.aiModeButton];
+    
+    // 更新AI按钮状态
+    [self updateAIModeButtonState];
     
     // 添加卡拉OK按钮
     [self createKaraokeButton];
@@ -2417,6 +2447,72 @@
     
     [self.performanceControlPanel showAnimated:YES];
     [self.view bringSubviewToFront:self.performanceControlPanel];
+}
+
+#pragma mark - AI自动模式
+
+- (void)aiModeButtonTapped:(UIButton *)sender {
+    // 切换AI自动模式
+    BOOL newState = !self.visualEffectManager.aiAutoModeEnabled;
+    self.visualEffectManager.aiAutoModeEnabled = newState;
+    
+    // 更新按钮状态
+    [self updateAIModeButtonState];
+    
+    // 显示提示
+    NSString *message = newState ? @"AI自动模式已开启\n将自动匹配最佳特效" : @"AI自动模式已关闭\n手动选择特效";
+    [self showToastMessage:message];
+    
+    NSLog(@"🤖 AI自动模式: %@", newState ? @"开启" : @"关闭");
+}
+
+- (void)updateAIModeButtonState {
+    BOOL isEnabled = self.visualEffectManager.aiAutoModeEnabled;
+    
+    if (isEnabled) {
+        [self.aiModeButton setTitle:@"🤖 AI" forState:UIControlStateNormal];
+        self.aiModeButton.backgroundColor = [UIColor colorWithRed:0.6 green:0.2 blue:0.8 alpha:0.9];
+        self.aiModeButton.layer.borderColor = [UIColor colorWithRed:0.8 green:0.4 blue:1.0 alpha:1.0].CGColor;
+    } else {
+        [self.aiModeButton setTitle:@"🔇 AI" forState:UIControlStateNormal];
+        self.aiModeButton.backgroundColor = [UIColor colorWithRed:0.3 green:0.3 blue:0.3 alpha:0.9];
+        self.aiModeButton.layer.borderColor = [UIColor grayColor].CGColor;
+    }
+}
+
+- (void)showToastMessage:(NSString *)message {
+    // 创建提示视图
+    UILabel *toast = [[UILabel alloc] init];
+    toast.text = message;
+    toast.textColor = [UIColor whiteColor];
+    toast.backgroundColor = [UIColor colorWithRed:0 green:0 blue:0 alpha:0.8];
+    toast.textAlignment = NSTextAlignmentCenter;
+    toast.font = [UIFont systemFontOfSize:14];
+    toast.numberOfLines = 0;
+    toast.layer.cornerRadius = 10;
+    toast.clipsToBounds = YES;
+    
+    // 计算大小和位置
+    CGSize maxSize = CGSizeMake(self.view.bounds.size.width - 80, 100);
+    CGSize textSize = [message boundingRectWithSize:maxSize
+                                            options:NSStringDrawingUsesLineFragmentOrigin
+                                         attributes:@{NSFontAttributeName: toast.font}
+                                            context:nil].size;
+    
+    CGFloat padding = 20;
+    toast.frame = CGRectMake((self.view.bounds.size.width - textSize.width - padding * 2) / 2,
+                             self.view.bounds.size.height - 150,
+                             textSize.width + padding * 2,
+                             textSize.height + padding);
+    
+    [self.view addSubview:toast];
+    
+    // 动画消失
+    [UIView animateWithDuration:0.3 delay:1.5 options:UIViewAnimationOptionCurveEaseOut animations:^{
+        toast.alpha = 0;
+    } completion:^(BOOL finished) {
+        [toast removeFromSuperview];
+    }];
 }
 
 - (void)karaokeButtonTapped:(UIButton *)sender {

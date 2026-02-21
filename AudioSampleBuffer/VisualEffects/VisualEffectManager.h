@@ -15,12 +15,19 @@
 NS_ASSUME_NONNULL_BEGIN
 
 @class SpectrumView;  // 前向声明
+@class VisualEffectAIController;  // AI控制器前向声明
+@class EffectDecision;  // AI决策前向声明
+@class EffectParameters;  // 特效参数前向声明
 
 @protocol VisualEffectManagerDelegate <NSObject>
 @optional
 - (void)visualEffectManager:(id)manager didChangeEffect:(VisualEffectType)effectType;
 - (void)visualEffectManager:(id)manager didUpdatePerformance:(NSDictionary *)stats;
 - (void)visualEffectManager:(id)manager didEncounterError:(NSError *)error;
+/// AI自动选择了特效
+- (void)visualEffectManager:(id)manager aiDidSelectEffect:(VisualEffectType)effectType withDecision:(EffectDecision *)decision;
+/// AI调整了特效参数
+- (void)visualEffectManager:(id)manager aiDidTuneParameters:(EffectParameters *)parameters;
 @end
 
 /**
@@ -117,6 +124,45 @@ NS_ASSUME_NONNULL_BEGIN
  * @param settings 性能设置字典
  */
 - (void)applyPerformanceSettings:(NSDictionary *)settings;
+
+#pragma mark - AI 自动模式
+
+/**
+ * AI自动模式是否启用
+ */
+@property (nonatomic, assign) BOOL aiAutoModeEnabled;
+
+/**
+ * AI控制器
+ */
+@property (nonatomic, strong, readonly, nullable) VisualEffectAIController *aiController;
+
+/**
+ * 开始AI自动模式（播放新歌曲时调用）
+ * @param songName 歌曲名
+ * @param artist 艺术家
+ */
+- (void)startAIModeWithSongName:(NSString *)songName artist:(nullable NSString *)artist;
+
+/**
+ * 停止AI自动模式
+ */
+- (void)stopAIMode;
+
+/**
+ * 用户手动切换特效（通知AI学习偏好）
+ */
+- (void)userDidManuallySelectEffect:(VisualEffectType)effectType;
+
+/**
+ * 用户跳过歌曲（通知AI）
+ */
+- (void)userDidSkipSong;
+
+/**
+ * 用户完整听完歌曲（通知AI）
+ */
+- (void)userDidFinishListening;
 
 @end
 

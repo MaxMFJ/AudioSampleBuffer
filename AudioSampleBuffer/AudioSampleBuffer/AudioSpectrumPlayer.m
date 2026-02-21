@@ -134,16 +134,24 @@
     // 调用核心播放逻辑
     [self _playWithFileName:fileName];
     
-    // 🎨 触发 AI 分析（如果提供了歌曲名）
+    // 🎨 触发 AI 颜色分析（如果提供了歌曲名）
     if (songName.length > 0) {
         [[MusicAIAnalyzer sharedAnalyzer] analyzeSong:songName
                                                artist:artist
                                            completion:^(AIColorConfiguration * _Nullable config, NSError * _Nullable error) {
             if (error) {
-                NSLog(@"⚠️ AI 分析失败: %@", error.localizedDescription);
+                NSLog(@"⚠️ AI 颜色分析失败: %@", error.localizedDescription);
             } else if (config) {
-                NSLog(@"🎨 AI 分析已应用: %@ - %@", config.songName, config.artist ?: @"");
+                NSLog(@"🎨 AI 颜色分析已应用: %@ - %@", config.songName, config.artist ?: @"");
             }
+        }];
+        
+        // 🤖 发送通知触发AI特效决策Agent
+        [[NSNotificationCenter defaultCenter] postNotificationName:@"AudioSpectrumPlayerDidStartSongNotification"
+                                                            object:self
+                                                          userInfo:@{
+            @"songName": songName,
+            @"artist": artist ?: @""
         }];
     }
 }

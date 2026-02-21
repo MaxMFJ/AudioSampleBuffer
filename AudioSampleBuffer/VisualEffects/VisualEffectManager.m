@@ -7,8 +7,13 @@
 
 #import "VisualEffectManager.h"
 #import "../AudioSampleBuffer/SpectrumView.h"
+#import "../AI/VisualEffectAIController.h"
+#import "../AI/EffectDecisionAgent.h"
+#import "../AI/RealtimeParameterTuner.h"
+#import "../AI/MusicStyleClassifier.h"
+#import "../AI/AudioFeatureExtractor.h"
 
-@interface VisualEffectManager () <MetalRendererDelegate>
+@interface VisualEffectManager () <MetalRendererDelegate, VisualEffectAIControllerDelegate>
 
 @property (nonatomic, strong) UIView *effectContainerView;
 @property (nonatomic, strong) MTKView *metalView;
@@ -34,6 +39,9 @@
 // 💾 保存用户的性能设置，切换特效时重新应用
 @property (nonatomic, copy) NSDictionary *savedPerformanceSettings;
 
+// 🤖 AI控制器 (readwrite for internal use, header declares readonly)
+@property (nonatomic, strong, readwrite) VisualEffectAIController *aiController;
+
 @end
 
 @implementation VisualEffectManager
@@ -47,8 +55,34 @@
         [self setupMetalView];
         [self setupEffectSelector];
         [self loadDefaultSettings];
+        [self setupAIController];
     }
     return self;
+}
+
+- (void)setupAIController {
+    _aiController = [VisualEffectAIController sharedController];
+    _aiController.delegate = self;
+    _aiAutoModeEnabled = YES;  // 默认启用AI自动模式
+    
+    // 监听播放器开始播放歌曲的通知
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(handleSongDidStart:)
+                                                 name:@"AudioSpectrumPlayerDidStartSongNotification"
+                                               object:nil];
+    
+    NSLog(@"🤖 AI控制器已集成到 VisualEffectManager");
+}
+
+- (void)handleSongDidStart:(NSNotification *)notification {
+    if (!_aiAutoModeEnabled) return;
+    
+    NSString *songName = notification.userInfo[@"songName"];
+    NSString *artist = notification.userInfo[@"artist"];
+    
+    if (songName.length > 0) {
+        [self startAIModeWithSongName:songName artist:artist];
+    }
 }
 
 - (void)setupMetalView {
@@ -414,6 +448,11 @@
     if (_currentRenderer && _isEffectActive) {
         [_currentRenderer updateSpectrumData:spectrumData];
     }
+    
+    // 🤖 同时将频谱数据发送给AI控制器
+    if (_aiAutoModeEnabled && _aiController) {
+        [_aiController processSpectrumData:spectrumData];
+    }
 }
 
 - (void)startRendering {
@@ -618,6 +657,104 @@
 
 - (void)dealloc {
     [[NSNotificationCenter defaultCenter] removeObserver:self];
+}
+
+#pragma mark - AI 自动模式
+
+- (void)startAIModeWithSongName:(NSString *)songName artist:(NSString *)artist {
+    if (!_aiAutoModeEnabled) {
+        NSLog(@"🔇 AI自动模式已禁用");
+        return;
+    }
+    
+    [_aiController startWithSongName:songName artist:artist];
+    NSLog(@"🤖 AI自动模式已启动: %@ - %@", songName, artist ?: @"Unknown");
+}
+
+- (void)stopAIMode {
+    [_aiController stop];
+    NSLog(@"🤖 AI自动模式已停止");
+}
+
+- (void)userDidManuallySelectEffect:(VisualEffectType)effectType {
+    [_aiController userDidManuallySelectEffect:effectType];
+}
+
+- (void)userDidSkipSong {
+    [_aiController userDidSkipSong];
+}
+
+- (void)userDidFinishListening {
+    [_aiController userDidFinishListening];
+}
+
+#pragma mark - VisualEffectAIControllerDelegate
+
+- (void)aiController:(id)controller didSelectEffect:(VisualEffectType)effect withDecision:(EffectDecision *)decision {
+    if (!_aiAutoModeEnabled) {
+        NSLog(@"⚠️ AI模式未启用，跳过特效切换");
+        return;
+    }
+    
+    NSString *effectName = [[VisualEffectRegistry sharedRegistry] effectInfoForType:effect].name ?: @"Unknown";
+    NSLog(@"🤖 AI选择特效: %@ (ID:%lu, 置信度: %.2f)", effectName, (unsigned long)effect, decision.confidence);
+    
+    // 应用AI选择的特效
+    [self setCurrentEffect:effect animated:YES];
+    NSLog(@"🎨 正在应用AI选择的特效: %@", effectName);
+    
+    // 应用AI推荐的参数
+    if (decision.parameters) {
+        [self setRenderParameters:decision.parameters];
+    }
+    
+    // 通知代理
+    if ([_delegate respondsToSelector:@selector(visualEffectManager:aiDidSelectEffect:withDecision:)]) {
+        [_delegate visualEffectManager:self aiDidSelectEffect:effect withDecision:decision];
+    }
+}
+
+- (void)aiController:(id)controller didTuneParameters:(EffectParameters *)parameters {
+    if (!_aiAutoModeEnabled) return;
+    
+    // 将EffectParameters转换为字典并应用
+    NSDictionary *paramsDict = [parameters toDictionary];
+    
+    // 只应用部分实时参数（避免干扰用户设置的静态参数）
+    NSMutableDictionary *realtimeParams = [NSMutableDictionary dictionary];
+    if (paramsDict[@"animationSpeed"]) realtimeParams[@"animationSpeed"] = paramsDict[@"animationSpeed"];
+    if (paramsDict[@"brightness"]) realtimeParams[@"brightness"] = paramsDict[@"brightness"];
+    if (paramsDict[@"glowIntensity"]) realtimeParams[@"glowIntensity"] = paramsDict[@"glowIntensity"];
+    
+    if (realtimeParams.count > 0) {
+        [_currentRenderer setRenderParameters:realtimeParams];
+    }
+    
+    // 通知代理
+    if ([_delegate respondsToSelector:@selector(visualEffectManager:aiDidTuneParameters:)]) {
+        [_delegate visualEffectManager:self aiDidTuneParameters:parameters];
+    }
+}
+
+- (void)aiController:(id)controller didDetectSegmentChange:(MusicSegment)segment suggestedEffect:(VisualEffectType)effect {
+    if (!_aiAutoModeEnabled) return;
+    
+    NSLog(@"🎭 AI检测到段落变化，建议切换到特效: %lu", (unsigned long)effect);
+    
+    // 平滑切换到建议的特效
+    if (effect != _currentEffectType) {
+        [self setCurrentEffect:effect animated:YES];
+    }
+}
+
+- (void)aiController:(id)controller didDetectBeatWithIntensity:(float)intensity {
+    // 节拍检测 - 可以触发一些视觉反馈
+    // 当前渲染器内部已经处理了节拍响应
+}
+
+- (void)aiController:(id)controller didClassifyStyle:(MusicStyle)style confidence:(float)confidence {
+    NSLog(@"🎵 AI识别音乐风格: %@ (置信度: %.2f)",
+          [MusicStyleClassifier nameForStyle:style], confidence);
 }
 
 #pragma mark - 性能设置

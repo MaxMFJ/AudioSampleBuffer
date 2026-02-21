@@ -121,6 +121,14 @@
 		4C7D33C02F11200000000006 /* AudioWaveformView.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C7D33B02F1110000000000C /* AudioWaveformView.m */; };
 		4C7D33C02F11200000000007 /* LocalLyricsListViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C7D33B02F1110000000000E /* LocalLyricsListViewController.m */; };
 		4CBE681F2F24BE5300F0C733 /* NeonSpringLinesShader.metal in Sources */ = {isa = PBXBuildFile; fileRef = 4CBE681E2F24BE5300F0C733 /* NeonSpringLinesShader.metal */; };
+		4CCDEFC82F497C7C00A2DB9C /* VisualEffectAIController.m in Sources */ = {isa = PBXBuildFile; fileRef = 4CCDEFC72F497C7C00A2DB9C /* VisualEffectAIController.m */; };
+		4CCDEFC92F497C7C00A2DB9C /* UserPreferenceEngine.m in Sources */ = {isa = PBXBuildFile; fileRef = 4CCDEFC52F497C7C00A2DB9C /* UserPreferenceEngine.m */; };
+		4CCDEFCA2F497C7C00A2DB9C /* EffectDecisionAgent.m in Sources */ = {isa = PBXBuildFile; fileRef = 4CCDEFBB2F497C7C00A2DB9C /* EffectDecisionAgent.m */; };
+		4CCDEFCB2F497C7C00A2DB9C /* UserContext.m in Sources */ = {isa = PBXBuildFile; fileRef = 4CCDEFC32F497C7C00A2DB9C /* UserContext.m */; };
+		4CCDEFCC2F497C7C00A2DB9C /* MusicStyleClassifier.m in Sources */ = {isa = PBXBuildFile; fileRef = 4CCDEFBF2F497C7C00A2DB9C /* MusicStyleClassifier.m */; };
+		4CCDEFCD2F497C7C00A2DB9C /* AudioFeatureExtractor.m in Sources */ = {isa = PBXBuildFile; fileRef = 4CCDEFB92F497C7C00A2DB9C /* AudioFeatureExtractor.m */; };
+		4CCDEFCE2F497C7C00A2DB9C /* RealtimeParameterTuner.m in Sources */ = {isa = PBXBuildFile; fileRef = 4CCDEFC12F497C7C00A2DB9C /* RealtimeParameterTuner.m */; };
+		4CCDEFCF2F497C7C00A2DB9C /* EffectTransitionController.m in Sources */ = {isa = PBXBuildFile; fileRef = 4CCDEFBD2F497C7C00A2DB9C /* EffectTransitionController.m */; };
 		4CCFF6022F3B1DAC004FFF9A /* MusicAIAnalyzer.m in Sources */ = {isa = PBXBuildFile; fileRef = 4CCFF6002F3B1DAC004FFF9A /* MusicAIAnalyzer.m */; };
 		4CCFF6032F3B1DAC004FFF9A /* AIColorConfiguration.m in Sources */ = {isa = PBXBuildFile; fileRef = 4CCFF5FE2F3B1DAC004FFF9A /* AIColorConfiguration.m */; };
 		4CDSP00012F24CF0000000001 /* RealtimeAnalyzerDSP.c in Sources */ = {isa = PBXBuildFile; fileRef = 4CDSP00012F24CF0000000003 /* RealtimeAnalyzerDSP.c */; };
@@ -341,6 +349,22 @@
 		4C7D33B02F1110000000000D /* LocalLyricsListViewController.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = LocalLyricsListViewController.h; sourceTree = "<group>"; };
 		4C7D33B02F1110000000000E /* LocalLyricsListViewController.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = LocalLyricsListViewController.m; sourceTree = "<group>"; };
 		4CBE681E2F24BE5300F0C733 /* NeonSpringLinesShader.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = NeonSpringLinesShader.metal; sourceTree = "<group>"; };
+		4CCDEFB82F497C7C00A2DB9C /* AudioFeatureExtractor.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AudioFeatureExtractor.h; sourceTree = "<group>"; };
+		4CCDEFB92F497C7C00A2DB9C /* AudioFeatureExtractor.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AudioFeatureExtractor.m; sourceTree = "<group>"; };
+		4CCDEFBA2F497C7C00A2DB9C /* EffectDecisionAgent.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = EffectDecisionAgent.h; sourceTree = "<group>"; };
+		4CCDEFBB2F497C7C00A2DB9C /* EffectDecisionAgent.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = EffectDecisionAgent.m; sourceTree = "<group>"; };
+		4CCDEFBC2F497C7C00A2DB9C /* EffectTransitionController.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = EffectTransitionController.h; sourceTree = "<group>"; };
+		4CCDEFBD2F497C7C00A2DB9C /* EffectTransitionController.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = EffectTransitionController.m; sourceTree = "<group>"; };
+		4CCDEFBE2F497C7C00A2DB9C /* MusicStyleClassifier.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = MusicStyleClassifier.h; sourceTree = "<group>"; };
+		4CCDEFBF2F497C7C00A2DB9C /* MusicStyleClassifier.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = MusicStyleClassifier.m; sourceTree = "<group>"; };
+		4CCDEFC02F497C7C00A2DB9C /* RealtimeParameterTuner.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = RealtimeParameterTuner.h; sourceTree = "<group>"; };
+		4CCDEFC12F497C7C00A2DB9C /* RealtimeParameterTuner.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = RealtimeParameterTuner.m; sourceTree = "<group>"; };
+		4CCDEFC22F497C7C00A2DB9C /* UserContext.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = UserContext.h; sourceTree = "<group>"; };
+		4CCDEFC32F497C7C00A2DB9C /* UserContext.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = UserContext.m; sourceTree = "<group>"; };
+		4CCDEFC42F497C7C00A2DB9C /* UserPreferenceEngine.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = UserPreferenceEngine.h; sourceTree = "<group>"; };
+		4CCDEFC52F497C7C00A2DB9C /* UserPreferenceEngine.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = UserPreferenceEngine.m; sourceTree = "<group>"; };
+		4CCDEFC62F497C7C00A2DB9C /* VisualEffectAIController.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = VisualEffectAIController.h; sourceTree = "<group>"; };
+		4CCDEFC72F497C7C00A2DB9C /* VisualEffectAIController.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = VisualEffectAIController.m; sourceTree = "<group>"; };
 		4CCFF5FD2F3B1DAC004FFF9A /* AIColorConfiguration.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AIColorConfiguration.h; sourceTree = "<group>"; };
 		4CCFF5FE2F3B1DAC004FFF9A /* AIColorConfiguration.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AIColorConfiguration.m; sourceTree = "<group>"; };
 		4CCFF5FF2F3B1DAC004FFF9A /* MusicAIAnalyzer.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = MusicAIAnalyzer.h; sourceTree = "<group>"; };
@@ -682,6 +706,22 @@
 				4CCFF5FE2F3B1DAC004FFF9A /* AIColorConfiguration.m */,
 				4CCFF5FF2F3B1DAC004FFF9A /* MusicAIAnalyzer.h */,
 				4CCFF6002F3B1DAC004FFF9A /* MusicAIAnalyzer.m */,
+				4CCDEFB82F497C7C00A2DB9C /* AudioFeatureExtractor.h */,
+				4CCDEFB92F497C7C00A2DB9C /* AudioFeatureExtractor.m */,
+				4CCDEFBA2F497C7C00A2DB9C /* EffectDecisionAgent.h */,
+				4CCDEFBB2F497C7C00A2DB9C /* EffectDecisionAgent.m */,
+				4CCDEFBC2F497C7C00A2DB9C /* EffectTransitionController.h */,
+				4CCDEFBD2F497C7C00A2DB9C /* EffectTransitionController.m */,
+				4CCDEFBE2F497C7C00A2DB9C /* MusicStyleClassifier.h */,
+				4CCDEFBF2F497C7C00A2DB9C /* MusicStyleClassifier.m */,
+				4CCDEFC02F497C7C00A2DB9C /* RealtimeParameterTuner.h */,
+				4CCDEFC12F497C7C00A2DB9C /* RealtimeParameterTuner.m */,
+				4CCDEFC22F497C7C00A2DB9C /* UserContext.h */,
+				4CCDEFC32F497C7C00A2DB9C /* UserContext.m */,
+				4CCDEFC42F497C7C00A2DB9C /* UserPreferenceEngine.h */,
+				4CCDEFC52F497C7C00A2DB9C /* UserPreferenceEngine.m */,
+				4CCDEFC62F497C7C00A2DB9C /* VisualEffectAIController.h */,
+				4CCDEFC72F497C7C00A2DB9C /* VisualEffectAIController.m */,
 			);
 			path = AI;
 			sourceTree = "<group>";
@@ -871,6 +911,14 @@
 				4C6548652EA0AB71006DD8DD /* QQMusicLyricsAPI.m in Sources */,
 				4C699F8C2E9F951A009090AB /* InterpolateShannon.cpp in Sources */,
 				4C699F8D2E9F951A009090AB /* cpu_detect_x86.cpp in Sources */,
+				4CCDEFC82F497C7C00A2DB9C /* VisualEffectAIController.m in Sources */,
+				4CCDEFC92F497C7C00A2DB9C /* UserPreferenceEngine.m in Sources */,
+				4CCDEFCA2F497C7C00A2DB9C /* EffectDecisionAgent.m in Sources */,
+				4CCDEFCB2F497C7C00A2DB9C /* UserContext.m in Sources */,
+				4CCDEFCC2F497C7C00A2DB9C /* MusicStyleClassifier.m in Sources */,
+				4CCDEFCD2F497C7C00A2DB9C /* AudioFeatureExtractor.m in Sources */,
+				4CCDEFCE2F497C7C00A2DB9C /* RealtimeParameterTuner.m in Sources */,
+				4CCDEFCF2F497C7C00A2DB9C /* EffectTransitionController.m in Sources */,
 				4C699F8E2E9F951A009090AB /* SoundTouchBridge.cpp in Sources */,
 				4C110D512EAA365E00D59E12 /* LuminousMistCoreShader.metal in Sources */,
 				4C110D522EAD000000D59E12 /* AuroraRippleShader.metal in Sources */,
