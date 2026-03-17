@@ -15,7 +15,7 @@
 
 #pragma mark - Constants
 
-static NSString *const kDeepSeekAPIKey = @"sk-daef0e2cc0f94c5a8473aa63c5026cd1";
+static NSString *const kDeepSeekAPIKey = @"";
 static NSString *const kDeepSeekAPIEndpoint = @"https://api.deepseek.com/v1/chat/completions";
 
 static NSString *const kLLMDecisionCacheFile = @"LLMDecisionCache.plist";
