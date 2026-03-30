@@ -222,6 +222,21 @@ NS_ASSUME_NONNULL_BEGIN
 @end
 
 /**
+ * 神经共振渲染器 - 实验性效果
+ * 仿神经网络拓扑结构，节点随音频脉动，信号沿连线实时传递
+ * 性能等级：Medium（14个节点 × 3条连线，30fps友好）
+ */
+@interface NeuralResonanceRenderer : BaseMetalRenderer
+@end
+
+/**
+ * 虫洞穿梭渲染器 - 实验性效果
+ * 星尘在原点汇聚成柱状脉冲，并沿虫洞纵深冲向观察者
+ */
+@interface WormholeDriveRenderer : BaseMetalRenderer
+@end
+
+/**
  * 默认效果渲染器
  */
 @interface DefaultEffectRenderer : BaseMetalRenderer

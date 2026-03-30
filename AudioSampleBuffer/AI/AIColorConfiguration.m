@@ -25,6 +25,7 @@
         _brightnessMultiplier = 1.0;
         _triggerSensitivity = 1.0;
         _atmosphereIntensity = 0.45;
+        _isLLMGenerated = NO;
         
         _cachedDate = [NSDate date];
     }
@@ -60,6 +61,9 @@
             config.emotion = MusicEmotionIntense;
         }
     }
+
+    id llmFlag = json[@"isLLMGenerated"];
+    config.isLLMGenerated = llmFlag ? [llmFlag boolValue] : YES;
     
     // 颜色方案
     NSDictionary *colors = json[@"colors"];
@@ -127,6 +131,7 @@
             @"triggerSensitivity": @(self.triggerSensitivity),
             @"atmosphereIntensity": @(self.atmosphereIntensity)
         },
+        @"isLLMGenerated": @(self.isLLMGenerated),
         @"cachedDate": self.cachedDate
     };
 }
@@ -289,6 +294,7 @@
     [coder encodeFloat:self.brightnessMultiplier forKey:@"brightnessMultiplier"];
     [coder encodeFloat:self.triggerSensitivity forKey:@"triggerSensitivity"];
     [coder encodeFloat:self.atmosphereIntensity forKey:@"atmosphereIntensity"];
+    [coder encodeBool:self.isLLMGenerated forKey:@"isLLMGenerated"];
 }
 
 - (instancetype)initWithCoder:(NSCoder *)coder {
@@ -342,6 +348,7 @@
         _brightnessMultiplier = [coder decodeFloatForKey:@"brightnessMultiplier"];
         _triggerSensitivity = [coder decodeFloatForKey:@"triggerSensitivity"];
         _atmosphereIntensity = [coder decodeFloatForKey:@"atmosphereIntensity"];
+        _isLLMGenerated = [coder decodeBoolForKey:@"isLLMGenerated"];
     }
     return self;
 }

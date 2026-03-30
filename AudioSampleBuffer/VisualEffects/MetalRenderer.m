@@ -1711,6 +1711,444 @@ typedef struct {
 
 @end
 
+#pragma mark - 神经共振渲染器 (实验性效果)
+
+@interface NeuralResonanceRenderer ()
+@property (nonatomic, assign) NSTimeInterval lastHostTime;
+@property (nonatomic, assign) float motionTime;
+@property (nonatomic, assign) float smoothedActivity;
+@property (nonatomic, strong) AIColorConfiguration *currentAIConfig;
+@end
+
+@implementation NeuralResonanceRenderer
+
+- (instancetype)initWithMetalView:(MTKView *)metalView {
+    self = [super initWithMetalView:metalView];
+    if (self) {
+        [[NSNotificationCenter defaultCenter] addObserver:self
+                                                 selector:@selector(neuralAIConfigurationDidChange:)
+                                                     name:kAIConfigurationDidChangeNotification
+                                                   object:nil];
+        _currentAIConfig = [MusicAIAnalyzer sharedAnalyzer].currentConfiguration;
+    }
+    return self;
+}
+
+- (void)dealloc {
+    [[NSNotificationCenter defaultCenter] removeObserver:self];
+}
+
+- (void)neuralAIConfigurationDidChange:(NSNotification *)notification {
+    AIColorConfiguration *config = notification.userInfo[kAIConfigurationKey];
+    if (config) {
+        self.currentAIConfig = config;
+        NSLog(@"🧠 神经共振: 已应用 AI 主题色 %@ - %@", config.songName, config.artist ?: @"");
+    }
+}
+
+- (void)setupPipeline {
+    MTLRenderPipelineDescriptor *pipelineDescriptor = [[MTLRenderPipelineDescriptor alloc] init];
+    pipelineDescriptor.label = @"NeuralResonance";
+    pipelineDescriptor.vertexFunction = [self.defaultLibrary newFunctionWithName:@"neon_vertex"];
+    pipelineDescriptor.fragmentFunction = [self.defaultLibrary newFunctionWithName:@"neuralResonanceFragment"];
+    pipelineDescriptor.colorAttachments[0].pixelFormat = self.metalView.colorPixelFormat;
+
+    pipelineDescriptor.sampleCount = self.metalView.sampleCount;
+    pipelineDescriptor.depthAttachmentPixelFormat = self.metalView.depthStencilPixelFormat;
+
+    // 发光叠加但保留层次，避免过曝
+    pipelineDescriptor.colorAttachments[0].blendingEnabled = YES;
+    pipelineDescriptor.colorAttachments[0].rgbBlendOperation = MTLBlendOperationAdd;
+    pipelineDescriptor.colorAttachments[0].alphaBlendOperation = MTLBlendOperationAdd;
+    pipelineDescriptor.colorAttachments[0].sourceRGBBlendFactor = MTLBlendFactorSourceAlpha;
+    pipelineDescriptor.colorAttachments[0].sourceAlphaBlendFactor = MTLBlendFactorSourceAlpha;
+    pipelineDescriptor.colorAttachments[0].destinationRGBBlendFactor = MTLBlendFactorOneMinusSourceAlpha;
+    pipelineDescriptor.colorAttachments[0].destinationAlphaBlendFactor = MTLBlendFactorOneMinusSourceAlpha;
+
+    NSError *error;
+    self.pipelineState = [self.device newRenderPipelineStateWithDescriptor:pipelineDescriptor error:&error];
+
+    if (!self.pipelineState) {
+        NSLog(@"❌ 创建神经共振管线失败: %@", error);
+        return;
+    }
+
+    [self setupPerformanceOptimizations];
+    NSLog(@"✅ 神经共振渲染器初始化成功");
+}
+
+- (void)setupPerformanceOptimizations {
+    NSString *deviceName = self.device.name;
+    NSMutableDictionary *params = [self.renderParameters mutableCopy] ?: [NSMutableDictionary dictionary];
+
+    // 根据 SoC 档位降低 shader 复杂度，控制发热
+    if ([deviceName containsString:@"A17"] || [deviceName containsString:@"A16"]) {
+        params[@"shaderComplexity"] = @(0.9);
+        params[@"nodeCount"] = @(12);
+    } else if ([deviceName containsString:@"A15"] || [deviceName containsString:@"A14"]) {
+        params[@"shaderComplexity"] = @(0.78);
+        params[@"nodeCount"] = @(10);
+    } else {
+        params[@"shaderComplexity"] = @(0.65);
+        params[@"nodeCount"] = @(8);
+    }
+
+    // 神经共振专用控制参数
+    params[@"silenceThreshold"] = params[@"silenceThreshold"] ?: @(0.022); // 无音乐门限
+    params[@"linkBrightness"] = params[@"linkBrightness"] ?: @(1.18);     // 连线提亮
+    params[@"rippleIntensity"] = params[@"rippleIntensity"] ?: @(1.08);   // 余波强度
+    params[@"currentIntensity"] = params[@"currentIntensity"] ?: @(1.15);  // 电流亮度
+    params[@"paletteBoost"] = params[@"paletteBoost"] ?: @(1.05);         // 调色增强
+
+    [self setRenderParameters:params];
+}
+
+- (void)updateUniforms:(NSTimeInterval)time {
+    [super updateUniforms:time];
+
+    Uniforms *uniforms = (Uniforms *)[self.uniformBuffer contents];
+
+    NSTimeInterval dt = 0.0;
+    if (self.lastHostTime > 0.0) {
+        dt = time - self.lastHostTime;
+        if (dt < 0.0) dt = 0.0;
+        if (dt > 0.12) dt = 0.12;
+    }
+    self.lastHostTime = time;
+
+    NSArray<NSNumber *> *spectrum = self.currentSpectrumData;
+    float bass = 0.0f;
+    float mid = 0.0f;
+    float treble = 0.0f;
+
+    if (spectrum.count > 0) {
+        NSUInteger count = MIN(spectrum.count, (NSUInteger)80);
+
+        float bassSum = 0.0f; int bassN = 0;
+        float midSum = 0.0f; int midN = 0;
+        float trebleSum = 0.0f; int trebleN = 0;
+
+        for (NSUInteger i = 0; i < count; i++) {
+            float v = [spectrum[i] floatValue];
+            if (isnan(v) || isinf(v)) v = 0.0f;
+
+            if (i <= 16) {
+                bassSum += v;
+                bassN++;
+            } else if (i <= 50) {
+                midSum += v;
+                midN++;
+            } else {
+                trebleSum += v;
+                trebleN++;
+            }
+        }
+
+        bass = bassN > 0 ? bassSum / (float)bassN : 0.0f;
+        mid = midN > 0 ? midSum / (float)midN : 0.0f;
+        treble = trebleN > 0 ? trebleSum / (float)trebleN : 0.0f;
+    }
+
+    NSDictionary *params = self.renderParameters;
+    float threshold = params[@"silenceThreshold"] ? [params[@"silenceThreshold"] floatValue] : 0.022f;
+    threshold = fmaxf(0.005f, fminf(threshold, 0.12f));
+
+    float energy = bass * 0.42f + mid * 0.35f + treble * 0.23f;
+    BOOL musicActive = energy > threshold;
+
+    float targetActivity = musicActive ? 1.0f : 0.0f;
+    float rise = 7.0f;
+    float fall = 4.0f;
+    float k = (targetActivity > self.smoothedActivity ? rise : fall) * (float)dt;
+    k = fminf(fmaxf(k, 0.0f), 1.0f);
+    self.smoothedActivity = self.smoothedActivity + (targetActivity - self.smoothedActivity) * k;
+
+    // 仅在音乐活跃时推进“余波/电流相位时间”，无音乐时冻结余波动画
+    if (musicActive && dt > 0.0) {
+        float speed = 0.72f + fminf(energy * 1.1f, 1.2f);
+        self.motionTime += (float)(dt * speed);
+    }
+
+    // 覆盖time向量：x作为主时间，z携带冻结相位时间（给余波/电流使用）
+    uniforms->time = (vector_float4){time, sin(time), self.motionTime, time * 0.5};
+
+    // LLM 主题色注入（供 shader 统一主导所有颜色）
+    vector_float3 themeColor = (vector_float3){0.58f, 0.68f, 1.0f};
+    float llmThemeEnabled = 0.0f;
+    if (self.currentAIConfig && self.currentAIConfig.isLLMGenerated) {
+        // 用 pulseRing + volumetricBeam 混合生成神经共振主主题色
+        vector_float3 p = (vector_float3){self.currentAIConfig.pulseRingColor.x,
+                                          self.currentAIConfig.pulseRingColor.y,
+                                          self.currentAIConfig.pulseRingColor.z};
+        vector_float3 v = (vector_float3){self.currentAIConfig.volumetricBeamColor.x,
+                                          self.currentAIConfig.volumetricBeamColor.y,
+                                          self.currentAIConfig.volumetricBeamColor.z};
+        themeColor = p * 0.62f + v * 0.38f;
+        llmThemeEnabled = 1.0f;
+    }
+
+    // 复用控制槽位给神经共振（不影响其他效果）
+    float paletteBoost = params[@"paletteBoost"] ? [params[@"paletteBoost"] floatValue] : 1.05f;
+
+    uniforms->cyberpunkControls = (vector_float4){musicActive ? 1.0f : 0.0f, self.smoothedActivity, bass, mid};
+    uniforms->cyberpunkFrequencyControls = (vector_float4){treble, energy, self.motionTime, llmThemeEnabled};
+    uniforms->cyberpunkBackgroundParams = (vector_float4){themeColor.x, themeColor.y, themeColor.z, paletteBoost};
+}
+
+- (void)encodeRenderCommands:(id<MTLRenderCommandEncoder>)encoder {
+    if (!self.pipelineState) return;
+    [encoder setRenderPipelineState:self.pipelineState];
+    [encoder setVertexBuffer:self.uniformBuffer offset:0 atIndex:0];
+    [encoder setFragmentBuffer:self.uniformBuffer offset:0 atIndex:0];
+    [encoder drawPrimitives:MTLPrimitiveTypeTriangleStrip vertexStart:0 vertexCount:4];
+}
+
+@end
+
+#pragma mark - 虫洞穿梭渲染器 (实验性效果)
+
+@interface WormholeDriveRenderer ()
+@property (nonatomic, assign) NSTimeInterval lastHostTime;
+@property (nonatomic, assign) float motionTime;
+@property (nonatomic, assign) float smoothedActivity;
+@property (nonatomic, assign) float beatEnvelope;
+@property (nonatomic, assign) float bassFollower;
+@property (nonatomic, assign) float energyFollower;
+@property (nonatomic, strong) AIColorConfiguration *currentAIConfig;
+@end
+
+@implementation WormholeDriveRenderer
+
+- (instancetype)initWithMetalView:(MTKView *)metalView {
+    self = [super initWithMetalView:metalView];
+    if (self) {
+        [[NSNotificationCenter defaultCenter] addObserver:self
+                                                 selector:@selector(wormholeAIConfigurationDidChange:)
+                                                     name:kAIConfigurationDidChangeNotification
+                                                   object:nil];
+        _currentAIConfig = [MusicAIAnalyzer sharedAnalyzer].currentConfiguration;
+    }
+    return self;
+}
+
+- (void)dealloc {
+    [[NSNotificationCenter defaultCenter] removeObserver:self];
+}
+
+- (void)wormholeAIConfigurationDidChange:(NSNotification *)notification {
+    AIColorConfiguration *config = notification.userInfo[kAIConfigurationKey];
+    if (config) {
+        self.currentAIConfig = config;
+        NSLog(@"🌀 虫洞穿梭: 已应用 AI 主题色 %@ - %@", config.songName, config.artist ?: @"");
+    }
+}
+
+- (void)setupPipeline {
+    MTLRenderPipelineDescriptor *pipelineDescriptor = [[MTLRenderPipelineDescriptor alloc] init];
+    pipelineDescriptor.label = @"WormholeDrive";
+    pipelineDescriptor.vertexFunction = [self.defaultLibrary newFunctionWithName:@"neon_vertex"];
+    pipelineDescriptor.fragmentFunction = [self.defaultLibrary newFunctionWithName:@"wormholeDriveFragment"];
+    pipelineDescriptor.colorAttachments[0].pixelFormat = self.metalView.colorPixelFormat;
+
+    pipelineDescriptor.sampleCount = self.metalView.sampleCount;
+    pipelineDescriptor.depthAttachmentPixelFormat = self.metalView.depthStencilPixelFormat;
+
+    pipelineDescriptor.colorAttachments[0].blendingEnabled = NO;
+    pipelineDescriptor.colorAttachments[0].rgbBlendOperation = MTLBlendOperationAdd;
+    pipelineDescriptor.colorAttachments[0].alphaBlendOperation = MTLBlendOperationAdd;
+    pipelineDescriptor.colorAttachments[0].sourceRGBBlendFactor = MTLBlendFactorSourceAlpha;
+    pipelineDescriptor.colorAttachments[0].sourceAlphaBlendFactor = MTLBlendFactorSourceAlpha;
+    pipelineDescriptor.colorAttachments[0].destinationRGBBlendFactor = MTLBlendFactorOneMinusSourceAlpha;
+    pipelineDescriptor.colorAttachments[0].destinationAlphaBlendFactor = MTLBlendFactorOneMinusSourceAlpha;
+
+    NSError *error;
+    self.pipelineState = [self.device newRenderPipelineStateWithDescriptor:pipelineDescriptor error:&error];
+
+    if (!self.pipelineState) {
+        NSLog(@"❌ 创建虫洞穿梭管线失败: %@", error);
+        return;
+    }
+
+    [self setupPerformanceOptimizations];
+    NSLog(@"✅ 虫洞穿梭渲染器初始化成功");
+}
+
+- (void)setupPerformanceOptimizations {
+    NSString *deviceName = self.device.name;
+    NSMutableDictionary *params = [self.renderParameters mutableCopy] ?: [NSMutableDictionary dictionary];
+
+    if ([deviceName containsString:@"A17"] || [deviceName containsString:@"A16"]) {
+        params[@"starLaneCount"] = @(16);
+        params[@"barCount"] = @(10);
+        params[@"travelSpeed"] = @(0.90);
+    } else if ([deviceName containsString:@"A15"] || [deviceName containsString:@"A14"]) {
+        params[@"starLaneCount"] = @(14);
+        params[@"barCount"] = @(8);
+        params[@"travelSpeed"] = @(0.86);
+    } else {
+        params[@"starLaneCount"] = @(12);
+        params[@"barCount"] = @(6);
+        params[@"travelSpeed"] = @(0.80);
+    }
+
+    params[@"silenceThreshold"] = params[@"silenceThreshold"] ?: @(0.02);
+    params[@"flashIntensity"] = params[@"flashIntensity"] ?: @(1.12);
+    params[@"tunnelRadius"] = params[@"tunnelRadius"] ?: @(0.28);
+    params[@"swirlAmount"] = params[@"swirlAmount"] ?: @(1.00);
+    params[@"paletteBoost"] = params[@"paletteBoost"] ?: @(1.08);
+    params[@"audioSensitivity"] = params[@"audioSensitivity"] ?: @(1.10);
+    params[@"beatDecay"] = params[@"beatDecay"] ?: @(5.4);
+
+    [self setRenderParameters:params];
+}
+
+- (void)updateUniforms:(NSTimeInterval)time {
+    [super updateUniforms:time];
+
+    Uniforms *uniforms = (Uniforms *)[self.uniformBuffer contents];
+
+    NSTimeInterval dt = 0.0;
+    if (self.lastHostTime > 0.0) {
+        dt = time - self.lastHostTime;
+        if (dt < 0.0) dt = 0.0;
+        if (dt > 0.12) dt = 0.12;
+    }
+    self.lastHostTime = time;
+
+    NSArray<NSNumber *> *spectrum = self.currentSpectrumData;
+    float bass = 0.0f;
+    float mid = 0.0f;
+    float treble = 0.0f;
+
+    if (spectrum.count > 0) {
+        NSUInteger count = MIN(spectrum.count, (NSUInteger)80);
+        float bassSum = 0.0f; int bassN = 0;
+        float midSum = 0.0f; int midN = 0;
+        float trebleSum = 0.0f; int trebleN = 0;
+
+        for (NSUInteger i = 0; i < count; i++) {
+            float value = [spectrum[i] floatValue];
+            if (isnan(value) || isinf(value)) value = 0.0f;
+
+            if (i <= 16) {
+                bassSum += value;
+                bassN++;
+            } else if (i <= 50) {
+                midSum += value;
+                midN++;
+            } else {
+                trebleSum += value;
+                trebleN++;
+            }
+        }
+
+        bass = bassN > 0 ? bassSum / (float)bassN : 0.0f;
+        mid = midN > 0 ? midSum / (float)midN : 0.0f;
+        treble = trebleN > 0 ? trebleSum / (float)trebleN : 0.0f;
+    }
+
+    NSDictionary *params = self.renderParameters;
+    float threshold = params[@"silenceThreshold"] ? [params[@"silenceThreshold"] floatValue] : 0.02f;
+    threshold = fmaxf(0.005f, fminf(threshold, 0.1f));
+
+    float energy = fmaxf(0.0f, fminf(bass * 0.48f + mid * 0.34f + treble * 0.18f, 1.4f));
+    BOOL musicActive = energy > threshold;
+
+    float targetActivity = musicActive ? 1.0f : 0.0f;
+    float rise = 7.6f;
+    float fall = 3.5f;
+    float response = (targetActivity > self.smoothedActivity ? rise : fall) * (float)dt;
+    response = fminf(fmaxf(response, 0.0f), 1.0f);
+    self.smoothedActivity = self.smoothedActivity + (targetActivity - self.smoothedActivity) * response;
+
+    if (dt > 0.0) {
+        float travelSpeed = params[@"travelSpeed"] ? [params[@"travelSpeed"] floatValue] : 1.12f;
+        float idleDrift = 0.08f + travelSpeed * 0.08f;
+        float musicBoost = musicActive ? (travelSpeed * 0.78f + energy * 0.95f + bass * 0.45f) : 0.0f;
+        self.motionTime += (float)(dt * (idleDrift + musicBoost));
+    }
+
+    uniforms->time = (vector_float4){time, (float)dt, self.motionTime, time * 0.31f};
+
+    vector_float3 themeColor = (vector_float3){0.52f, 0.72f, 1.0f};
+    float llmThemeEnabled = 0.0f;
+    if (self.currentAIConfig && self.currentAIConfig.isLLMGenerated) {
+        vector_float3 pulse = (vector_float3){self.currentAIConfig.pulseRingColor.x,
+                                              self.currentAIConfig.pulseRingColor.y,
+                                              self.currentAIConfig.pulseRingColor.z};
+        vector_float3 corona = (vector_float3){self.currentAIConfig.coronaFilamentsColor.x,
+                                               self.currentAIConfig.coronaFilamentsColor.y,
+                                               self.currentAIConfig.coronaFilamentsColor.z};
+        themeColor = pulse * 0.58f + corona * 0.42f;
+        llmThemeEnabled = 1.0f;
+    }
+
+    float barCount = params[@"barCount"] ? [params[@"barCount"] floatValue] : 10.0f;
+    float starLaneCount = params[@"starLaneCount"] ? [params[@"starLaneCount"] floatValue] : 16.0f;
+    float tunnelRadius = params[@"tunnelRadius"] ? [params[@"tunnelRadius"] floatValue] : 0.30f;
+    float flashIntensity = params[@"flashIntensity"] ? [params[@"flashIntensity"] floatValue] : 1.35f;
+    float swirlAmount = params[@"swirlAmount"] ? [params[@"swirlAmount"] floatValue] : 1.20f;
+    float paletteBoost = params[@"paletteBoost"] ? [params[@"paletteBoost"] floatValue] : 1.10f;
+    float audioSensitivity = params[@"audioSensitivity"] ? [params[@"audioSensitivity"] floatValue] : 1.08f;
+    audioSensitivity = fmaxf(0.65f, fminf(audioSensitivity, 1.8f));
+
+    float previousBassFollower = self.bassFollower;
+    float previousEnergyFollower = self.energyFollower;
+    if (dt > 0.0) {
+        float bassFollowRate = (bass > self.bassFollower ? 10.0f : 2.8f) * (float)dt;
+        bassFollowRate = fminf(fmaxf(bassFollowRate, 0.0f), 1.0f);
+        self.bassFollower = self.bassFollower + (bass - self.bassFollower) * bassFollowRate;
+
+        float energyFollowRate = (energy > self.energyFollower ? 7.2f : 2.6f) * (float)dt;
+        energyFollowRate = fminf(fmaxf(energyFollowRate, 0.0f), 1.0f);
+        self.energyFollower = self.energyFollower + (energy - self.energyFollower) * energyFollowRate;
+    } else {
+        self.bassFollower = bass;
+        self.energyFollower = energy;
+    }
+
+    float beatTrigger = params[@"beatTrigger"] ? [params[@"beatTrigger"] floatValue] : 0.0f;
+    beatTrigger = fmaxf(0.0f, fminf(beatTrigger, 1.2f));
+    float bassRise = dt > 0.0 ? fmaxf(0.0f, bass - previousBassFollower) : 0.0f;
+    float energyRise = dt > 0.0 ? fmaxf(0.0f, energy - previousEnergyFollower) : 0.0f;
+    float localBeat = fminf(fmaxf(bassRise * 4.8f + energyRise * 3.2f + treble * 0.14f, 0.0f), 1.0f);
+    float beatInput = fmaxf(beatTrigger, localBeat);
+    self.beatEnvelope = fmaxf(self.beatEnvelope, beatInput);
+
+    float beatDecay = params[@"beatDecay"] ? [params[@"beatDecay"] floatValue] : 6.2f;
+    beatDecay = fmaxf(1.0f, fminf(beatDecay, 12.0f));
+    if (dt > 0.0) {
+        self.beatEnvelope *= expf(-beatDecay * (float)dt);
+    }
+
+    if (beatTrigger > 0.0f) {
+        self.renderParameters[@"beatTrigger"] = @(0.0f);
+    }
+
+    uniforms->galaxyParams1 = (vector_float4){barCount, starLaneCount, tunnelRadius, flashIntensity};
+    uniforms->galaxyParams2 = (vector_float4){params[@"travelSpeed"] ? [params[@"travelSpeed"] floatValue] : 0.90f,
+                                              swirlAmount,
+                                              self.smoothedActivity,
+                                              audioSensitivity};
+    uniforms->galaxyParams3 = (vector_float4){0.09f + bass * 0.05f,
+                                              11.0f + mid * 8.0f + energy * 3.0f,
+                                              1.05f + treble * 0.80f + beatInput * 0.18f,
+                                              self.beatEnvelope};
+    uniforms->cyberpunkControls = (vector_float4){musicActive ? 1.0f : 0.0f, self.smoothedActivity, bass, mid};
+    uniforms->cyberpunkFrequencyControls = (vector_float4){treble, energy, self.motionTime, llmThemeEnabled};
+    uniforms->cyberpunkBackgroundParams = (vector_float4){themeColor.x, themeColor.y, themeColor.z, paletteBoost};
+}
+
+- (void)encodeRenderCommands:(id<MTLRenderCommandEncoder>)encoder {
+    if (!self.pipelineState) return;
+    [encoder setRenderPipelineState:self.pipelineState];
+    [encoder setVertexBuffer:self.uniformBuffer offset:0 atIndex:0];
+    [encoder setFragmentBuffer:self.uniformBuffer offset:0 atIndex:0];
+    [encoder drawPrimitives:MTLPrimitiveTypeTriangleStrip vertexStart:0 vertexCount:4];
+}
+
+@end
+
 #pragma mark - 渲染器工厂
 
 @implementation MetalRendererFactory
@@ -1790,6 +2228,12 @@ typedef struct {
             
         case VisualEffectTypeTyndallBeam:
             return [[TyndallBeamRenderer alloc] initWithMetalView:metalView];
+
+        case VisualEffectTypeNeuralResonance:
+            return [[NeuralResonanceRenderer alloc] initWithMetalView:metalView];
+
+        case VisualEffectTypeWormholeDrive:
+            return [[WormholeDriveRenderer alloc] initWithMetalView:metalView];
             
         default:
             return [[DefaultEffectRenderer alloc] initWithMetalView:metalView];

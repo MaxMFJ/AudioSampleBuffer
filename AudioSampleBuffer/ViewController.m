@@ -28,6 +28,7 @@
 #import "LyricsEditorViewController.h"  // 🎼 歌词打轴编辑器
 #import "MusicAIAnalyzer.h"  // 🎨 AI 音乐分析（丁达尔等效果动态颜色）
 #import "EffectDecisionAgent.h"  // 🧠 Planning + Reflection Agent
+#import "LLMAPISettings.h"  // 🤖 AI 接口本地配置
 #import "AgentGoalManager.h"     // 🎯 目标管理器
 #import "AgentPlanner.h"         // 📋 规划器
 #import "AgentReflectionEngine.h" // 🔍 反思引擎
@@ -58,6 +59,7 @@
 @property (nonatomic, strong) UIButton *reloadButton;  // 刷新音乐库按钮
 @property (nonatomic, strong) UIButton *importButton;  // 导入音乐按钮
 @property (nonatomic, strong) UIButton *clearAICacheButton;  // 清除 AI 缓存按钮
+@property (nonatomic, strong) UIButton *aiSettingsButton;  // AI 接口设置按钮
 @property (nonatomic, assign) MusicSortType currentSortType;  // 当前排序方式
 @property (nonatomic, assign) BOOL sortAscending;  // 排序方向
 @property (nonatomic, strong) UIScrollView *leftFunctionScrollView;  // 🆕 左侧功能栏滚动容器
@@ -1289,12 +1291,28 @@
     [self.clearAICacheButton addTarget:self action:@selector(clearAICacheButtonTapped:) forControlEvents:UIControlEventTouchUpInside];
     [self.leftFunctionScrollView addSubview:self.clearAICacheButton];
     
+    // AI 接口设置按钮 - 放在清除 AI 按钮下方
+    CGFloat aiSettingsButtonY = clearAICacheButtonY + buttonHeight + spacing;
+    self.aiSettingsButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    [self.aiSettingsButton setTitle:@"🤖 AI设置" forState:UIControlStateNormal];
+    [self.aiSettingsButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+    self.aiSettingsButton.titleLabel.font = [UIFont boldSystemFontOfSize:13];
+    self.aiSettingsButton.titleLabel.numberOfLines = 2;
+    self.aiSettingsButton.titleLabel.textAlignment = NSTextAlignmentCenter;
+    self.aiSettingsButton.backgroundColor = [UIColor colorWithRed:0.32 green:0.45 blue:0.85 alpha:0.85];
+    self.aiSettingsButton.layer.cornerRadius = 8;
+    self.aiSettingsButton.layer.borderWidth = 1.5;
+    self.aiSettingsButton.layer.borderColor = [UIColor colorWithRed:0.45 green:0.58 blue:1.0 alpha:0.8].CGColor;
+    self.aiSettingsButton.frame = CGRectMake(leftX, aiSettingsButtonY, buttonWidth, buttonHeight);
+    [self.aiSettingsButton addTarget:self action:@selector(aiSettingsButtonTapped:) forControlEvents:UIControlEventTouchUpInside];
+    [self.leftFunctionScrollView addSubview:self.aiSettingsButton];
+    
     // 左侧功能栏中的其他按钮（循环、云端、歌词打轴）
     CGFloat controlButtonHeight = 32;
     CGFloat controlSpacing = 4;
     
     // 单曲循环按钮
-    CGFloat loopButtonY = clearAICacheButtonY + buttonHeight + spacing + 10;
+    CGFloat loopButtonY = aiSettingsButtonY + buttonHeight + spacing + 10;
     self.loopButton = [UIButton buttonWithType:UIButtonTypeSystem];
     [self.loopButton setTitle:@"🔁" forState:UIControlStateNormal];
     self.loopButton.titleLabel.font = [UIFont systemFontOfSize:20];
@@ -3359,7 +3377,7 @@
     
     // 显示确认对话框
     UIAlertController *confirmAlert = [UIAlertController alertControllerWithTitle:@"清除 AI 缓存"
-                                                                          message:@"确定要清除所有 DeepSeek AI 音乐分析缓存吗？\n清除后，下次播放歌曲将重新进行 AI 分析。"
+                                                                          message:@"确定要清除所有 AI 音乐分析缓存吗？\n清除后，下次播放歌曲将重新进行 AI 分析。"
                                                                    preferredStyle:UIAlertControllerStyleAlert];
     
     // 取消按钮
@@ -3390,6 +3408,75 @@
     [confirmAlert addAction:confirmAction];
     
     [self presentViewController:confirmAlert animated:YES completion:nil];
+}
+
+- (void)aiSettingsButtonTapped:(UIButton *)sender {
+    [self.searchBar resignFirstResponder];
+    
+    LLMAPISettings *settings = [LLMAPISettings sharedSettings];
+    NSString *message = [NSString stringWithFormat:@"配置保存在 App 沙箱内，不会写进开源代码。\n当前模型：%@\n当前 Key：%@", settings.model, settings.maskedAPIKey];
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"🤖 AI 接口设置"
+                                                                   message:message
+                                                            preferredStyle:UIAlertControllerStyleAlert];
+    
+    [alert addTextFieldWithConfigurationHandler:^(UITextField * _Nonnull textField) {
+        textField.placeholder = @"Base URL，例如 https://api.deepseek.com";
+        textField.text = settings.baseURL;
+        textField.clearButtonMode = UITextFieldViewModeWhileEditing;
+        textField.autocapitalizationType = UITextAutocapitalizationTypeNone;
+        textField.autocorrectionType = UITextAutocorrectionTypeNo;
+        textField.keyboardType = UIKeyboardTypeURL;
+    }];
+    
+    [alert addTextFieldWithConfigurationHandler:^(UITextField * _Nonnull textField) {
+        textField.placeholder = @"Model，例如 deepseek-chat";
+        textField.text = settings.model;
+        textField.clearButtonMode = UITextFieldViewModeWhileEditing;
+        textField.autocapitalizationType = UITextAutocapitalizationTypeNone;
+        textField.autocorrectionType = UITextAutocorrectionTypeNo;
+    }];
+    
+    [alert addTextFieldWithConfigurationHandler:^(UITextField * _Nonnull textField) {
+        textField.placeholder = @"API Key";
+        textField.text = settings.apiKey;
+        textField.clearButtonMode = UITextFieldViewModeWhileEditing;
+        textField.autocapitalizationType = UITextAutocapitalizationTypeNone;
+        textField.autocorrectionType = UITextAutocorrectionTypeNo;
+        textField.secureTextEntry = YES;
+    }];
+    
+    UIAlertAction *cancelAction = [UIAlertAction actionWithTitle:@"取消"
+                                                           style:UIAlertActionStyleCancel
+                                                         handler:nil];
+    [alert addAction:cancelAction];
+    
+    UIAlertAction *saveAction = [UIAlertAction actionWithTitle:@"保存"
+                                                         style:UIAlertActionStyleDefault
+                                                       handler:^(UIAlertAction * _Nonnull action) {
+        NSString *baseURL = alert.textFields.count > 0 ? alert.textFields[0].text : @"";
+        NSString *model = alert.textFields.count > 1 ? alert.textFields[1].text : @"";
+        NSString *apiKey = alert.textFields.count > 2 ? alert.textFields[2].text : @"";
+        
+        NSURL *resolvedURL = [LLMAPISettings resolvedServiceURLForBaseURL:baseURL];
+        if (!resolvedURL) {
+            [self showAlert:@"❌ 保存失败" message:@"Base URL 无效，请检查后重新填写。"];
+            return;
+        }
+        
+        [[LLMAPISettings sharedSettings] updateWithBaseURL:baseURL
+                                                     model:model
+                                                    apiKey:apiKey];
+        
+        LLMAPISettings *updatedSettings = [LLMAPISettings sharedSettings];
+        NSString *resultMessage = [NSString stringWithFormat:@"AI 接口配置已保存到 App 沙箱。\nBase URL：%@\nModel：%@\nAPI Key：%@",
+                                   updatedSettings.baseURL,
+                                   updatedSettings.model,
+                                   updatedSettings.maskedAPIKey];
+        [self showAlert:@"✅ 保存成功" message:resultMessage];
+    }];
+    [alert addAction:saveAction];
+    
+    [self presentViewController:alert animated:YES completion:nil];
 }
 
 #pragma mark - 🎵 播放控制按钮事件处理

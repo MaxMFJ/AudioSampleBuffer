@@ -4,11 +4,8 @@
 //
 
 #import "MusicAIAnalyzer.h"
+#import "LLMAPISettings.h"
 #import <CommonCrypto/CommonDigest.h>
-
-// DeepSeek API 配置
-static NSString *const kDeepSeekAPIKey = @"sk-daef0e2cc0f94c5a8473aa63c5026cd1";
-static NSString *const kDeepSeekAPIEndpoint = @"https://api.deepseek.com/v1/chat/completions";
 
 // 缓存配置
 static NSString *const kCacheDirectory = @"MusicAICache";
@@ -77,14 +74,20 @@ NSString *const kAIConfigurationKey = @"configuration";
     // 检查缓存
     AIColorConfiguration *cached = [self getCachedConfigurationForSong:songName artist:artist];
     if (cached) {
-        NSLog(@"✅ 使用缓存配置: %@ - %@", songName, artist);
-        NSLog(@"🎨 缓存颜色: laserFanBlue=(%.2f, %.2f, %.2f), topLightArray=(%.2f, %.2f, %.2f)",
-              cached.laserFanBlueColor.x, cached.laserFanBlueColor.y, cached.laserFanBlueColor.z,
-              cached.topLightArrayColor.x, cached.topLightArrayColor.y, cached.topLightArrayColor.z);
-        self.currentConfiguration = cached;
-        [self applyConfiguration:cached];
-        completion(cached, nil);
-        return;
+        // 旧缓存中可能是网络失败后的降级配置，允许重新请求 LLM 避免长期卡死在默认配色
+        if (!cached.isLLMGenerated) {
+            NSLog(@"♻️ 检测到降级缓存，清除并重新请求 AI 服务: %@ - %@", songName, artist ?: @"Unknown");
+            [self clearCacheForSong:songName artist:artist];
+        } else {
+            NSLog(@"✅ 使用缓存配置: %@ - %@", songName, artist);
+            NSLog(@"🎨 缓存颜色: laserFanBlue=(%.2f, %.2f, %.2f), topLightArray=(%.2f, %.2f, %.2f)",
+                  cached.laserFanBlueColor.x, cached.laserFanBlueColor.y, cached.laserFanBlueColor.z,
+                  cached.topLightArrayColor.x, cached.topLightArrayColor.y, cached.topLightArrayColor.z);
+            self.currentConfiguration = cached;
+            [self applyConfiguration:cached];
+            completion(cached, nil);
+            return;
+        }
     }
     
     // 调用 API 分析
@@ -112,7 +115,7 @@ NSString *const kAIConfigurationKey = @"configuration";
     // 构建 prompt
     NSString *prompt = [self buildPromptForSong:songName artist:artist];
     
-    // 调用 DeepSeek API
+    // 调用已配置的 LLM API
     [self callDeepSeekAPI:prompt completion:^(NSDictionary *response, NSError *error) {
         self.isAnalyzing = NO;
         
@@ -123,7 +126,6 @@ NSString *const kAIConfigurationKey = @"configuration";
             NSLog(@"🎨 降级颜色: laserFanBlue=(%.2f, %.2f, %.2f), topLightArray=(%.2f, %.2f, %.2f)",
                   fallback.laserFanBlueColor.x, fallback.laserFanBlueColor.y, fallback.laserFanBlueColor.z,
                   fallback.topLightArrayColor.x, fallback.topLightArrayColor.y, fallback.topLightArrayColor.z);
-            [self cacheConfiguration:fallback forSong:songName artist:artist];
             self.currentConfiguration = fallback;
             [self applyConfiguration:fallback];
             completion(fallback, nil);
@@ -134,6 +136,7 @@ NSString *const kAIConfigurationKey = @"configuration";
         AIColorConfiguration *config = [self parseAPIResponse:response songName:songName artist:artist];
         if (config) {
             NSLog(@"✅ AI 分析成功: BPM=%ld, 情感=%@", (long)config.bpm, [self emotionToString:config.emotion]);
+            config.isLLMGenerated = YES;
             [self cacheConfiguration:config forSong:songName artist:artist];
             self.currentConfiguration = config;
             [self applyConfiguration:config];
@@ -141,7 +144,6 @@ NSString *const kAIConfigurationKey = @"configuration";
         } else {
             NSLog(@"⚠️ 解析响应失败，使用降级配置");
             AIColorConfiguration *fallback = [self generateFallbackConfiguration:songName artist:artist];
-            [self cacheConfiguration:fallback forSong:songName artist:artist];
             self.currentConfiguration = fallback;
             [self applyConfiguration:fallback];
             completion(fallback, nil);
@@ -267,14 +269,31 @@ NSString *const kAIConfigurationKey = @"configuration";
 }
 
 - (void)callDeepSeekAPI:(NSString *)prompt completion:(void(^)(NSDictionary *response, NSError *error))completion {
-    NSURL *url = [NSURL URLWithString:kDeepSeekAPIEndpoint];
+    LLMAPISettings *settings = [LLMAPISettings sharedSettings];
+    if (settings.apiKey.length == 0) {
+        NSError *configError = [NSError errorWithDomain:@"LLMConfiguration"
+                                                   code:-1001
+                                               userInfo:@{NSLocalizedDescriptionKey: @"请先在 AI 设置中填写 API Key"}];
+        completion(nil, configError);
+        return;
+    }
+    
+    NSURL *url = settings.serviceURL;
+    if (!url) {
+        NSError *configError = [NSError errorWithDomain:@"LLMConfiguration"
+                                                   code:-1002
+                                               userInfo:@{NSLocalizedDescriptionKey: @"AI 设置中的 Base URL 无效，请重新填写"}];
+        completion(nil, configError);
+        return;
+    }
+    
     NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
     request.HTTPMethod = @"POST";
     [request setValue:@"application/json" forHTTPHeaderField:@"Content-Type"];
-    [request setValue:[NSString stringWithFormat:@"Bearer %@", kDeepSeekAPIKey] forHTTPHeaderField:@"Authorization"];
+    [request setValue:[NSString stringWithFormat:@"Bearer %@", settings.apiKey] forHTTPHeaderField:@"Authorization"];
     
     NSDictionary *payload = @{
-        @"model": @"deepseek-chat",
+        @"model": settings.model,
         @"messages": @[
             @{
                 @"role": @"system",
@@ -309,7 +328,7 @@ NSString *const kAIConfigurationKey = @"configuration";
         NSHTTPURLResponse *httpResponse = (NSHTTPURLResponse *)response;
         if (httpResponse.statusCode != 200) {
             NSString *errorMsg = [NSString stringWithFormat:@"API 返回错误: %ld", (long)httpResponse.statusCode];
-            NSError *apiError = [NSError errorWithDomain:@"DeepSeekAPI"
+            NSError *apiError = [NSError errorWithDomain:@"LLMAPI"
                                                     code:httpResponse.statusCode
                                                 userInfo:@{NSLocalizedDescriptionKey: errorMsg}];
             dispatch_async(dispatch_get_main_queue(), ^{
@@ -420,6 +439,7 @@ NSString *const kAIConfigurationKey = @"configuration";
     }
     
     AIColorConfiguration *config = [AIColorConfiguration configurationForEmotion:emotion];
+    config.isLLMGenerated = NO;
     config.songName = songName;
     config.artist = artist ?: @"";
     config.songIdentifier = [self cacheKeyForSong:songName artist:artist];

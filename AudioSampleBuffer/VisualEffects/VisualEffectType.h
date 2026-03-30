@@ -41,6 +41,8 @@ typedef NS_ENUM(NSUInteger, VisualEffectType) {
     VisualEffectTypeNeonSpringLines,        // 霓虹弹簧竖线
     VisualEffectTypeCherryBlossomSnow,      // 樱花飘雪
     VisualEffectTypeTyndallBeam,            // 丁达尔效应/舞台灯光
+    VisualEffectTypeNeuralResonance,        // 神经共振 - 仿神经网络拓扑脉冲
+    VisualEffectTypeWormholeDrive,          // 虫洞穿梭 - 星尘柱状脉冲向屏幕袭来
     
     // 数量
     VisualEffectTypeCount

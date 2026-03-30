@@ -52,6 +52,9 @@ typedef NS_ENUM(NSInteger, MusicEmotion) {
 @property (nonatomic, assign) float triggerSensitivity;  // 触发灵敏度，默认 1.0
 @property (nonatomic, assign) float atmosphereIntensity; // 氛围强度，默认 0.45
 
+// 来源标记
+@property (nonatomic, assign) BOOL isLLMGenerated;       // YES=来自 DeepSeek 成功响应, NO=降级/本地生成
+
 // 缓存时间
 @property (nonatomic, strong) NSDate *cachedDate;
 

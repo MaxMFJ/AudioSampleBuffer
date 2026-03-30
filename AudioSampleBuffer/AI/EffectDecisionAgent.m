@@ -8,15 +8,13 @@
 #import "EffectDecisionAgent.h"
 #import "MusicAIAnalyzer.h"
 #import "AIColorConfiguration.h"
+#import "LLMAPISettings.h"
 #import "AgentGoalManager.h"
 #import "AgentPlanner.h"
 #import "AgentReflectionEngine.h"
 #import "AgentMetricsCollector.h"
 
 #pragma mark - Constants
-
-static NSString *const kDeepSeekAPIKey = @"sk-daef0e2cc0f94c5a8473aa63c5026cd1";
-static NSString *const kDeepSeekAPIEndpoint = @"https://api.deepseek.com/v1/chat/completions";
 
 static NSString *const kLLMDecisionCacheFile = @"LLMDecisionCache.plist";
 static NSString *const kHistoryRecordsFile = @"DecisionHistory.plist";
@@ -295,6 +293,7 @@ NSString *const kEffectDecisionAgentDidLearnNotification = @"EffectDecisionAgent
 - (void)setupStyleEffectMapping {
     self.styleEffectMapping = @{
         @(MusicStyleElectronic): @[
+            @(VisualEffectTypeWormholeDrive),
             @(VisualEffectTypeNeonGlow),
             @(VisualEffectTypeCyberPunk),
             @(VisualEffectTypeNeonSpringLines),
@@ -344,6 +343,7 @@ NSString *const kEffectDecisionAgentDidLearnNotification = @"EffectDecisionAgent
             @(VisualEffectTypeHolographic)
         ],
         @(MusicStyleAmbient): @[
+            @(VisualEffectTypeWormholeDrive),
             @(VisualEffectTypeTyndallBeam),
             @(VisualEffectTypeGalaxy),
             @(VisualEffectTypeAuroraRipples),
@@ -353,6 +353,7 @@ NSString *const kEffectDecisionAgentDidLearnNotification = @"EffectDecisionAgent
         @(MusicStyleDance): @[
             @(VisualEffectTypeNeonGlow),
             @(VisualEffectTypeCyberPunk),
+            @(VisualEffectTypeWormholeDrive),
             @(VisualEffectTypeQuantumField),
             @(VisualEffectTypeNeonSpringLines),
             @(VisualEffectTypeFireworks)
@@ -392,10 +393,13 @@ NSString *const kEffectDecisionAgentDidLearnNotification = @"EffectDecisionAgent
             @(VisualEffectTypeCircularWave): @(VisualEffectTypeParticleFlow),
             @(VisualEffectTypeTyndallBeam): @(VisualEffectTypeQuantumField),
             @(VisualEffectTypeNeonGlow): @(VisualEffectTypeCyberPunk),
+            @(VisualEffectTypeGalaxy): @(VisualEffectTypeWormholeDrive),
+            @(VisualEffectTypeStarVortex): @(VisualEffectTypeWormholeDrive),
         },
         @(MusicSegmentOutro): @{
             @(VisualEffectTypeLightning): @(VisualEffectTypeAuroraRipples),
             @(VisualEffectTypeCyberPunk): @(VisualEffectTypeTyndallBeam),
+            @(VisualEffectTypeWormholeDrive): @(VisualEffectTypeTyndallBeam),
         }
     };
 }
@@ -978,23 +982,44 @@ NSString *const kEffectDecisionAgentDidLearnNotification = @"EffectDecisionAgent
     }];
 }
 
-#pragma mark - Direct DeepSeek API Call
+#pragma mark - Direct LLM API Call
 
 - (void)callDeepSeekDirectly:(NSString *)songName
                       artist:(nullable NSString *)artist
            additionalContext:(nullable NSDictionary *)additionalContext
                   completion:(LLMAnalysisCompletion)completion {
     
-    NSLog(@"🔗 直接调用 DeepSeek API: %@ - %@（单次超时 %.0f 秒，请耐心等待）", 
+    NSLog(@"🔗 直接调用 LLM API: %@ - %@（单次超时 %.0f 秒，请耐心等待）", 
           songName, artist ?: @"Unknown", self.configuration.llmTimeout);
     
     self.isCallingLLM = YES;
     [self incrementStatistic:@"llmCalls"];
     
     NSString *prompt = [self buildPromptForSong:songName artist:artist additionalContext:additionalContext];
+    LLMAPISettings *settings = [LLMAPISettings sharedSettings];
+    if (settings.apiKey.length == 0) {
+        self.isCallingLLM = NO;
+        NSError *configError = [NSError errorWithDomain:@"LLMConfiguration"
+                                                   code:-1001
+                                               userInfo:@{NSLocalizedDescriptionKey: @"请先在 AI 设置中填写 API Key"}];
+        [self incrementStatistic:@"llmFailures"];
+        completion(nil, configError);
+        return;
+    }
+    
+    NSURL *serviceURL = settings.serviceURL;
+    if (!serviceURL) {
+        self.isCallingLLM = NO;
+        NSError *configError = [NSError errorWithDomain:@"LLMConfiguration"
+                                                   code:-1002
+                                               userInfo:@{NSLocalizedDescriptionKey: @"AI 设置中的 Base URL 无效，请重新填写"}];
+        [self incrementStatistic:@"llmFailures"];
+        completion(nil, configError);
+        return;
+    }
     
     NSDictionary *requestBody = @{
-        @"model": @"deepseek-chat",
+        @"model": settings.model,
         @"messages": @[
             @{@"role": @"system", @"content": @"你是一个专业的音乐视觉效果分析师。根据歌曲信息，推荐最合适的视觉特效。返回JSON格式。"},
             @{@"role": @"user", @"content": prompt}
@@ -1011,18 +1036,18 @@ NSString *const kEffectDecisionAgentDidLearnNotification = @"EffectDecisionAgent
         return;
     }
     
-    NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:[NSURL URLWithString:kDeepSeekAPIEndpoint]];
+    NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:serviceURL];
     request.HTTPMethod = @"POST";
     request.HTTPBody = bodyData;
     [request setValue:@"application/json" forHTTPHeaderField:@"Content-Type"];
-    [request setValue:[NSString stringWithFormat:@"Bearer %@", kDeepSeekAPIKey] forHTTPHeaderField:@"Authorization"];
+    [request setValue:[NSString stringWithFormat:@"Bearer %@", settings.apiKey] forHTTPHeaderField:@"Authorization"];
     
     NSURLSessionDataTask *task = [self.urlSession dataTaskWithRequest:request completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
         self.isCallingLLM = NO;
         
         dispatch_async(dispatch_get_main_queue(), ^{
             if (error) {
-                NSLog(@"❌ DeepSeek API 错误: %@", error.localizedDescription);
+                NSLog(@"❌ LLM API 错误: %@", error.localizedDescription);
                 [self incrementStatistic:@"llmFailures"];
                 completion(nil, error);
                 return;
@@ -1031,19 +1056,19 @@ NSString *const kEffectDecisionAgentDidLearnNotification = @"EffectDecisionAgent
             // 先检查 HTTP 状态码
             NSHTTPURLResponse *httpResponse = (NSHTTPURLResponse *)response;
             NSInteger statusCode = httpResponse.statusCode;
-            NSLog(@"📡 DeepSeek HTTP 状态码: %ld", (long)statusCode);
+            NSLog(@"📡 LLM HTTP 状态码: %ld", (long)statusCode);
             
             // 打印原始响应（调试用）
             if (data) {
                 NSString *rawResponse = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
                 if (rawResponse.length > 500) {
-                    NSLog(@"📥 DeepSeek 原始响应 (前500字符): %@...", [rawResponse substringToIndex:500]);
+                    NSLog(@"📥 LLM 原始响应 (前500字符): %@...", [rawResponse substringToIndex:500]);
                 } else {
-                    NSLog(@"📥 DeepSeek 原始响应: %@", rawResponse);
+                    NSLog(@"📥 LLM 原始响应: %@", rawResponse);
                 }
             } else {
-                NSLog(@"❌ DeepSeek 响应数据为空");
-                completion(nil, [NSError errorWithDomain:@"DeepSeek" code:-1 userInfo:@{NSLocalizedDescriptionKey: @"No data received"}]);
+                NSLog(@"❌ LLM 响应数据为空");
+                completion(nil, [NSError errorWithDomain:@"LLMAPI" code:-1 userInfo:@{NSLocalizedDescriptionKey: @"No data received"}]);
                 return;
             }
             
@@ -1061,9 +1086,9 @@ NSString *const kEffectDecisionAgentDidLearnNotification = @"EffectDecisionAgent
                 NSDictionary *errorInfo = responseDict[@"error"];
                 NSString *errorMsg = errorInfo[@"message"] ?: @"Unknown API error";
                 NSString *errorType = errorInfo[@"type"] ?: @"unknown";
-                NSLog(@"❌ DeepSeek API 返回错误: [%@] %@", errorType, errorMsg);
+                NSLog(@"❌ LLM API 返回错误: [%@] %@", errorType, errorMsg);
                 [self incrementStatistic:@"llmFailures"];
-                completion(nil, [NSError errorWithDomain:@"DeepSeek" code:statusCode userInfo:@{NSLocalizedDescriptionKey: errorMsg}]);
+                completion(nil, [NSError errorWithDomain:@"LLMAPI" code:statusCode userInfo:@{NSLocalizedDescriptionKey: errorMsg}]);
                 return;
             }
             
@@ -1076,17 +1101,17 @@ NSString *const kEffectDecisionAgentDidLearnNotification = @"EffectDecisionAgent
                 // 尝试解析 JSON 内容
                 NSDictionary *parsedContent = [self parseJSONFromContent:content];
                 if (parsedContent) {
-                    NSLog(@"✅ DeepSeek 分析成功");
+                    NSLog(@"✅ LLM 分析成功");
                     [self incrementStatistic:@"llmSuccesses"];
                     completion(parsedContent, nil);
                 } else {
-                    NSLog(@"⚠️ 无法解析 DeepSeek 响应内容，使用原始内容");
+                    NSLog(@"⚠️ 无法解析 LLM 响应内容，使用原始内容");
                     completion(@{@"raw_content": content ?: @""}, nil);
                 }
             } else {
-                NSLog(@"❌ DeepSeek 响应中没有 choices 数组");
+                NSLog(@"❌ LLM 响应中没有 choices 数组");
                 NSLog(@"📋 完整响应字典: %@", responseDict);
-                completion(nil, [NSError errorWithDomain:@"DeepSeek" code:-1 userInfo:@{NSLocalizedDescriptionKey: @"Empty choices in response"}]);
+                completion(nil, [NSError errorWithDomain:@"LLMAPI" code:-1 userInfo:@{NSLocalizedDescriptionKey: @"Empty choices in response"}]);
             }
         });
     }];

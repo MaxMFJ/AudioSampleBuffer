@@ -2,7 +2,7 @@
 //  MusicAIAnalyzer.h
 //  AudioSampleBuffer
 //
-//  使用 DeepSeek API 分析音乐并生成视觉效果配置
+//  使用可配置的 LLM API 分析音乐并生成视觉效果配置
 //
 
 #import <Foundation/Foundation.h>

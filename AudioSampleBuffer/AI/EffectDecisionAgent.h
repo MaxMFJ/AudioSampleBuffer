@@ -203,7 +203,7 @@ typedef void(^LLMAnalysisCompletion)(NSDictionary * _Nullable response, NSError 
 
 #pragma mark - 直接 LLM 调用
 
-/// 直接调用 DeepSeek 进行分析
+/// 直接调用可配置的 LLM 接口进行分析
 /// @param songName 歌曲名
 /// @param artist 艺术家
 /// @param additionalContext 额外上下文信息

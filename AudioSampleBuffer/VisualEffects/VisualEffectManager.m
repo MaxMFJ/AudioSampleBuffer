@@ -12,6 +12,7 @@
 #import "../AI/RealtimeParameterTuner.h"
 #import "../AI/MusicStyleClassifier.h"
 #import "../AI/AudioFeatureExtractor.h"
+#import "../AI/MusicAIAnalyzer.h"
 
 @interface VisualEffectManager () <MetalRendererDelegate, VisualEffectAIControllerDelegate>
 
@@ -81,7 +82,21 @@
     NSString *artist = notification.userInfo[@"artist"];
     
     if (songName.length > 0) {
+        // 1) 原有 AI 决策链路
         [self startAIModeWithSongName:songName artist:artist];
+
+        // 2) 额外触发远端 LLM 颜色分析（丁达尔/神经共振共享）
+        [[MusicAIAnalyzer sharedAnalyzer] analyzeSong:songName
+                                               artist:artist ?: @""
+                                           completion:^(AIColorConfiguration * _Nullable config, NSError * _Nullable error) {
+            if (error) {
+                NSLog(@"⚠️ 远端LLM主题色分析失败，使用本地降级: %@", error.localizedDescription);
+                return;
+            }
+            if (config) {
+                NSLog(@"🎨 已更新远端LLM主题色: %@ - %@", songName, artist ?: @"Unknown");
+            }
+        }];
     }
 }
 
@@ -276,6 +291,32 @@
             settings[@"audioSensitivity"] = @(1.0);
             break;
             
+        case VisualEffectTypeNeuralResonance:
+            // 节点数量 & 连接半径
+            settings[@"nodeCount"] = @(14);          // 14个节点（性能/细节平衡）
+            settings[@"connectionRadius"] = @(0.8);  // 连接距离阈值
+            // 发光强度
+            settings[@"glowIntensity"] = @(1.2);
+            // 信号脉冲速度
+            settings[@"signalSpeed"] = @(0.6);
+            // 音频灵敏度
+            settings[@"audioSensitivity"] = @(1.0);
+            // 冲击波强度
+            settings[@"shockwaveIntensity"] = @(0.6);
+            break;
+
+        case VisualEffectTypeWormholeDrive:
+            settings[@"barCount"] = @(10);
+            settings[@"starLaneCount"] = @(16);
+            settings[@"travelSpeed"] = @(0.88);
+            settings[@"flashIntensity"] = @(1.18);
+            settings[@"tunnelRadius"] = @(0.28);
+            settings[@"swirlAmount"] = @(1.05);
+            settings[@"paletteBoost"] = @(1.08);
+            settings[@"audioSensitivity"] = @(1.15);
+            settings[@"beatDecay"] = @(5.4);
+            break;
+            
         default:
             settings[@"intensity"] = @(1.0);
             break;
@@ -283,6 +324,27 @@
     
     NSString *key = [NSString stringWithFormat:@"effect_%lu", (unsigned long)effectType];
     [_effectSettings setObject:settings forKey:key];
+}
+
+- (void)updateMetalViewDrawableSizeForEffect:(VisualEffectType)effectType {
+    if (!_metalView) return;
+
+    CGSize containerSize = _actualContainerSize;
+    if (containerSize.width <= 0.0 || containerSize.height <= 0.0) {
+        containerSize = _effectContainerView.bounds.size;
+    }
+
+    CGFloat screenScale = [UIScreen mainScreen].scale;
+    CGFloat squareSize = MAX(containerSize.width, containerSize.height);
+
+    if (effectType == VisualEffectTypeWormholeDrive) {
+        CGFloat renderScale = 0.58;
+        _metalView.drawableSize = CGSizeMake(containerSize.width * screenScale * renderScale,
+                                             containerSize.height * screenScale * renderScale);
+    } else {
+        CGFloat drawableSize = squareSize * screenScale;
+        _metalView.drawableSize = CGSizeMake(drawableSize, drawableSize);
+    }
 }
 
 #pragma mark - Public Methods
@@ -378,6 +440,24 @@
                 }
                 
                 _currentEffectType = effectType;
+                [self updateMetalViewDrawableSizeForEffect:effectType];
+
+                // 神经共振在 A15（iPhone 13 Pro Max）上使用更稳的帧率，显著降GPU占用
+                if (effectType == VisualEffectTypeNeuralResonance) {
+                    NSInteger targetFPS = 24;
+                    if (_metalView.preferredFramesPerSecond != targetFPS) {
+                        _metalView.preferredFramesPerSecond = targetFPS;
+                        NSLog(@"🧠 神经共振启用低负载帧率: %ldfps", (long)targetFPS);
+                    }
+                } else if (effectType == VisualEffectTypeWormholeDrive) {
+                    NSInteger targetFPS = 18;
+                    if (_metalView.preferredFramesPerSecond != targetFPS) {
+                        _metalView.preferredFramesPerSecond = targetFPS;
+                        NSLog(@"🌀 虫洞穿梭启用稳定帧率: %ldfps", (long)targetFPS);
+                    }
+                } else if (!_savedPerformanceSettings && _metalView.preferredFramesPerSecond < 30) {
+                    _metalView.preferredFramesPerSecond = 30;
+                }
                 
                 // 开始渲染（仅对Metal特效）
                 if (isMetalEffect) {
@@ -610,9 +690,8 @@
         // 更新Metal视图frame为居中的正方形
         _metalView.frame = CGRectMake(x, y, squareSize, squareSize);
         
-        // 更新绘制尺寸以保持高清晰度和正方形
-        CGFloat drawableSize = squareSize * [UIScreen mainScreen].scale;
-        _metalView.drawableSize = CGSizeMake(drawableSize, drawableSize);
+        // 更新绘制尺寸（不同特效可能有不同渲染分辨率策略）
+        [self updateMetalViewDrawableSizeForEffect:_currentEffectType];
         
         // 更新当前renderer的容器尺寸
         if (_currentRenderer && [_currentRenderer respondsToSelector:@selector(setActualContainerSize:)]) {
@@ -650,6 +729,8 @@
         case VisualEffectTypeNeonSpringLines:
         case VisualEffectTypeCherryBlossomSnow:
         case VisualEffectTypeTyndallBeam:
+        case VisualEffectTypeNeuralResonance:
+        case VisualEffectTypeWormholeDrive:
             return YES;
             
         case VisualEffectTypeClassicSpectrum:
@@ -767,8 +848,10 @@
 }
 
 - (void)aiController:(id)controller didDetectBeatWithIntensity:(float)intensity {
-    // 节拍检测 - 可以触发一些视觉反馈
-    // 当前渲染器内部已经处理了节拍响应
+    if (_currentEffectType == VisualEffectTypeWormholeDrive && _currentRenderer) {
+        float clamped = fmaxf(0.0f, fminf(intensity, 0.9f));
+        [_currentRenderer setRenderParameters:@{@"beatTrigger": @(clamped)}];
+    }
 }
 
 - (void)aiController:(id)controller didClassifyStyle:(MusicStyle)style confidence:(float)confidence {

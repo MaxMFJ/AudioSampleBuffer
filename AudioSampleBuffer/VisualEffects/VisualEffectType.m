@@ -177,6 +177,18 @@
                                                category:EffectCategoryExperimental
                                        performanceLevel:PerformanceLevelHigh]];
     
+    [effects addObject:[VisualEffectInfo effectWithType:VisualEffectTypeNeuralResonance
+                                                   name:@"神经共振"
+                                            description:@"仿神经网络拓扑结构，节点随音频脉动并向相邻节点传递信号"
+                                               category:EffectCategoryExperimental
+                                       performanceLevel:PerformanceLevelMedium]];
+
+    [effects addObject:[VisualEffectInfo effectWithType:VisualEffectTypeWormholeDrive
+                                                   name:@"虫洞穿梭"
+                                            description:@"深空虫洞隧道中，星尘随音频自原点凝成光柱并向屏幕穿梭冲刺"
+                                               category:EffectCategoryExperimental
+                                       performanceLevel:PerformanceLevelHigh]];
+    
     self.effects = [effects copy];
 }
 
