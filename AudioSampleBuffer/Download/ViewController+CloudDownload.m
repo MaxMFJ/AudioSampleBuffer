@@ -6,9 +6,9 @@
 //
 
 #import "ViewController+CloudDownload.h"
+#import "../ViewController+Private.h"
 #import "MusicLibraryManager.h"
 #import "QQMusicAPIService.h"
-#import <objc/runtime.h>
 #import <AVFoundation/AVFoundation.h>
 
 @implementation ViewController (CloudDownload)
@@ -137,7 +137,7 @@
     [resultAlert addAction:cancelAction];
     
     // 如果是iPad，需要设置popoverPresentationController
-    if (UI_USER_INTERFACE_IDIOM() == UIUserInterfaceIdiomPad) {
+    if (UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPad) {
         resultAlert.popoverPresentationController.sourceView = self.view;
         resultAlert.popoverPresentationController.sourceRect = CGRectMake(self.view.bounds.size.width / 2.0, self.view.bounds.size.height / 2.0, 1.0, 1.0);
     }
@@ -272,14 +272,8 @@
 - (void)playDownloadedMusic:(NSString *)filePath {
     NSLog(@"▶️ [播放下载] 准备播放: %@", [filePath lastPathComponent]);
     
-    // 获取播放器
-    if (![self respondsToSelector:@selector(player)]) {
-        NSLog(@"❌ [播放下载] 找不到播放器");
-        return;
-    }
-    
-    id player = [self valueForKey:@"player"];
-    if (!player || ![player respondsToSelector:@selector(playWithFileName:)]) {
+    AudioSpectrumPlayer *player = self.player;
+    if (!player) {
         NSLog(@"❌ [播放下载] 播放器无效或不支持播放");
         return;
     }
@@ -340,63 +334,20 @@
         }
         
         if (foundIndex >= 0) {
-            // 🔧 使用 runtime 直接修改实例变量 index
-            Ivar indexIvar = class_getInstanceVariable([self class], "index");
-            ptrdiff_t offset = 0;
-            
-            if (indexIvar) {
-                // 🔧 正确的方式：获取 ivar 地址并设置值
-                void *selfPtr = (__bridge void *)self;
-                offset = ivar_getOffset(indexIvar);
-                NSInteger *indexPtr = (NSInteger *)(selfPtr + offset);
-                
-                NSLog(@"🔍 [索引设置] 准备设置索引...");
-                NSLog(@"   self 指针: %p", self);
-                NSLog(@"   offset: %td", offset);
-                NSLog(@"   index 地址: %p", indexPtr);
-                NSLog(@"   旧值: %ld", (long)*indexPtr);
-                
-                *indexPtr = foundIndex;
-                
-                NSLog(@"   新值: %ld", (long)*indexPtr);
-                NSLog(@"✅ [播放下载] 索引已设置: %ld", (long)foundIndex);
-            }
-            
-            // 更新 displayedMusicItems
-            if ([self respondsToSelector:@selector(setDisplayedMusicItems:)]) {
-                [self setValue:allMusic forKey:@"displayedMusicItems"];
-            }
-            
-            // 🎯 关键：调用 updateAudioSelection 更新封面UI
-            if ([self respondsToSelector:@selector(updateAudioSelection)]) {
-                [self performSelector:@selector(updateAudioSelection)];
-                NSLog(@"✅ [播放下载] 已调用 updateAudioSelection 更新封面");
-            }
-            
-            // 🔧 先停止当前播放，避免冲突
-            if ([player respondsToSelector:@selector(stop)]) {
-                [player performSelector:@selector(stop)];
-                NSLog(@"⏹️ [播放下载] 已停止当前播放");
-            }
-            
-            // 🎯 使用标准播放方法（包含封面、歌词等完整流程）
-            if ([self respondsToSelector:@selector(playCurrentTrack)]) {
-                NSLog(@"▶️ [播放下载] 准备调用 playCurrentTrack...");
-                
-                // 再次验证索引值
-                if (indexIvar && offset > 0) {
-                    void *selfPtr = (__bridge void *)self;
-                    NSInteger *indexPtr = (NSInteger *)(selfPtr + offset);
-                    NSLog(@"🔍 [播放前验证] 索引值: %ld", (long)*indexPtr);
-                }
-                
-                [self performSelector:@selector(playCurrentTrack)];
-                NSLog(@"✅ [播放下载] playCurrentTrack 已调用");
-            } else {
-                // 备用：直接播放
-                [player performSelector:@selector(playWithFileName:) withObject:filePath];
-                NSLog(@"▶️ [播放下载] 使用备用方式播放");
-            }
+            self.currentIndex = foundIndex;
+            self.displayedMusicItems = allMusic;
+
+            NSLog(@"✅ [播放下载] 索引已设置: %ld", (long)foundIndex);
+
+            [self updateAudioSelection];
+            NSLog(@"✅ [播放下载] 已调用 updateAudioSelection 更新封面");
+
+            [player stop];
+            NSLog(@"⏹️ [播放下载] 已停止当前播放");
+
+            NSLog(@"▶️ [播放下载] 准备调用 playCurrentTrack...");
+            [self playCurrentTrack];
+            NSLog(@"✅ [播放下载] playCurrentTrack 已调用");
         } else {
             NSLog(@"⚠️ [播放下载] 未在音乐库中找到该文件！");
             NSLog(@"   尝试的文件名: %@", fileName);
@@ -409,7 +360,7 @@
             }
             
             // 即使找不到索引，也尝试直接播放
-            [player performSelector:@selector(playWithFileName:) withObject:filePath];
+            [player playWithFileName:filePath];
             NSLog(@"▶️ [播放下载] 未找到索引，尝试直接播放");
         }
     });
@@ -422,19 +373,14 @@
     [[MusicLibraryManager sharedManager] reloadMusicLibrary];
     
     // 2️⃣ 更新 displayedMusicItems（显示全部音乐）
-    if ([self respondsToSelector:@selector(setDisplayedMusicItems:)]) {
-        NSArray *allMusic = [[MusicLibraryManager sharedManager] allMusic];
-        [self setValue:allMusic forKey:@"displayedMusicItems"];
-        NSLog(@"🔄 [音乐库] 更新显示列表: %ld 首歌曲", (long)allMusic.count);
-    }
+    NSArray *allMusic = [[MusicLibraryManager sharedManager] allMusic];
+    self.displayedMusicItems = allMusic;
+    NSLog(@"🔄 [音乐库] 更新显示列表: %ld 首歌曲", (long)allMusic.count);
     
     // 3️⃣ 刷新表格视图
-    if ([self respondsToSelector:@selector(tableView)]) {
-        UITableView *tableView = [self valueForKey:@"tableView"];
-        if (tableView) {
-            [tableView reloadData];
-            NSLog(@"🔄 [音乐库] 表格已刷新");
-        }
+    if (self.tableView) {
+        [self.tableView reloadData];
+        NSLog(@"🔄 [音乐库] 表格已刷新");
     }
     
     NSLog(@"✅ [音乐库] 刷新完成");

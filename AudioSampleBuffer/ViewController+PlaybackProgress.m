@@ -6,7 +6,7 @@
 //
 
 #import "ViewController+PlaybackProgress.h"
-#import "AudioSpectrumPlayer.h"
+#import "ViewController+Private.h"
 #import <objc/runtime.h>
 
 // 关联对象的 key
@@ -26,9 +26,9 @@ static const void *kProgressViewKey = &kProgressViewKey;
 
 #pragma mark - 私有属性访问
 
-/// 获取播放器（通过 KVC）
+/// 获取播放器
 - (AudioSpectrumPlayer *)playbackPlayer {
-    return [self valueForKey:@"player"];
+    return self.player;
 }
 
 #pragma mark - 设置
@@ -150,4 +150,3 @@ static const void *kProgressViewKey = &kProgressViewKey;
 }
 
 @end
-

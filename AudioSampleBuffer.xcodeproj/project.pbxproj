@@ -138,6 +138,10 @@
 		4CCFF6022F3B1DAC004FFF9A /* MusicAIAnalyzer.m in Sources */ = {isa = PBXBuildFile; fileRef = 4CCFF6002F3B1DAC004FFF9A /* MusicAIAnalyzer.m */; };
 		4CCFF6032F3B1DAC004FFF9A /* AIColorConfiguration.m in Sources */ = {isa = PBXBuildFile; fileRef = 4CCFF5FE2F3B1DAC004FFF9A /* AIColorConfiguration.m */; };
 		4CF7A11230A1000000000003 /* LLMAPISettings.m in Sources */ = {isa = PBXBuildFile; fileRef = 4CF7A11130A1000000000002 /* LLMAPISettings.m */; };
+		8A5F000130A2000000000012 /* ViewController+Playback.m in Sources */ = {isa = PBXBuildFile; fileRef = 8A5F000130A2000000000002 /* ViewController+Playback.m */; };
+		8A5F000130A2000000000013 /* ViewController+Lyrics.m in Sources */ = {isa = PBXBuildFile; fileRef = 8A5F000130A2000000000003 /* ViewController+Lyrics.m */; };
+		8A5F000130A2000000000014 /* ViewController+Library.m in Sources */ = {isa = PBXBuildFile; fileRef = 8A5F000130A2000000000004 /* ViewController+Library.m */; };
+		8A5F000130A2000000000015 /* ViewController+Visuals.m in Sources */ = {isa = PBXBuildFile; fileRef = 8A5F000130A2000000000005 /* ViewController+Visuals.m */; };
 		4CDSP00012F24CF0000000001 /* RealtimeAnalyzerDSP.c in Sources */ = {isa = PBXBuildFile; fileRef = 4CDSP00012F24CF0000000003 /* RealtimeAnalyzerDSP.c */; };
 		4CSPC00012F25000000000001 /* SpectrumViewShader.metal in Sources */ = {isa = PBXBuildFile; fileRef = 4CSPC00012F25000000000002 /* SpectrumViewShader.metal */; };
 		4c4e68e181504d63bdcceeb4 /* QQMusicAPIService.m in Sources */ = {isa = PBXBuildFile; fileRef = 8f06cadb652e4fd8b81f19fb /* QQMusicAPIService.m */; };
@@ -347,6 +351,11 @@
 		4C77CD1A2E990F61008EA7C6 /* CyberpunkControlPanel.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = CyberpunkControlPanel.m; sourceTree = "<group>"; };
 		4C7D33952EFEEC8D0027CBC8 /* ViewController+PlaybackProgress.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "ViewController+PlaybackProgress.h"; sourceTree = "<group>"; };
 		4C7D33962EFEEC8D0027CBC8 /* ViewController+PlaybackProgress.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = "ViewController+PlaybackProgress.m"; sourceTree = "<group>"; };
+		8A5F000130A2000000000001 /* ViewController+Private.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "ViewController+Private.h"; sourceTree = "<group>"; };
+		8A5F000130A2000000000002 /* ViewController+Playback.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = "ViewController+Playback.m"; sourceTree = "<group>"; };
+		8A5F000130A2000000000003 /* ViewController+Lyrics.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = "ViewController+Lyrics.m"; sourceTree = "<group>"; };
+		8A5F000130A2000000000004 /* ViewController+Library.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = "ViewController+Library.m"; sourceTree = "<group>"; };
+		8A5F000130A2000000000005 /* ViewController+Visuals.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = "ViewController+Visuals.m"; sourceTree = "<group>"; };
 		4C7D33982EFEEC950027CBC8 /* AudioProgressView.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AudioProgressView.h; sourceTree = "<group>"; };
 		4C7D33992EFEEC950027CBC8 /* AudioProgressView.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AudioProgressView.m; sourceTree = "<group>"; };
 		4C7D33A12F00000000000001 /* VinylRecordView.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = VinylRecordView.h; sourceTree = "<group>"; };
@@ -789,6 +798,11 @@
 				4C5E4BC42EA10E13009B5708 /* MusicLibraryManager.m */,
 				64C5446628C838D100C23393 /* ViewController.h */,
 				64C5446728C838D100C23393 /* ViewController.m */,
+				8A5F000130A2000000000001 /* ViewController+Private.h */,
+				8A5F000130A2000000000002 /* ViewController+Playback.m */,
+				8A5F000130A2000000000003 /* ViewController+Lyrics.m */,
+				8A5F000130A2000000000004 /* ViewController+Library.m */,
+				8A5F000130A2000000000005 /* ViewController+Visuals.m */,
 				64C5447D28C8395200C23393 /* AudioPlayCell.h */,
 				64C5447E28C8395200C23393 /* AudioPlayCell.m */,
 				4C7D33A12F00000000000001 /* VinylRecordView.h */,
@@ -997,6 +1011,10 @@
 				4C66E71A2E8A9255003200DA /* MetalRenderer.m in Sources */,
 				64C5448E28C83A7700C23393 /* AudioSpectrumPlayer.m in Sources */,
 				64C5446828C838D100C23393 /* ViewController.m in Sources */,
+				8A5F000130A2000000000012 /* ViewController+Playback.m in Sources */,
+				8A5F000130A2000000000013 /* ViewController+Lyrics.m in Sources */,
+				8A5F000130A2000000000014 /* ViewController+Library.m in Sources */,
+				8A5F000130A2000000000015 /* ViewController+Visuals.m in Sources */,
 				4C51687E2E9E5FD500853960 /* LyricsEffectCell.m in Sources */,
 				4C51687F2E9E5FD500853960 /* LyricsEffectControlPanel.m in Sources */,
 				4C2C6A232EA2170A00D18118 /* smallft.c in Sources */,
