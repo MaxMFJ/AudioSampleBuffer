@@ -103,7 +103,16 @@
     
     // 🎨 配置按钮（仅在特定特效上显示）
     _configButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    [_configButton setTitle:@"⚙️" forState:UIControlStateNormal];
+    UIImage *configImage = nil;
+    if (@available(iOS 13.0, *)) {
+        configImage = [UIImage systemImageNamed:@"gearshape.fill"];
+    }
+    [_configButton setImage:configImage forState:UIControlStateNormal];
+    [_configButton setTitle:@"" forState:UIControlStateNormal];
+    _configButton.tintColor = [UIColor whiteColor];
+    if (_configButton.imageView) {
+        _configButton.imageView.contentMode = UIViewContentModeCenter;
+    }
     _configButton.titleLabel.font = [UIFont systemFontOfSize:24];
     _configButton.backgroundColor = [UIColor colorWithRed:0.2 green:0.2 blue:0.3 alpha:0.9];
     _configButton.layer.cornerRadius = 18;
@@ -250,6 +259,9 @@
         case VisualEffectTypeFluidSimulation:
             [self drawFluidSimulationPreview:context size:size];
             break;
+        case VisualEffectTypeChromaticCaustics:
+            [self drawChromaticCausticsPreview:context size:size];
+            break;
         default:
             [self drawDefaultPreview:context size:size];
             break;
@@ -298,6 +310,42 @@
     CGPoint endPoint = CGPointMake(size.width, size.height);
     CGContextDrawLinearGradient(context, gradient, startPoint, endPoint, 0);
     
+    CGGradientRelease(gradient);
+    CGColorSpaceRelease(colorSpace);
+}
+
+- (void)drawChromaticCausticsPreview:(CGContextRef)context size:(CGSize)size {
+    CGColorSpaceRef colorSpace = CGColorSpaceCreateDeviceRGB();
+    CGFloat colors[] = {
+        0.07, 0.04, 0.18, 1.0,
+        0.10, 0.20, 0.40, 1.0,
+        0.92, 0.46, 0.78, 1.0,
+        1.00, 0.82, 0.36, 1.0
+    };
+    CGFloat locations[] = {0.0, 0.4, 0.78, 1.0};
+    CGGradientRef gradient = CGGradientCreateWithColorComponents(colorSpace, colors, locations, 4);
+    CGContextDrawLinearGradient(context,
+                                gradient,
+                                CGPointMake(0, size.height),
+                                CGPointMake(size.width, 0),
+                                0);
+
+    CGContextSetBlendMode(context, kCGBlendModeScreen);
+    CGContextSetLineWidth(context, 3.0);
+
+    [[UIColor colorWithRed:0.55 green:0.95 blue:1.0 alpha:0.85] setStroke];
+    CGContextMoveToPoint(context, 8, 42);
+    CGContextAddCurveToPoint(context, 18, 14, 38, 12, 52, 40);
+    CGContextStrokePath(context);
+
+    [[UIColor colorWithRed:1.0 green:0.62 blue:0.86 alpha:0.75] setStroke];
+    CGContextMoveToPoint(context, 10, 50);
+    CGContextAddCurveToPoint(context, 24, 22, 36, 22, 49, 50);
+    CGContextStrokePath(context);
+
+    CGContextSetRGBFillColor(context, 1.0, 0.95, 0.78, 0.42);
+    CGContextFillEllipseInRect(context, CGRectMake(18, 20, 24, 24));
+
     CGGradientRelease(gradient);
     CGColorSpaceRelease(colorSpace);
 }
@@ -466,7 +514,16 @@
     
     // 关闭按钮
     _closeButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    [_closeButton setTitle:@"✕" forState:UIControlStateNormal];
+    UIImage *closeImage = nil;
+    if (@available(iOS 13.0, *)) {
+        closeImage = [UIImage systemImageNamed:@"xmark"];
+    }
+    [_closeButton setImage:closeImage forState:UIControlStateNormal];
+    [_closeButton setTitle:@"" forState:UIControlStateNormal];
+    _closeButton.tintColor = [UIColor whiteColor];
+    if (_closeButton.imageView) {
+        _closeButton.imageView.contentMode = UIViewContentModeCenter;
+    }
     [_closeButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
     _closeButton.titleLabel.font = [UIFont systemFontOfSize:18];
     [_closeButton addTarget:self action:@selector(closeButtonTapped:) forControlEvents:UIControlEventTouchUpInside];
@@ -474,7 +531,16 @@
     
     // 设置按钮
     _settingsButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    [_settingsButton setTitle:@"⚙️" forState:UIControlStateNormal];
+    UIImage *settingsImage = nil;
+    if (@available(iOS 13.0, *)) {
+        settingsImage = [UIImage systemImageNamed:@"gearshape.fill"];
+    }
+    [_settingsButton setImage:settingsImage forState:UIControlStateNormal];
+    [_settingsButton setTitle:@"" forState:UIControlStateNormal];
+    _settingsButton.tintColor = [UIColor whiteColor];
+    if (_settingsButton.imageView) {
+        _settingsButton.imageView.contentMode = UIViewContentModeCenter;
+    }
     _settingsButton.titleLabel.font = [UIFont systemFontOfSize:18];
     [_settingsButton addTarget:self action:@selector(settingsButtonTapped:) forControlEvents:UIControlEventTouchUpInside];
     [self addSubview:_settingsButton];

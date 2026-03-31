@@ -52,7 +52,7 @@
     
     // 标题
     _titleLabel = [[UILabel alloc] init];
-    _titleLabel.text = @"🎭 歌词特效选择器";
+    _titleLabel.text = @"歌词特效选择器";
     _titleLabel.font = [UIFont boldSystemFontOfSize:20];
     _titleLabel.textColor = [UIColor whiteColor];
     _titleLabel.textAlignment = NSTextAlignmentCenter;
@@ -165,12 +165,18 @@
         cell.contentView.layer.shadowOpacity = 0;
     }
     
-    // Emoji图标
-    UILabel *emojiLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 15, cell.contentView.bounds.size.width, 40)];
-    emojiLabel.text = info.emoji;
-    emojiLabel.font = [UIFont systemFontOfSize:32];
-    emojiLabel.textAlignment = NSTextAlignmentCenter;
-    [cell.contentView addSubview:emojiLabel];
+    // 图标（SF Symbols）
+    UIImageView *iconView = [[UIImageView alloc] initWithFrame:CGRectMake(0, 10, cell.contentView.bounds.size.width, 48)];
+    iconView.contentMode = UIViewContentModeScaleAspectFit;
+    iconView.tintColor = [UIColor whiteColor];
+    if (info.iconName.length > 0) {
+        UIImage *icon = [UIImage systemImageNamed:info.iconName];
+        if (icon) {
+            UIImageSymbolConfiguration *config = [UIImageSymbolConfiguration configurationWithPointSize:34 weight:UIImageSymbolWeightRegular];
+            iconView.image = [icon imageWithConfiguration:config];
+        }
+    }
+    [cell.contentView addSubview:iconView];
     
     // 特效名称
     UILabel *nameLabel = [[UILabel alloc] initWithFrame:CGRectMake(5, 60, cell.contentView.bounds.size.width - 10, 25)];
@@ -210,7 +216,7 @@
     UIImpactFeedbackGenerator *feedback = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleMedium];
     [feedback impactOccurred];
     
-    NSLog(@"🎭 选择歌词特效: %@ (%@)", info.name, info.emoji);
+    NSLog(@"选择歌词特效: %@ (%@)", info.name, info.iconName);
 }
 
 #pragma mark - UICollectionViewDelegateFlowLayout
@@ -271,17 +277,17 @@
     UIImpactFeedbackGenerator *feedback = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleMedium];
     [feedback impactOccurred];
     
-    NSLog(@"👁️ 歌词显示状态切换: %@", _lyricsVisible ? @"显示" : @"隐藏");
+    NSLog(@"歌词显示状态切换: %@", _lyricsVisible ? @"显示" : @"隐藏");
 }
 
 - (void)updateToggleButtonAppearance {
     if (_lyricsVisible) {
-        [_toggleVisibilityButton setTitle:@"👁️ 显示歌词" forState:UIControlStateNormal];
+        [_toggleVisibilityButton setTitle:@"显示歌词" forState:UIControlStateNormal];
         [_toggleVisibilityButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
         _toggleVisibilityButton.backgroundColor = [UIColor colorWithRed:0.2 green:0.6 blue:0.9 alpha:0.9];
         _toggleVisibilityButton.layer.borderColor = [UIColor colorWithRed:0.3 green:0.7 blue:1.0 alpha:1.0].CGColor;
     } else {
-        [_toggleVisibilityButton setTitle:@"👁️‍🗨️ 隐藏歌词" forState:UIControlStateNormal];
+        [_toggleVisibilityButton setTitle:@"隐藏歌词" forState:UIControlStateNormal];
         [_toggleVisibilityButton setTitleColor:[UIColor colorWithWhite:0.7 alpha:1.0] forState:UIControlStateNormal];
         _toggleVisibilityButton.backgroundColor = [UIColor colorWithRed:0.3 green:0.3 blue:0.3 alpha:0.9];
         _toggleVisibilityButton.layer.borderColor = [UIColor colorWithWhite:0.5 alpha:1.0].CGColor;

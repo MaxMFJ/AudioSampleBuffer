@@ -6,13 +6,15 @@
 //
 
 #import "VisualEffectManager.h"
-#import "../AudioSampleBuffer/SpectrumView.h"
-#import "../AI/VisualEffectAIController.h"
-#import "../AI/EffectDecisionAgent.h"
-#import "../AI/RealtimeParameterTuner.h"
-#import "../AI/MusicStyleClassifier.h"
-#import "../AI/AudioFeatureExtractor.h"
-#import "../AI/MusicAIAnalyzer.h"
+#import "../../AudioSampleBuffer/SpectrumView.h"
+#import "../../AI/VisualEffectAIController.h"
+#import "../../AI/EffectDecisionAgent.h"
+#import "../../AI/RealtimeParameterTuner.h"
+#import "../../AI/MusicStyleClassifier.h"
+#import "../../AI/AudioFeatureExtractor.h"
+#import "../../AI/MusicAIAnalyzer.h"
+
+static const CGFloat kDefaultEffectRenderScale = 0.85f;
 
 @interface VisualEffectManager () <MetalRendererDelegate, VisualEffectAIControllerDelegate>
 
@@ -263,6 +265,20 @@
             settings[@"bassResponse"] = @(1.5);
             settings[@"trebleResponse"] = @(1.2);
             break;
+
+        case VisualEffectTypeChromaticCaustics:
+            settings[@"ribbonCount"] = @(3);
+            settings[@"prismSeparation"] = @(0.14);
+            settings[@"flowSpeed"] = @(0.82);
+            settings[@"glowIntensity"] = @(1.18);
+            settings[@"causticScale"] = @(1.05);
+            settings[@"interference"] = @(0.72);
+            settings[@"audioSensitivity"] = @(1.12);
+            settings[@"sparkleDensity"] = @(0.32);
+            settings[@"hueDrift"] = @(0.16);
+            settings[@"vignette"] = @(0.22);
+            settings[@"bassLift"] = @(0.18);
+            break;
             
         case VisualEffectTypeAuroraRipples:
             settings[@"auroraLayers"] = @(3);
@@ -310,11 +326,19 @@
             settings[@"starLaneCount"] = @(16);
             settings[@"travelSpeed"] = @(0.88);
             settings[@"flashIntensity"] = @(1.18);
-            settings[@"tunnelRadius"] = @(0.28);
+            settings[@"tunnelRadius"] = @(0.34);
             settings[@"swirlAmount"] = @(1.05);
             settings[@"paletteBoost"] = @(1.08);
             settings[@"audioSensitivity"] = @(1.15);
             settings[@"beatDecay"] = @(5.4);
+            break;
+
+        case VisualEffectTypePrismResonance:
+            settings[@"shapeLayers"] = @(3);         // 3层景深，降低热量同时保留层次
+            settings[@"glyphsPerLayer"] = @(6);       // 每层6个棱镜，共18个，但每个都独立绑定频段
+            settings[@"morphSensitivity"] = @(1.20);  // 变形灵敏度（瞬态驱动◇→○/❤）
+            settings[@"audioSensitivity"] = @(1.20);  // 整体音频灵敏度
+            settings[@"glowIntensity"] = @(1.00);     // 光晕强度
             break;
             
         default:
@@ -338,11 +362,19 @@
     CGFloat squareSize = MAX(containerSize.width, containerSize.height);
 
     if (effectType == VisualEffectTypeWormholeDrive) {
+        // 虫洞特效本身已针对宽屏做过专门调优，保留原有低功耗缩放。
+        CGFloat renderScale = 0.58;
+        _metalView.drawableSize = CGSizeMake(containerSize.width * screenScale * renderScale,
+                                             containerSize.height * screenScale * renderScale);
+    } else if (effectType == VisualEffectTypePrismResonance) {
+        // 棱镜共振：参考赛博朋克的低热量策略，进一步压低实际绘制分辨率
         CGFloat renderScale = 0.58;
         _metalView.drawableSize = CGSizeMake(containerSize.width * screenScale * renderScale,
                                              containerSize.height * screenScale * renderScale);
     } else {
-        CGFloat drawableSize = squareSize * screenScale;
+        // 保持正方形逻辑画布不变，只温和降低实际渲染分辨率。
+        // 这样圆形/极坐标类效果不会重新出现拉伸变形问题。
+        CGFloat drawableSize = squareSize * screenScale * kDefaultEffectRenderScale;
         _metalView.drawableSize = CGSizeMake(drawableSize, drawableSize);
     }
 }
@@ -723,6 +755,7 @@
         case VisualEffectTypeFireworks:
         case VisualEffectTypeGeometricMorph:
         case VisualEffectTypeFractalPattern:
+        case VisualEffectTypeChromaticCaustics:
         // 实验性Metal特效
         case VisualEffectTypeAuroraRipples:
         case VisualEffectTypeStarVortex:
@@ -731,6 +764,7 @@
         case VisualEffectTypeTyndallBeam:
         case VisualEffectTypeNeuralResonance:
         case VisualEffectTypeWormholeDrive:
+        case VisualEffectTypePrismResonance:
             return YES;
             
         case VisualEffectTypeClassicSpectrum:

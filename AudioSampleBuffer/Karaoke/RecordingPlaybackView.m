@@ -49,7 +49,7 @@
     
     // 标题
     self.titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(20, 15, self.bounds.size.width - 40, 25)];
-    self.titleLabel.text = @"🎤 录音回放";
+    self.titleLabel.text = @"录音回放";
     self.titleLabel.textColor = [UIColor colorWithRed:0.0 green:0.8 blue:1.0 alpha:1.0];
     self.titleLabel.font = [UIFont boldSystemFontOfSize:20];
     self.titleLabel.textAlignment = NSTextAlignmentCenter;
@@ -58,8 +58,13 @@
     // 关闭按钮
     self.closeButton = [UIButton buttonWithType:UIButtonTypeSystem];
     self.closeButton.frame = CGRectMake(self.bounds.size.width - 40, 10, 30, 30);
-    [self.closeButton setTitle:@"✕" forState:UIControlStateNormal];
-    [self.closeButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+    UIImage *closeIcon = nil;
+    if (@available(iOS 13.0, *)) {
+        closeIcon = [UIImage systemImageNamed:@"xmark"];
+    }
+    [self.closeButton setImage:closeIcon forState:UIControlStateNormal];
+    [self.closeButton setTitle:@"" forState:UIControlStateNormal];
+    self.closeButton.tintColor = [UIColor whiteColor];
     self.closeButton.titleLabel.font = [UIFont systemFontOfSize:24];
     [self.closeButton addTarget:self action:@selector(closeButtonTapped) forControlEvents:UIControlEventTouchUpInside];
     [self addSubview:self.closeButton];
@@ -87,24 +92,36 @@
     // 快退按钮
     self.rewindButton = [UIButton buttonWithType:UIButtonTypeSystem];
     self.rewindButton.frame = CGRectMake(centerX - 90, buttonY, 50, 50);
-    [self.rewindButton setTitle:@"⏪" forState:UIControlStateNormal];
+    if (@available(iOS 13.0, *)) {
+        [self.rewindButton setImage:[UIImage systemImageNamed:@"gobackward"] forState:UIControlStateNormal];
+    }
+    [self.rewindButton setTitle:@"" forState:UIControlStateNormal];
     self.rewindButton.titleLabel.font = [UIFont systemFontOfSize:30];
+    self.rewindButton.tintColor = [UIColor whiteColor];
     [self.rewindButton addTarget:self action:@selector(rewindButtonTapped) forControlEvents:UIControlEventTouchUpInside];
     [self addSubview:self.rewindButton];
     
     // 播放/暂停按钮
     self.playPauseButton = [UIButton buttonWithType:UIButtonTypeSystem];
     self.playPauseButton.frame = CGRectMake(centerX - 25, buttonY, 50, 50);
-    [self.playPauseButton setTitle:@"▶️" forState:UIControlStateNormal];
+    if (@available(iOS 13.0, *)) {
+        [self.playPauseButton setImage:[UIImage systemImageNamed:@"play.fill"] forState:UIControlStateNormal];
+    }
+    [self.playPauseButton setTitle:@"" forState:UIControlStateNormal];
     self.playPauseButton.titleLabel.font = [UIFont systemFontOfSize:35];
+    self.playPauseButton.tintColor = [UIColor whiteColor];
     [self.playPauseButton addTarget:self action:@selector(playPauseButtonTapped) forControlEvents:UIControlEventTouchUpInside];
     [self addSubview:self.playPauseButton];
     
     // 快进按钮
     self.forwardButton = [UIButton buttonWithType:UIButtonTypeSystem];
     self.forwardButton.frame = CGRectMake(centerX + 40, buttonY, 50, 50);
-    [self.forwardButton setTitle:@"⏩" forState:UIControlStateNormal];
+    if (@available(iOS 13.0, *)) {
+        [self.forwardButton setImage:[UIImage systemImageNamed:@"goforward"] forState:UIControlStateNormal];
+    }
+    [self.forwardButton setTitle:@"" forState:UIControlStateNormal];
     self.forwardButton.titleLabel.font = [UIFont systemFontOfSize:30];
+    self.forwardButton.tintColor = [UIColor whiteColor];
     [self.forwardButton addTarget:self action:@selector(forwardButtonTapped) forControlEvents:UIControlEventTouchUpInside];
     [self addSubview:self.forwardButton];
     
@@ -123,7 +140,10 @@
     // 导出按钮
     self.exportButton = [UIButton buttonWithType:UIButtonTypeSystem];
     self.exportButton.frame = CGRectMake(20, bottomButtonY, buttonWidth, 40);
-    [self.exportButton setTitle:@"📤 导出" forState:UIControlStateNormal];
+    [self.exportButton setTitle:@"导出" forState:UIControlStateNormal];
+    if (@available(iOS 13.0, *)) {
+        [self.exportButton setImage:[UIImage systemImageNamed:@"square.and.arrow.up"] forState:UIControlStateNormal];
+    }
     [self.exportButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
     self.exportButton.backgroundColor = [UIColor colorWithRed:0.0 green:0.6 blue:1.0 alpha:1.0];
     self.exportButton.layer.cornerRadius = 8;
@@ -134,7 +154,10 @@
     // 删除按钮
     self.deleteButton = [UIButton buttonWithType:UIButtonTypeSystem];
     self.deleteButton.frame = CGRectMake(self.bounds.size.width - 20 - buttonWidth, bottomButtonY, buttonWidth, 40);
-    [self.deleteButton setTitle:@"🗑️ 删除" forState:UIControlStateNormal];
+    [self.deleteButton setTitle:@"删除" forState:UIControlStateNormal];
+    if (@available(iOS 13.0, *)) {
+        [self.deleteButton setImage:[UIImage systemImageNamed:@"trash.fill"] forState:UIControlStateNormal];
+    }
     [self.deleteButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
     self.deleteButton.backgroundColor = [UIColor colorWithRed:1.0 green:0.2 blue:0.2 alpha:1.0];
     self.deleteButton.layer.cornerRadius = 8;
@@ -184,7 +207,10 @@
     
     if (success) {
         NSLog(@"✅ PCM文件加载成功，可以播放");
-        [self.playPauseButton setTitle:@"▶️" forState:UIControlStateNormal];
+        if (@available(iOS 13.0, *)) {
+            [self.playPauseButton setImage:[UIImage systemImageNamed:@"play.fill"] forState:UIControlStateNormal];
+        }
+        [self.playPauseButton setTitle:@"" forState:UIControlStateNormal];
         
         // 更新时间显示
         NSString *durationStr = [self formatTime:self.pcmPlayer.duration];
@@ -235,7 +261,7 @@
     NSString *fileName = [self.filePath lastPathComponent];
     NSString *fileSizeStr = [self formatFileSize:fileSize];
     
-    self.fileInfoLabel.text = [NSString stringWithFormat:@"📄 %@\n💾 %@ | PCM 格式", fileName, fileSizeStr];
+    self.fileInfoLabel.text = [NSString stringWithFormat:@"%@\n%@ | PCM 格式", fileName, fileSizeStr];
 }
 
 #pragma mark - 按钮动作
@@ -249,12 +275,18 @@
     if (self.pcmPlayer.isPlaying) {
         // 暂停
         [self.pcmPlayer pause];
-        [self.playPauseButton setTitle:@"▶️" forState:UIControlStateNormal];
+        if (@available(iOS 13.0, *)) {
+            [self.playPauseButton setImage:[UIImage systemImageNamed:@"play.fill"] forState:UIControlStateNormal];
+        }
+        [self.playPauseButton setTitle:@"" forState:UIControlStateNormal];
         NSLog(@"⏸️ 暂停播放");
     } else {
         // 播放
         [self.pcmPlayer play];
-        [self.playPauseButton setTitle:@"⏸️" forState:UIControlStateNormal];
+        if (@available(iOS 13.0, *)) {
+            [self.playPauseButton setImage:[UIImage systemImageNamed:@"pause.fill"] forState:UIControlStateNormal];
+        }
+        [self.playPauseButton setTitle:@"" forState:UIControlStateNormal];
         NSLog(@"▶️ 开始播放");
     }
 }
@@ -359,7 +391,10 @@
 - (void)stopPlayback {
     if (self.pcmPlayer) {
         [self.pcmPlayer stop];
-        [self.playPauseButton setTitle:@"▶️" forState:UIControlStateNormal];
+        if (@available(iOS 13.0, *)) {
+            [self.playPauseButton setImage:[UIImage systemImageNamed:@"play.fill"] forState:UIControlStateNormal];
+        }
+        [self.playPauseButton setTitle:@"" forState:UIControlStateNormal];
     }
 }
 
@@ -367,7 +402,10 @@
 
 - (void)audioPlayerDidFinishPlaying {
     NSLog(@"✅ 播放完成");
-    [self.playPauseButton setTitle:@"▶️" forState:UIControlStateNormal];
+    if (@available(iOS 13.0, *)) {
+        [self.playPauseButton setImage:[UIImage systemImageNamed:@"play.fill"] forState:UIControlStateNormal];
+    }
+    [self.playPauseButton setTitle:@"" forState:UIControlStateNormal];
     self.progressView.progress = 0.0;
     
     NSString *durationStr = [self formatTime:self.pcmPlayer.duration];

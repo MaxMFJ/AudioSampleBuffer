@@ -57,65 +57,74 @@
     if (@available(iOS 11.0, *)) {
         safeTop = self.view.safeAreaInsets.top;
     }
+    CGFloat topOffset = MAX(safeTop, 44.0) + 8;
 
-    CGFloat navigationBarHeight = self.navigationController.navigationBar.frame.size.height;
-    CGFloat statusBarHeight = [[UIApplication sharedApplication] statusBarFrame].size.height;
-    CGFloat topOffset = MAX(safeTop, statusBarHeight + navigationBarHeight) + 10;
-
+    // 隐藏UI 切换按钮 - 左上角
     [self createToggleUIButton:topOffset];
-
-    self.performanceControlButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    [self.performanceControlButton setTitle:@"⚙️" forState:UIControlStateNormal];
-    [self.performanceControlButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-    self.performanceControlButton.titleLabel.font = [UIFont boldSystemFontOfSize:24];
-    self.performanceControlButton.backgroundColor = [UIColor colorWithRed:0.3 green:0.6 blue:0.2 alpha:0.9];
-    self.performanceControlButton.layer.cornerRadius = 25;
-    self.performanceControlButton.layer.borderWidth = 2.0;
-    self.performanceControlButton.layer.borderColor = [UIColor colorWithRed:0.5 green:0.9 blue:0.3 alpha:1.0].CGColor;
-    self.performanceControlButton.frame = CGRectMake(80, topOffset, 50, 50);
-    self.performanceControlButton.layer.shadowColor = [UIColor greenColor].CGColor;
-    self.performanceControlButton.layer.shadowOffset = CGSizeMake(0, 2);
-    self.performanceControlButton.layer.shadowOpacity = 0.8;
-    self.performanceControlButton.layer.shadowRadius = 4;
-    [self.performanceControlButton addTarget:self action:@selector(performanceControlButtonTapped:) forControlEvents:UIControlEventTouchUpInside];
-    [self.view addSubview:self.performanceControlButton];
-    [self.controlButtons addObject:self.performanceControlButton];
 
     [self setupFPSMonitor];
 
+    // 右侧功能按钮区域 - 统一 44x44 圆形图标按钮，竖向排列
+    CGFloat btnSize = 44;
+    CGFloat btnSpacing = 10;
+    CGFloat rightX = self.view.bounds.size.width - btnSize - 12;
+    CGFloat rightY = topOffset;
+
+    // 特效按钮
     self.effectSelectorButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    [self.effectSelectorButton setTitle:@"🎨 特效" forState:UIControlStateNormal];
-    [self.effectSelectorButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-    self.effectSelectorButton.titleLabel.font = [UIFont boldSystemFontOfSize:16];
-    self.effectSelectorButton.backgroundColor = [UIColor colorWithRed:0.2 green:0.2 blue:0.3 alpha:0.9];
-    self.effectSelectorButton.layer.cornerRadius = 25;
+    UIImage *effectImage = nil;
+    if (@available(iOS 13.0, *)) {
+        effectImage = [UIImage systemImageNamed:@"paintpalette.fill"];
+    }
+    [self.effectSelectorButton setImage:effectImage forState:UIControlStateNormal];
+    [self.effectSelectorButton setTitle:@"" forState:UIControlStateNormal];
+    self.effectSelectorButton.tintColor = [UIColor whiteColor];
+    self.effectSelectorButton.backgroundColor = [UIColor colorWithRed:0.15 green:0.15 blue:0.25 alpha:0.85];
+    self.effectSelectorButton.layer.cornerRadius = btnSize / 2;
     self.effectSelectorButton.layer.borderWidth = 1.0;
-    self.effectSelectorButton.layer.borderColor = [UIColor whiteColor].CGColor;
-    self.effectSelectorButton.frame = CGRectMake(140, topOffset, 80, 50);
-    self.effectSelectorButton.layer.shadowColor = [UIColor blackColor].CGColor;
-    self.effectSelectorButton.layer.shadowOffset = CGSizeMake(0, 2);
-    self.effectSelectorButton.layer.shadowOpacity = 0.8;
-    self.effectSelectorButton.layer.shadowRadius = 4;
+    self.effectSelectorButton.layer.borderColor = [UIColor colorWithWhite:1.0 alpha:0.3].CGColor;
+    self.effectSelectorButton.frame = CGRectMake(rightX, rightY, btnSize, btnSize);
     [self.effectSelectorButton addTarget:self action:@selector(effectSelectorButtonTapped:) forControlEvents:UIControlEventTouchUpInside];
     [self.view addSubview:self.effectSelectorButton];
     [self.controlButtons addObject:self.effectSelectorButton];
+    rightY += btnSize + btnSpacing;
 
+    // AI模式按钮
     self.aiModeButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    [self.aiModeButton setTitle:@"🤖 AI" forState:UIControlStateNormal];
-    [self.aiModeButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-    self.aiModeButton.titleLabel.font = [UIFont boldSystemFontOfSize:14];
-    self.aiModeButton.backgroundColor = [UIColor colorWithRed:0.6 green:0.2 blue:0.8 alpha:0.9];
-    self.aiModeButton.layer.cornerRadius = 25;
-    self.aiModeButton.layer.borderWidth = 2.0;
-    self.aiModeButton.layer.borderColor = [UIColor colorWithRed:0.8 green:0.4 blue:1.0 alpha:1.0].CGColor;
-    self.aiModeButton.frame = CGRectMake(230, topOffset, 70, 50);
-    self.aiModeButton.layer.shadowColor = [UIColor purpleColor].CGColor;
-    self.aiModeButton.layer.shadowOffset = CGSizeMake(0, 2);
-    self.aiModeButton.layer.shadowOpacity = 0.8;
-    self.aiModeButton.layer.shadowRadius = 4;
+    UIImage *aiImage = nil;
+    if (@available(iOS 13.0, *)) {
+        aiImage = [UIImage systemImageNamed:@"brain.head.profile.fill"];
+    }
+    [self.aiModeButton setImage:aiImage forState:UIControlStateNormal];
+    [self.aiModeButton setTitle:@"" forState:UIControlStateNormal];
+    self.aiModeButton.tintColor = [UIColor whiteColor];
+    self.aiModeButton.backgroundColor = [UIColor colorWithRed:0.4 green:0.15 blue:0.6 alpha:0.85];
+    self.aiModeButton.layer.cornerRadius = btnSize / 2;
+    self.aiModeButton.layer.borderWidth = 1.0;
+    self.aiModeButton.layer.borderColor = [UIColor colorWithRed:0.8 green:0.4 blue:1.0 alpha:0.5].CGColor;
+    self.aiModeButton.frame = CGRectMake(rightX, rightY, btnSize, btnSize);
     [self.aiModeButton addTarget:self action:@selector(aiModeButtonTapped:) forControlEvents:UIControlEventTouchUpInside];
     [self.view addSubview:self.aiModeButton];
     [self.controlButtons addObject:self.aiModeButton];
+    rightY += btnSize + btnSpacing;
+
+    // 性能设置按钮
+    self.performanceControlButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    UIImage *perfImage = nil;
+    if (@available(iOS 13.0, *)) {
+        perfImage = [UIImage systemImageNamed:@"gearshape.fill"];
+    }
+    [self.performanceControlButton setImage:perfImage forState:UIControlStateNormal];
+    [self.performanceControlButton setTitle:@"" forState:UIControlStateNormal];
+    self.performanceControlButton.tintColor = [UIColor whiteColor];
+    self.performanceControlButton.backgroundColor = [UIColor colorWithRed:0.15 green:0.35 blue:0.15 alpha:0.85];
+    self.performanceControlButton.layer.cornerRadius = btnSize / 2;
+    self.performanceControlButton.layer.borderWidth = 1.0;
+    self.performanceControlButton.layer.borderColor = [UIColor colorWithRed:0.4 green:0.8 blue:0.3 alpha:0.5].CGColor;
+    self.performanceControlButton.frame = CGRectMake(rightX, rightY, btnSize, btnSize);
+    [self.performanceControlButton addTarget:self action:@selector(performanceControlButtonTapped:) forControlEvents:UIControlEventTouchUpInside];
+    [self.view addSubview:self.performanceControlButton];
+    [self.controlButtons addObject:self.performanceControlButton];
 
     [self updateAIModeButtonState];
     [self createKaraokeButton];
@@ -123,129 +132,46 @@
 }
 
 - (void)createQuickEffectButtons {
-    CGFloat safeTop = 0;
-    if (@available(iOS 11.0, *)) {
-        safeTop = self.view.safeAreaInsets.top;
-    }
-    CGFloat navigationBarHeight = self.navigationController.navigationBar.frame.size.height;
-    CGFloat statusBarHeight = [[UIApplication sharedApplication] statusBarFrame].size.height;
-    CGFloat topOffset = MAX(safeTop, statusBarHeight + navigationBarHeight) + 70;
-
-    NSArray *quickEffects = @[
-        @{@"title": @"🌈", @"effect": @(VisualEffectTypeNeonGlow)},
-        @{@"title": @"🌊", @"effect": @(VisualEffectType3DWaveform)},
-        @{@"title": @"💫", @"effect": @(VisualEffectTypeQuantumField)},
-        @{@"title": @"🔮", @"effect": @(VisualEffectTypeHolographic)},
-        @{@"title": @"⚡", @"effect": @(VisualEffectTypeCyberPunk)},
-        @{@"title": @"🌌", @"effect": @(VisualEffectTypeGalaxy)}
-    ];
-
-    for (NSInteger i = 0; i < quickEffects.count; i++) {
-        NSDictionary *effectInfo = quickEffects[i];
-        UIButton *button = [UIButton buttonWithType:UIButtonTypeSystem];
-
-        [button setTitle:effectInfo[@"title"] forState:UIControlStateNormal];
-        button.titleLabel.font = [UIFont systemFontOfSize:20];
-        button.backgroundColor = [UIColor colorWithRed:0.1 green:0.1 blue:0.2 alpha:0.9];
-        button.layer.cornerRadius = 20;
-        button.layer.borderWidth = 1.0;
-        button.layer.borderColor = [UIColor whiteColor].CGColor;
-        button.tag = [effectInfo[@"effect"] integerValue];
-        button.layer.shadowColor = [UIColor blackColor].CGColor;
-        button.layer.shadowOffset = CGSizeMake(0, 2);
-        button.layer.shadowOpacity = 0.8;
-        button.layer.shadowRadius = 3;
-
-        CGFloat buttonSize = 40;
-        CGFloat spacing = 10;
-        button.frame = CGRectMake(self.view.bounds.size.width - buttonSize - 20,
-                                  topOffset + i * (buttonSize + spacing),
-                                  buttonSize,
-                                  buttonSize);
-
-        [button addTarget:self action:@selector(quickEffectButtonTapped:) forControlEvents:UIControlEventTouchUpInside];
-        [self.view addSubview:button];
-        [self.controlButtons addObject:button];
-    }
-
+    // 快速特效按钮现已整合到 effectSelectorButton 弹出面板中，此处不再创建独立按钮
     [self createGalaxyControlButton];
     [self createCyberpunkControlButton];
 }
 
 - (void)createGalaxyControlButton {
-    CGFloat safeTop = 0;
-    if (@available(iOS 11.0, *)) {
-        safeTop = self.view.safeAreaInsets.top;
-    }
-    CGFloat navigationBarHeight = self.navigationController.navigationBar.frame.size.height;
-    CGFloat statusBarHeight = [[UIApplication sharedApplication] statusBarFrame].size.height;
-    CGFloat topOffset = MAX(safeTop, statusBarHeight + navigationBarHeight) + 10;
-
-    self.galaxyControlButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    [self.galaxyControlButton setTitle:@"🌌⚙️" forState:UIControlStateNormal];
-    self.galaxyControlButton.titleLabel.font = [UIFont systemFontOfSize:16];
-    self.galaxyControlButton.backgroundColor = [UIColor colorWithRed:0.2 green:0.1 blue:0.3 alpha:0.9];
-    self.galaxyControlButton.layer.cornerRadius = 25;
-    self.galaxyControlButton.layer.borderWidth = 1.0;
-    self.galaxyControlButton.layer.borderColor = [UIColor whiteColor].CGColor;
-    self.galaxyControlButton.frame = CGRectMake(230, topOffset, 80, 50);
-    self.galaxyControlButton.layer.shadowColor = [UIColor blackColor].CGColor;
-    self.galaxyControlButton.layer.shadowOffset = CGSizeMake(0, 2);
-    self.galaxyControlButton.layer.shadowOpacity = 0.8;
-    self.galaxyControlButton.layer.shadowRadius = 4;
-    [self.galaxyControlButton addTarget:self action:@selector(galaxyControlButtonTapped:) forControlEvents:UIControlEventTouchUpInside];
-    [self.view addSubview:self.galaxyControlButton];
-    [self.controlButtons addObject:self.galaxyControlButton];
+    // 银河控制按钮现已通过特效选择器面板访问，不再独立显示
 }
 
 - (void)createCyberpunkControlButton {
-    CGFloat safeTop = 0;
-    if (@available(iOS 11.0, *)) {
-        safeTop = self.view.safeAreaInsets.top;
-    }
-    CGFloat navigationBarHeight = self.navigationController.navigationBar.frame.size.height;
-    CGFloat statusBarHeight = [[UIApplication sharedApplication] statusBarFrame].size.height;
-    CGFloat topOffset = MAX(safeTop, statusBarHeight + navigationBarHeight) + 10;
-
-    self.cyberpunkControlButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    [self.cyberpunkControlButton setTitle:@"⚡⚙️" forState:UIControlStateNormal];
-    self.cyberpunkControlButton.titleLabel.font = [UIFont systemFontOfSize:16];
-    self.cyberpunkControlButton.backgroundColor = [UIColor colorWithRed:0.0 green:0.3 blue:0.4 alpha:0.9];
-    self.cyberpunkControlButton.layer.cornerRadius = 25;
-    self.cyberpunkControlButton.layer.borderWidth = 1.0;
-    self.cyberpunkControlButton.layer.borderColor = [UIColor colorWithRed:0.0 green:0.8 blue:1.0 alpha:1.0].CGColor;
-    self.cyberpunkControlButton.frame = CGRectMake(320, topOffset, 80, 50);
-    self.cyberpunkControlButton.layer.shadowColor = [UIColor cyanColor].CGColor;
-    self.cyberpunkControlButton.layer.shadowOffset = CGSizeMake(0, 2);
-    self.cyberpunkControlButton.layer.shadowOpacity = 0.6;
-    self.cyberpunkControlButton.layer.shadowRadius = 4;
-    [self.cyberpunkControlButton addTarget:self action:@selector(cyberpunkControlButtonTapped:) forControlEvents:UIControlEventTouchUpInside];
-    [self.view addSubview:self.cyberpunkControlButton];
-    [self.controlButtons addObject:self.cyberpunkControlButton];
+    // 赛博朋克控制按钮现已通过特效选择器面板访问，不再独立显示
 }
 
 - (void)createKaraokeButton {
+    // 卡拉OK 按钮 - 接续右侧竖排（在 performanceControlButton 下方继续）
     CGFloat safeTop = 0;
     if (@available(iOS 11.0, *)) {
         safeTop = self.view.safeAreaInsets.top;
     }
-    CGFloat navigationBarHeight = self.navigationController.navigationBar.frame.size.height;
-    CGFloat statusBarHeight = [[UIApplication sharedApplication] statusBarFrame].size.height;
-    CGFloat topOffset = MAX(safeTop, statusBarHeight + navigationBarHeight) + 70;
+    CGFloat topOffset = MAX(safeTop, 44.0) + 8;
+
+    CGFloat btnSize = 44;
+    CGFloat btnSpacing = 10;
+    CGFloat rightX = self.view.bounds.size.width - btnSize - 12;
+    // 跳过前3个按钮(特效+AI+性能)的位置
+    CGFloat rightY = topOffset + (btnSize + btnSpacing) * 3;
 
     self.karaokeButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    [self.karaokeButton setTitle:@"🎤 卡拉OK" forState:UIControlStateNormal];
-    [self.karaokeButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-    self.karaokeButton.titleLabel.font = [UIFont boldSystemFontOfSize:16];
-    self.karaokeButton.backgroundColor = [UIColor colorWithRed:0.8 green:0.2 blue:0.2 alpha:0.9];
-    self.karaokeButton.layer.cornerRadius = 25;
-    self.karaokeButton.layer.borderWidth = 2.0;
-    self.karaokeButton.layer.borderColor = [UIColor colorWithRed:1.0 green:0.3 blue:0.3 alpha:1.0].CGColor;
-    self.karaokeButton.frame = CGRectMake(20, topOffset, 120, 50);
-    self.karaokeButton.layer.shadowColor = [UIColor redColor].CGColor;
-    self.karaokeButton.layer.shadowOffset = CGSizeMake(0, 2);
-    self.karaokeButton.layer.shadowOpacity = 0.8;
-    self.karaokeButton.layer.shadowRadius = 4;
+    UIImage *micImage = nil;
+    if (@available(iOS 13.0, *)) {
+        micImage = [UIImage systemImageNamed:@"mic.fill"];
+    }
+    [self.karaokeButton setImage:micImage forState:UIControlStateNormal];
+    [self.karaokeButton setTitle:@"" forState:UIControlStateNormal];
+    self.karaokeButton.tintColor = [UIColor whiteColor];
+    self.karaokeButton.backgroundColor = [UIColor colorWithRed:0.55 green:0.1 blue:0.1 alpha:0.85];
+    self.karaokeButton.layer.cornerRadius = btnSize / 2;
+    self.karaokeButton.layer.borderWidth = 1.0;
+    self.karaokeButton.layer.borderColor = [UIColor colorWithRed:1.0 green:0.3 blue:0.3 alpha:0.5].CGColor;
+    self.karaokeButton.frame = CGRectMake(rightX, rightY, btnSize, btnSize);
     [self.karaokeButton addTarget:self action:@selector(karaokeButtonTapped:) forControlEvents:UIControlEventTouchUpInside];
     [self.view addSubview:self.karaokeButton];
     [self.controlButtons addObject:self.karaokeButton];
@@ -258,70 +184,80 @@
     if (@available(iOS 11.0, *)) {
         safeTop = self.view.safeAreaInsets.top;
     }
-    CGFloat navigationBarHeight = self.navigationController.navigationBar.frame.size.height;
-    CGFloat statusBarHeight = [[UIApplication sharedApplication] statusBarFrame].size.height;
-    CGFloat topOffset = MAX(safeTop, statusBarHeight + navigationBarHeight) + 70;
+    CGFloat topOffset = MAX(safeTop, 44.0) + 8;
 
+    CGFloat btnSize = 44;
+    CGFloat btnSpacing = 10;
+    CGFloat rightX = self.view.bounds.size.width - btnSize - 12;
+    // 跳过前4个按钮(特效+AI+性能+卡拉OK)的位置
+    CGFloat rightY = topOffset + (btnSize + btnSpacing) * 4;
+
+    // 歌词特效按钮
     self.lyricsEffectButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    [self.lyricsEffectButton setTitle:@"🎭 歌词" forState:UIControlStateNormal];
-    [self.lyricsEffectButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-    self.lyricsEffectButton.titleLabel.font = [UIFont boldSystemFontOfSize:16];
-    self.lyricsEffectButton.backgroundColor = [UIColor colorWithRed:0.5 green:0.2 blue:0.8 alpha:0.9];
-    self.lyricsEffectButton.layer.cornerRadius = 25;
-    self.lyricsEffectButton.layer.borderWidth = 2.0;
-    self.lyricsEffectButton.layer.borderColor = [UIColor colorWithRed:0.7 green:0.4 blue:1.0 alpha:1.0].CGColor;
-    self.lyricsEffectButton.frame = CGRectMake(150, topOffset, 100, 50);
-    self.lyricsEffectButton.layer.shadowColor = [UIColor purpleColor].CGColor;
-    self.lyricsEffectButton.layer.shadowOffset = CGSizeMake(0, 2);
-    self.lyricsEffectButton.layer.shadowOpacity = 0.8;
-    self.lyricsEffectButton.layer.shadowRadius = 4;
+    UIImage *lyricsImage = nil;
+    if (@available(iOS 13.0, *)) {
+        lyricsImage = [UIImage systemImageNamed:@"music.note.list"];
+    }
+    [self.lyricsEffectButton setImage:lyricsImage forState:UIControlStateNormal];
+    [self.lyricsEffectButton setTitle:@"" forState:UIControlStateNormal];
+    self.lyricsEffectButton.tintColor = [UIColor whiteColor];
+    self.lyricsEffectButton.backgroundColor = [UIColor colorWithRed:0.3 green:0.12 blue:0.5 alpha:0.85];
+    self.lyricsEffectButton.layer.cornerRadius = btnSize / 2;
+    self.lyricsEffectButton.layer.borderWidth = 1.0;
+    self.lyricsEffectButton.layer.borderColor = [UIColor colorWithRed:0.7 green:0.4 blue:1.0 alpha:0.5].CGColor;
+    self.lyricsEffectButton.frame = CGRectMake(rightX, rightY, btnSize, btnSize);
     [self.lyricsEffectButton addTarget:self action:@selector(lyricsEffectButtonTapped:) forControlEvents:UIControlEventTouchUpInside];
     [self.view addSubview:self.lyricsEffectButton];
     [self.controlButtons addObject:self.lyricsEffectButton];
+    rightY += btnSize + btnSpacing;
 
-    [self createImportLyricsButton];
+    // 导入歌词按钮
+    self.importLyricsButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    UIImage *importLyricsImage = nil;
+    if (@available(iOS 13.0, *)) {
+        importLyricsImage = [UIImage systemImageNamed:@"doc.badge.plus"];
+    }
+    [self.importLyricsButton setImage:importLyricsImage forState:UIControlStateNormal];
+    [self.importLyricsButton setTitle:@"" forState:UIControlStateNormal];
+    self.importLyricsButton.tintColor = [UIColor whiteColor];
+    self.importLyricsButton.backgroundColor = [UIColor colorWithRed:0.1 green:0.3 blue:0.25 alpha:0.85];
+    self.importLyricsButton.layer.cornerRadius = btnSize / 2;
+    self.importLyricsButton.layer.borderWidth = 1.0;
+    self.importLyricsButton.layer.borderColor = [UIColor colorWithRed:0.3 green:0.7 blue:0.6 alpha:0.5].CGColor;
+    self.importLyricsButton.frame = CGRectMake(rightX, rightY, btnSize, btnSize);
+    [self.importLyricsButton addTarget:self action:@selector(importLyricsButtonTapped:) forControlEvents:UIControlEventTouchUpInside];
+    [self.view addSubview:self.importLyricsButton];
+    [self.controlButtons addObject:self.importLyricsButton];
+
     [self createMixAudioControl];
 }
 
 - (void)createImportLyricsButton {
-    CGFloat lyricsButtonRightEdge = CGRectGetMaxX(self.lyricsEffectButton.frame);
-    CGFloat topOffset = CGRectGetMinY(self.lyricsEffectButton.frame);
-
-    self.importLyricsButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    [self.importLyricsButton setTitle:@"📝 导入" forState:UIControlStateNormal];
-    [self.importLyricsButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-    self.importLyricsButton.titleLabel.font = [UIFont boldSystemFontOfSize:14];
-    self.importLyricsButton.backgroundColor = [UIColor colorWithRed:0.2 green:0.5 blue:0.4 alpha:0.9];
-    self.importLyricsButton.layer.cornerRadius = 25;
-    self.importLyricsButton.layer.borderWidth = 1.5;
-    self.importLyricsButton.layer.borderColor = [UIColor colorWithRed:0.4 green:0.7 blue:0.6 alpha:1.0].CGColor;
-    self.importLyricsButton.frame = CGRectMake(lyricsButtonRightEdge + 5, topOffset, 70, 50);
-    self.importLyricsButton.layer.shadowColor = [UIColor colorWithRed:0.2 green:0.6 blue:0.5 alpha:1.0].CGColor;
-    self.importLyricsButton.layer.shadowOffset = CGSizeMake(0, 2);
-    self.importLyricsButton.layer.shadowOpacity = 0.6;
-    self.importLyricsButton.layer.shadowRadius = 3;
-    [self.importLyricsButton addTarget:self action:@selector(importLyricsButtonTapped:) forControlEvents:UIControlEventTouchUpInside];
-    [self.view addSubview:self.importLyricsButton];
-    [self.controlButtons addObject:self.importLyricsButton];
+    // 导入歌词按钮已移至 createLyricsEffectButton 中统一创建，此方法保留为空兼容调用
 }
 
 - (void)createMixAudioControl {
-    CGFloat importButtonRightEdge = CGRectGetMaxX(self.importLyricsButton.frame);
-    CGFloat topOffset = CGRectGetMinY(self.importLyricsButton.frame);
+    // 混音控制放在右侧竖排末尾（导入歌词按钮下方）
+    CGFloat safeTop = 0;
+    if (@available(iOS 11.0, *)) {
+        safeTop = self.view.safeAreaInsets.top;
+    }
+    CGFloat topOffset = MAX(safeTop, 44.0) + 8;
+    CGFloat btnSize = 44;
+    CGFloat btnSpacing = 10;
+    CGFloat rightX = self.view.bounds.size.width - btnSize - 12;
+    // 跳过前6个按钮的位置(特效+AI+性能+卡拉OK+歌词+导入歌词)
+    CGFloat rightY = topOffset + (btnSize + btnSpacing) * 6;
 
-    self.mixAudioControlView = [[UIView alloc] initWithFrame:CGRectMake(importButtonRightEdge + 5, topOffset, 60, 50)];
-    self.mixAudioControlView.backgroundColor = [UIColor colorWithRed:0.2 green:0.4 blue:0.6 alpha:0.9];
-    self.mixAudioControlView.layer.cornerRadius = 25;
-    self.mixAudioControlView.layer.borderWidth = 2.0;
-    self.mixAudioControlView.layer.borderColor = [UIColor colorWithRed:0.4 green:0.6 blue:0.8 alpha:1.0].CGColor;
-    self.mixAudioControlView.layer.shadowColor = [UIColor cyanColor].CGColor;
-    self.mixAudioControlView.layer.shadowOffset = CGSizeMake(0, 2);
-    self.mixAudioControlView.layer.shadowOpacity = 0.8;
-    self.mixAudioControlView.layer.shadowRadius = 4;
+    self.mixAudioControlView = [[UIView alloc] initWithFrame:CGRectMake(rightX, rightY, btnSize, btnSize)];
+    self.mixAudioControlView.backgroundColor = [UIColor colorWithRed:0.1 green:0.25 blue:0.4 alpha:0.85];
+    self.mixAudioControlView.layer.cornerRadius = btnSize / 2;
+    self.mixAudioControlView.layer.borderWidth = 1.0;
+    self.mixAudioControlView.layer.borderColor = [UIColor colorWithRed:0.3 green:0.6 blue:0.9 alpha:0.5].CGColor;
 
-    self.mixAudioSwitch = [[UISwitch alloc] initWithFrame:CGRectMake(8, 10, 44, 30)];
-    self.mixAudioSwitch.transform = CGAffineTransformMakeScale(0.75, 0.75);
-    self.mixAudioSwitch.center = CGPointMake(30, 25);
+    self.mixAudioSwitch = [[UISwitch alloc] init];
+    self.mixAudioSwitch.transform = CGAffineTransformMakeScale(0.65, 0.65);
+    self.mixAudioSwitch.center = CGPointMake(btnSize / 2, btnSize / 2);
     self.mixAudioSwitch.on = NO;
     self.mixAudioSwitch.onTintColor = [UIColor colorWithRed:0.3 green:0.8 blue:0.5 alpha:1.0];
     [self.mixAudioSwitch addTarget:self action:@selector(mixAudioSwitchChanged:) forControlEvents:UIControlEventValueChanged];
@@ -353,18 +289,21 @@
 }
 
 - (void)createToggleUIButton:(CGFloat)topOffset {
+    CGFloat btnSize = 36;
     self.toggleUIButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    [self.toggleUIButton setTitle:@"👁️" forState:UIControlStateNormal];
-    self.toggleUIButton.titleLabel.font = [UIFont boldSystemFontOfSize:24];
-    self.toggleUIButton.backgroundColor = [UIColor colorWithRed:0.2 green:0.2 blue:0.2 alpha:0.9];
-    self.toggleUIButton.layer.cornerRadius = 25;
-    self.toggleUIButton.layer.borderWidth = 2.0;
-    self.toggleUIButton.layer.borderColor = [UIColor whiteColor].CGColor;
-    self.toggleUIButton.frame = CGRectMake(20, topOffset, 50, 50);
-    self.toggleUIButton.layer.shadowColor = [UIColor whiteColor].CGColor;
-    self.toggleUIButton.layer.shadowOffset = CGSizeMake(0, 2);
-    self.toggleUIButton.layer.shadowOpacity = 0.8;
-    self.toggleUIButton.layer.shadowRadius = 4;
+    UIImage *eyeImage = nil;
+    if (@available(iOS 13.0, *)) {
+        UIImageSymbolConfiguration *config = [UIImageSymbolConfiguration configurationWithPointSize:16 weight:UIImageSymbolWeightMedium];
+        eyeImage = [UIImage systemImageNamed:@"eye.fill" withConfiguration:config];
+    }
+    [self.toggleUIButton setImage:eyeImage forState:UIControlStateNormal];
+    [self.toggleUIButton setTitle:@"" forState:UIControlStateNormal];
+    self.toggleUIButton.tintColor = [UIColor colorWithWhite:1.0 alpha:0.8];
+    self.toggleUIButton.backgroundColor = [UIColor colorWithWhite:0.15 alpha:0.75];
+    self.toggleUIButton.layer.cornerRadius = btnSize / 2;
+    self.toggleUIButton.layer.borderWidth = 1.0;
+    self.toggleUIButton.layer.borderColor = [UIColor colorWithWhite:1.0 alpha:0.25].CGColor;
+    self.toggleUIButton.frame = CGRectMake(12, topOffset + 4, btnSize, btnSize);
     [self.toggleUIButton addTarget:self action:@selector(toggleUIButtonTapped:) forControlEvents:UIControlEventTouchUpInside];
     [self.view addSubview:self.toggleUIButton];
 }
@@ -373,7 +312,12 @@
     self.isUIHidden = !self.isUIHidden;
 
     NSLog(@"👁️ UI切换: %@", self.isUIHidden ? @"隐藏" : @"显示");
-    [self.toggleUIButton setTitle:self.isUIHidden ? @"🙈" : @"👁️" forState:UIControlStateNormal];
+    UIImage *eyeImage = nil;
+    if (@available(iOS 13.0, *)) {
+        UIImageSymbolConfiguration *config = [UIImageSymbolConfiguration configurationWithPointSize:16 weight:UIImageSymbolWeightMedium];
+        eyeImage = [UIImage systemImageNamed:self.isUIHidden ? @"eye.slash.fill" : @"eye.fill" withConfiguration:config];
+    }
+    [self.toggleUIButton setImage:eyeImage forState:UIControlStateNormal];
 
     [UIView animateWithDuration:0.3 animations:^{
         self.toggleUIButton.alpha = self.isUIHidden ? 0.2 : 1.0;
@@ -397,17 +341,9 @@
             self.importLyricsButton.userInteractionEnabled = !self.isUIHidden;
         }
 
-        if (self.previousButton) {
-            self.previousButton.alpha = self.isUIHidden ? 0.0 : 1.0;
-            self.previousButton.userInteractionEnabled = !self.isUIHidden;
-        }
-        if (self.playPauseButton) {
-            self.playPauseButton.alpha = self.isUIHidden ? 0.0 : 1.0;
-            self.playPauseButton.userInteractionEnabled = !self.isUIHidden;
-        }
-        if (self.nextButton) {
-            self.nextButton.alpha = self.isUIHidden ? 0.0 : 1.0;
-            self.nextButton.userInteractionEnabled = !self.isUIHidden;
+        if (self.playControlBarView) {
+            self.playControlBarView.alpha = self.isUIHidden ? 0.0 : 1.0;
+            self.playControlBarView.userInteractionEnabled = !self.isUIHidden;
         }
 
         if (self.searchBar) {
@@ -423,25 +359,13 @@
 }
 
 - (void)bringControlButtonsToFront {
-    [self.view bringSubviewToFront:self.toggleUIButton];
-    [self.view bringSubviewToFront:self.leftFunctionScrollView];
-    [self.view bringSubviewToFront:self.previousButton];
-    [self.view bringSubviewToFront:self.playPauseButton];
-    [self.view bringSubviewToFront:self.nextButton];
+    if (self.toggleUIButton) [self.view bringSubviewToFront:self.toggleUIButton];
+    if (self.fpsLabel) [self.view bringSubviewToFront:self.fpsLabel];
+    if (self.leftFunctionScrollView) [self.view bringSubviewToFront:self.leftFunctionScrollView];
 
     for (UIView *controlView in self.controlButtons) {
-        [self.view bringSubviewToFront:controlView];
-    }
-
-    for (UIView *subview in self.view.subviews) {
-        if ([subview isKindOfClass:[UIButton class]] &&
-            subview != self.toggleUIButton &&
-            subview != self.previousButton &&
-            subview != self.playPauseButton &&
-            subview != self.nextButton &&
-            subview.tag >= 0 &&
-            subview.tag < VisualEffectTypeCount) {
-            [self.view bringSubviewToFront:subview];
+        if (controlView && controlView.superview) {
+            [self.view bringSubviewToFront:controlView];
         }
     }
 }
@@ -606,226 +530,148 @@
 }
 
 - (void)buildUI {
-    CGFloat safeTop = 0;
+    CGFloat screenWidth  = self.view.frame.size.width;
+    CGFloat screenHeight = self.view.frame.size.height;
+
+    CGFloat safeTop = 0, safeBottom = 0;
     if (@available(iOS 11.0, *)) {
-        safeTop = self.view.safeAreaInsets.top;
+        safeTop    = self.view.safeAreaInsets.top;
+        safeBottom = self.view.safeAreaInsets.bottom;
     }
-    CGFloat navigationBarHeight = self.navigationController.navigationBar.frame.size.height;
-    CGFloat statusBarHeight = [[UIApplication sharedApplication] statusBarFrame].size.height;
-    CGFloat topOffset = MAX(safeTop, statusBarHeight + navigationBarHeight) + 140;
+    CGFloat topOffset = MAX(safeTop, 44.0) + 8;
 
-    CGFloat leftX = 10;
-    CGFloat buttonWidth = 70;
-    CGFloat buttonHeight = 40;
-    CGFloat spacing = 8;
-    CGFloat scrollViewWidth = buttonWidth + 20;
-    CGFloat scrollViewHeight = self.view.frame.size.height - topOffset - 20;
+    // ── 右侧功能按钮区宽度 ──
+    CGFloat rightBtnSize  = 44;
+    CGFloat rightBtnRight = rightBtnSize + 12 + 8; // 按钮宽+右边距+间隙
 
-    self.leftFunctionScrollView = [[UIScrollView alloc] initWithFrame:CGRectMake(0, topOffset, scrollViewWidth, scrollViewHeight)];
-    self.leftFunctionScrollView.showsVerticalScrollIndicator = YES;
+    // ── 底部播放控制区高度 ──
+    CGFloat playAreaHeight = 100;
+    CGFloat bottomAreaTop  = screenHeight - safeBottom - playAreaHeight;
+
+    // ══════════════════════════════════════════
+    // 左侧分类滚动视图
+    // ══════════════════════════════════════════
+    CGFloat leftScrollX     = 0;
+    CGFloat leftScrollWidth = 80;
+    CGFloat leftScrollTop   = topOffset + 52; // 给 toggleUIButton 留空间
+    CGFloat leftScrollH     = bottomAreaTop - leftScrollTop - 8;
+
+    self.leftFunctionScrollView = [[UIScrollView alloc] initWithFrame:
+        CGRectMake(leftScrollX, leftScrollTop, leftScrollWidth, leftScrollH)];
+    self.leftFunctionScrollView.showsVerticalScrollIndicator = NO;
     self.leftFunctionScrollView.showsHorizontalScrollIndicator = NO;
     self.leftFunctionScrollView.bounces = YES;
     self.leftFunctionScrollView.backgroundColor = [UIColor clearColor];
     [self.view addSubview:self.leftFunctionScrollView];
 
-    CGFloat contentY = 0;
+    CGFloat btnW = 58, btnH = 34, btnSpacing = 6, btnX = 11;
+    CGFloat contentY = 8;
     self.categoryButtons = [NSMutableArray array];
 
     NSArray *categories = @[
-        @{@"title": @"📁 全部", @"category": @(MusicCategoryAll)},
-        @{@"title": @"🕐 最近", @"category": @(MusicCategoryRecent)},
-        @{@"title": @"❤️ 最爱", @"category": @(MusicCategoryFavorite)},
-        @{@"title": @"🎵 MP3", @"category": @(MusicCategoryMP3)},
-        @{@"title": @"🔒 NCM", @"category": @(MusicCategoryNCM)}
+        @{@"title": @"全部",  @"category": @(MusicCategoryAll)},
+        @{@"title": @"最近",  @"category": @(MusicCategoryRecent)},
+        @{@"title": @"最爱",  @"category": @(MusicCategoryFavorite)},
+        @{@"title": @"MP3",  @"category": @(MusicCategoryMP3)},
+        @{@"title": @"NCM",  @"category": @(MusicCategoryNCM)}
     ];
 
-    for (NSInteger i = 0; i < categories.count; i++) {
+    for (NSInteger i = 0; i < (NSInteger)categories.count; i++) {
         NSDictionary *catInfo = categories[i];
         UIButton *button = [UIButton buttonWithType:UIButtonTypeSystem];
         [button setTitle:catInfo[@"title"] forState:UIControlStateNormal];
-        [button setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-        button.titleLabel.font = [UIFont boldSystemFontOfSize:13];
-        button.backgroundColor = [UIColor colorWithWhite:0.2 alpha:0.85];
+        [button setTitleColor:[UIColor colorWithWhite:0.9 alpha:1.0] forState:UIControlStateNormal];
+        button.titleLabel.font = [UIFont boldSystemFontOfSize:12];
+        button.backgroundColor = [UIColor colorWithWhite:0.18 alpha:0.80];
         button.layer.cornerRadius = 8;
-        button.layer.borderWidth = 1.5;
-        button.layer.borderColor = [UIColor colorWithWhite:0.4 alpha:0.6].CGColor;
+        button.layer.borderWidth = 1.0;
+        button.layer.borderColor = [UIColor colorWithWhite:0.35 alpha:0.5].CGColor;
         button.tag = [catInfo[@"category"] integerValue];
-
-        CGFloat yPos = contentY + i * (buttonHeight + spacing);
-        button.frame = CGRectMake(leftX, yPos, buttonWidth, buttonHeight);
-
+        button.frame = CGRectMake(btnX, contentY + i * (btnH + btnSpacing), btnW, btnH);
         [button addTarget:self action:@selector(categoryButtonTapped:) forControlEvents:UIControlEventTouchUpInside];
         [self.leftFunctionScrollView addSubview:button];
         [self.categoryButtons addObject:button];
-
         if (i == 0) {
-            button.backgroundColor = [UIColor colorWithRed:0.2 green:0.5 blue:0.8 alpha:0.9];
-            button.layer.borderColor = [UIColor colorWithRed:0.3 green:0.6 blue:1.0 alpha:1.0].CGColor;
+            button.backgroundColor = [UIColor colorWithRed:0.15 green:0.45 blue:0.85 alpha:0.9];
+            button.layer.borderColor = [UIColor colorWithRed:0.3 green:0.6 blue:1.0 alpha:0.7].CGColor;
         }
     }
 
-    CGFloat sortButtonY = contentY + categories.count * (buttonHeight + spacing) + 15;
-    self.sortButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    [self.sortButton setTitle:@"🔄 排序" forState:UIControlStateNormal];
-    [self.sortButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-    self.sortButton.titleLabel.font = [UIFont boldSystemFontOfSize:13];
-    self.sortButton.backgroundColor = [UIColor colorWithRed:0.3 green:0.6 blue:0.3 alpha:0.85];
-    self.sortButton.layer.cornerRadius = 8;
-    self.sortButton.layer.borderWidth = 1.5;
-    self.sortButton.layer.borderColor = [UIColor colorWithRed:0.4 green:0.8 blue:0.4 alpha:0.8].CGColor;
-    self.sortButton.frame = CGRectMake(leftX, sortButtonY, buttonWidth, buttonHeight);
-    [self.sortButton addTarget:self action:@selector(sortButtonTapped:) forControlEvents:UIControlEventTouchUpInside];
-    [self.leftFunctionScrollView addSubview:self.sortButton];
+    CGFloat utilY = contentY + categories.count * (btnH + btnSpacing) + 12;
 
-    CGFloat reloadButtonY = sortButtonY + buttonHeight + spacing;
-    self.reloadButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    [self.reloadButton setTitle:@"🔄 重新扫描" forState:UIControlStateNormal];
-    [self.reloadButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-    self.reloadButton.titleLabel.font = [UIFont boldSystemFontOfSize:13];
-    self.reloadButton.backgroundColor = [UIColor colorWithRed:0.8 green:0.4 blue:0.2 alpha:0.85];
-    self.reloadButton.layer.cornerRadius = 8;
-    self.reloadButton.layer.borderWidth = 1.5;
-    self.reloadButton.layer.borderColor = [UIColor colorWithRed:1.0 green:0.5 blue:0.3 alpha:0.8].CGColor;
-    self.reloadButton.frame = CGRectMake(leftX, reloadButtonY, buttonWidth, buttonHeight);
-    [self.reloadButton addTarget:self action:@selector(reloadMusicLibraryButtonTapped:) forControlEvents:UIControlEventTouchUpInside];
-    [self.leftFunctionScrollView addSubview:self.reloadButton];
+    // 工具按钮辅助 block（仅用图标，无文字，统一风格）
+    NSArray *utilButtons = @[
+        @{@"icon": @"arrow.up.arrow.down",    @"color": @[@0.2, @0.5, @0.25],  @"sel": @"sortButtonTapped:"},
+        @{@"icon": @"arrow.clockwise",         @"color": @[@0.5, @0.28, @0.12], @"sel": @"reloadMusicLibraryButtonTapped:"},
+        @{@"icon": @"tray.and.arrow.down",     @"color": @[@0.12, @0.42, @0.6], @"sel": @"importMusicButtonTapped:"},
+        @{@"icon": @"trash.fill",              @"color": @[@0.6, @0.18, @0.18], @"sel": @"clearAICacheButtonTapped:"},
+        @{@"icon": @"cpu.fill",                @"color": @[@0.22, @0.32, @0.7], @"sel": @"aiSettingsButtonTapped:"},
+        @{@"icon": @"repeat",                  @"color": @[@0.4, @0.28, @0.5],  @"sel": @"loopButtonTapped:"},
+        @{@"icon": @"icloud.and.arrow.down",   @"color": @[@0.12, @0.42, @0.68],@"sel": @"cloudDownloadButtonTapped:"},
+        @{@"icon": @"waveform",                @"color": @[@0.6, @0.33, @0.06], @"sel": @"lyricsTimingButtonTapped:"}
+    ];
 
-    CGFloat importButtonY = reloadButtonY + buttonHeight + spacing;
-    self.importButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    [self.importButton setTitle:@"📥 导入" forState:UIControlStateNormal];
-    [self.importButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-    self.importButton.titleLabel.font = [UIFont boldSystemFontOfSize:13];
-    self.importButton.backgroundColor = [UIColor colorWithRed:0.2 green:0.6 blue:0.8 alpha:0.85];
-    self.importButton.layer.cornerRadius = 8;
-    self.importButton.layer.borderWidth = 1.5;
-    self.importButton.layer.borderColor = [UIColor colorWithRed:0.3 green:0.7 blue:1.0 alpha:0.8].CGColor;
-    self.importButton.frame = CGRectMake(leftX, importButtonY, buttonWidth, buttonHeight);
-    [self.importButton addTarget:self action:@selector(importMusicButtonTapped:) forControlEvents:UIControlEventTouchUpInside];
-    [self.leftFunctionScrollView addSubview:self.importButton];
+    UIButton *sortBtn = nil, *reloadBtn = nil, *importBtn = nil, *clearAIBtn = nil;
+    UIButton *aiSettingsBtn = nil, *loopBtn = nil, *cloudBtn = nil, *timingBtn = nil;
+    NSArray *btnRefs = @[
+        [NSNull null], [NSNull null], [NSNull null], [NSNull null],
+        [NSNull null], [NSNull null], [NSNull null], [NSNull null]
+    ];
+    (void)btnRefs;
 
-    CGFloat clearAICacheButtonY = importButtonY + buttonHeight + spacing;
-    self.clearAICacheButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    [self.clearAICacheButton setTitle:@"🗑️ 清除 AI" forState:UIControlStateNormal];
-    [self.clearAICacheButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-    self.clearAICacheButton.titleLabel.font = [UIFont boldSystemFontOfSize:13];
-    self.clearAICacheButton.backgroundColor = [UIColor colorWithRed:0.9 green:0.3 blue:0.3 alpha:0.85];
-    self.clearAICacheButton.layer.cornerRadius = 8;
-    self.clearAICacheButton.layer.borderWidth = 1.5;
-    self.clearAICacheButton.layer.borderColor = [UIColor colorWithRed:1.0 green:0.4 blue:0.4 alpha:0.8].CGColor;
-    self.clearAICacheButton.frame = CGRectMake(leftX, clearAICacheButtonY, buttonWidth, buttonHeight);
-    [self.clearAICacheButton addTarget:self action:@selector(clearAICacheButtonTapped:) forControlEvents:UIControlEventTouchUpInside];
-    [self.leftFunctionScrollView addSubview:self.clearAICacheButton];
+    for (NSInteger i = 0; i < (NSInteger)utilButtons.count; i++) {
+        NSDictionary *info = utilButtons[i];
+        NSArray *rgb = info[@"color"];
+        UIButton *btn = [UIButton buttonWithType:UIButtonTypeSystem];
+        if (@available(iOS 13.0, *)) {
+            UIImageSymbolConfiguration *cfg = [UIImageSymbolConfiguration configurationWithPointSize:14 weight:UIImageSymbolWeightMedium];
+            [btn setImage:[UIImage systemImageNamed:info[@"icon"] withConfiguration:cfg] forState:UIControlStateNormal];
+        }
+        [btn setTitle:@"" forState:UIControlStateNormal];
+        btn.tintColor = [UIColor whiteColor];
+        btn.backgroundColor = [UIColor colorWithRed:[rgb[0] floatValue]
+                                              green:[rgb[1] floatValue]
+                                               blue:[rgb[2] floatValue]
+                                              alpha:0.85];
+        btn.layer.cornerRadius = 8;
+        btn.layer.borderWidth = 1.0;
+        btn.layer.borderColor = [UIColor colorWithWhite:1.0 alpha:0.2].CGColor;
+        btn.frame = CGRectMake(btnX, utilY + i * (btnH + btnSpacing), btnW, btnH);
+        SEL action = NSSelectorFromString(info[@"sel"]);
+        [btn addTarget:self action:action forControlEvents:UIControlEventTouchUpInside];
+        [self.leftFunctionScrollView addSubview:btn];
 
-    CGFloat aiSettingsButtonY = clearAICacheButtonY + buttonHeight + spacing;
-    self.aiSettingsButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    [self.aiSettingsButton setTitle:@"🤖 AI设置" forState:UIControlStateNormal];
-    [self.aiSettingsButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-    self.aiSettingsButton.titleLabel.font = [UIFont boldSystemFontOfSize:13];
-    self.aiSettingsButton.titleLabel.numberOfLines = 2;
-    self.aiSettingsButton.titleLabel.textAlignment = NSTextAlignmentCenter;
-    self.aiSettingsButton.backgroundColor = [UIColor colorWithRed:0.32 green:0.45 blue:0.85 alpha:0.85];
-    self.aiSettingsButton.layer.cornerRadius = 8;
-    self.aiSettingsButton.layer.borderWidth = 1.5;
-    self.aiSettingsButton.layer.borderColor = [UIColor colorWithRed:0.45 green:0.58 blue:1.0 alpha:0.8].CGColor;
-    self.aiSettingsButton.frame = CGRectMake(leftX, aiSettingsButtonY, buttonWidth, buttonHeight);
-    [self.aiSettingsButton addTarget:self action:@selector(aiSettingsButtonTapped:) forControlEvents:UIControlEventTouchUpInside];
-    [self.leftFunctionScrollView addSubview:self.aiSettingsButton];
+        if (i == 0) sortBtn = btn;
+        else if (i == 1) reloadBtn = btn;
+        else if (i == 2) importBtn = btn;
+        else if (i == 3) clearAIBtn = btn;
+        else if (i == 4) aiSettingsBtn = btn;
+        else if (i == 5) loopBtn = btn;
+        else if (i == 6) cloudBtn = btn;
+        else if (i == 7) timingBtn = btn;
+    }
 
-    CGFloat controlButtonHeight = 32;
-    CGFloat controlSpacing = 4;
+    self.sortButton          = sortBtn;
+    self.reloadButton        = reloadBtn;
+    self.importButton        = importBtn;
+    self.clearAICacheButton  = clearAIBtn;
+    self.aiSettingsButton    = aiSettingsBtn;
+    self.loopButton          = loopBtn;
+    self.cloudButton         = cloudBtn;
+    self.lyricsTimingButton  = timingBtn;
+    self.isSingleLoopMode    = NO;
 
-    CGFloat loopButtonY = aiSettingsButtonY + buttonHeight + spacing + 10;
-    self.loopButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    [self.loopButton setTitle:@"🔁" forState:UIControlStateNormal];
-    self.loopButton.titleLabel.font = [UIFont systemFontOfSize:20];
-    [self.loopButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-    self.loopButton.backgroundColor = [UIColor colorWithRed:0.6 green:0.4 blue:0.7 alpha:0.85];
-    self.loopButton.layer.cornerRadius = 6;
-    self.loopButton.layer.borderWidth = 1.0;
-    self.loopButton.layer.borderColor = [UIColor colorWithRed:0.7 green:0.5 blue:0.8 alpha:0.8].CGColor;
-    self.loopButton.frame = CGRectMake(leftX, loopButtonY, buttonWidth, controlButtonHeight);
-    [self.loopButton addTarget:self action:@selector(loopButtonTapped:) forControlEvents:UIControlEventTouchUpInside];
-    [self.leftFunctionScrollView addSubview:self.loopButton];
-    self.isSingleLoopMode = NO;
+    CGFloat totalContentH = utilY + utilButtons.count * (btnH + btnSpacing) + 16;
+    self.leftFunctionScrollView.contentSize = CGSizeMake(leftScrollWidth, totalContentH);
 
-    CGFloat cloudButtonY = loopButtonY + controlButtonHeight + controlSpacing;
-    self.cloudButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    [self.cloudButton setTitle:@"☁️" forState:UIControlStateNormal];
-    self.cloudButton.titleLabel.font = [UIFont systemFontOfSize:20];
-    [self.cloudButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-    self.cloudButton.backgroundColor = [UIColor colorWithRed:0.2 green:0.6 blue:0.9 alpha:0.85];
-    self.cloudButton.layer.cornerRadius = 6;
-    self.cloudButton.layer.borderWidth = 1.0;
-    self.cloudButton.layer.borderColor = [UIColor colorWithRed:0.3 green:0.7 blue:1.0 alpha:0.8].CGColor;
-    self.cloudButton.frame = CGRectMake(leftX, cloudButtonY, buttonWidth, controlButtonHeight);
-    [self.cloudButton addTarget:self action:@selector(cloudDownloadButtonTapped:) forControlEvents:UIControlEventTouchUpInside];
-    [self.leftFunctionScrollView addSubview:self.cloudButton];
+    // ══════════════════════════════════════════
+    // 搜索栏 & 歌曲列表
+    // ══════════════════════════════════════════
+    CGFloat listLeft  = leftScrollX + leftScrollWidth + 4;
+    CGFloat listRight = screenWidth - rightBtnRight - 4;
+    CGFloat listW     = listRight - listLeft;
 
-    CGFloat timingButtonY = cloudButtonY + controlButtonHeight + controlSpacing;
-    self.lyricsTimingButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    [self.lyricsTimingButton setTitle:@"🎼" forState:UIControlStateNormal];
-    self.lyricsTimingButton.titleLabel.font = [UIFont systemFontOfSize:20];
-    [self.lyricsTimingButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-    self.lyricsTimingButton.backgroundColor = [UIColor colorWithRed:0.9 green:0.5 blue:0.1 alpha:0.85];
-    self.lyricsTimingButton.layer.cornerRadius = 6;
-    self.lyricsTimingButton.layer.borderWidth = 1.0;
-    self.lyricsTimingButton.layer.borderColor = [UIColor colorWithRed:1.0 green:0.7 blue:0.3 alpha:0.8].CGColor;
-    self.lyricsTimingButton.frame = CGRectMake(leftX, timingButtonY, buttonWidth, controlButtonHeight);
-    [self.lyricsTimingButton addTarget:self action:@selector(lyricsTimingButtonTapped:) forControlEvents:UIControlEventTouchUpInside];
-    [self.leftFunctionScrollView addSubview:self.lyricsTimingButton];
-
-    CGFloat totalContentHeight = timingButtonY + controlButtonHeight + 20;
-    self.leftFunctionScrollView.contentSize = CGSizeMake(scrollViewWidth, totalContentHeight);
-
-    CGFloat screenWidth = self.view.frame.size.width;
-    CGFloat playControlWidth = 50;
-    CGFloat playControlHeight = 40;
-    CGFloat playControlSpacing = 8;
-    CGFloat totalPlayControlWidth = playControlWidth * 3 + playControlSpacing * 2;
-    CGFloat playControlX = screenWidth - totalPlayControlWidth - 15;
-    CGFloat playControlY = topOffset;
-
-    self.previousButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    [self.previousButton setTitle:@"⏮️" forState:UIControlStateNormal];
-    self.previousButton.titleLabel.font = [UIFont systemFontOfSize:20];
-    [self.previousButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-    self.previousButton.backgroundColor = [UIColor colorWithRed:0.3 green:0.5 blue:0.7 alpha:0.85];
-    self.previousButton.layer.cornerRadius = 6;
-    self.previousButton.layer.borderWidth = 1.0;
-    self.previousButton.layer.borderColor = [UIColor colorWithRed:0.4 green:0.6 blue:0.8 alpha:0.8].CGColor;
-    self.previousButton.frame = CGRectMake(playControlX, playControlY, playControlWidth, playControlHeight);
-    [self.previousButton addTarget:self action:@selector(previousButtonTapped:) forControlEvents:UIControlEventTouchUpInside];
-    [self.view addSubview:self.previousButton];
-
-    CGFloat playButtonX = playControlX + playControlWidth + playControlSpacing;
-    self.playPauseButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    [self.playPauseButton setTitle:@"▶️" forState:UIControlStateNormal];
-    self.playPauseButton.titleLabel.font = [UIFont systemFontOfSize:20];
-    [self.playPauseButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-    self.playPauseButton.backgroundColor = [UIColor colorWithRed:0.2 green:0.7 blue:0.3 alpha:0.85];
-    self.playPauseButton.layer.cornerRadius = 6;
-    self.playPauseButton.layer.borderWidth = 1.0;
-    self.playPauseButton.layer.borderColor = [UIColor colorWithRed:0.3 green:0.8 blue:0.4 alpha:0.8].CGColor;
-    self.playPauseButton.frame = CGRectMake(playButtonX, playControlY, playControlWidth, playControlHeight);
-    [self.playPauseButton addTarget:self action:@selector(playPauseButtonTapped:) forControlEvents:UIControlEventTouchUpInside];
-    [self.view addSubview:self.playPauseButton];
-
-    CGFloat nextButtonX = playButtonX + playControlWidth + playControlSpacing;
-    self.nextButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    [self.nextButton setTitle:@"⏭️" forState:UIControlStateNormal];
-    self.nextButton.titleLabel.font = [UIFont systemFontOfSize:20];
-    [self.nextButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-    self.nextButton.backgroundColor = [UIColor colorWithRed:0.3 green:0.5 blue:0.7 alpha:0.85];
-    self.nextButton.layer.cornerRadius = 6;
-    self.nextButton.layer.borderWidth = 1.0;
-    self.nextButton.layer.borderColor = [UIColor colorWithRed:0.4 green:0.6 blue:0.8 alpha:0.8].CGColor;
-    self.nextButton.frame = CGRectMake(nextButtonX, playControlY, playControlWidth, playControlHeight);
-    [self.nextButton addTarget:self action:@selector(nextButtonTapped:) forControlEvents:UIControlEventTouchUpInside];
-    [self.view addSubview:self.nextButton];
-
-    CGFloat searchBarX = scrollViewWidth + 5;
-    CGFloat searchBarWidth = playControlX - searchBarX - 10;
-    self.searchBar = [[UISearchBar alloc] initWithFrame:CGRectMake(searchBarX, topOffset, searchBarWidth, 50)];
+    self.searchBar = [[UISearchBar alloc] initWithFrame:CGRectMake(listLeft, topOffset, listW, 44)];
     self.searchBar.delegate = self;
     self.searchBar.placeholder = @"搜索歌曲、艺术家...";
     self.searchBar.barStyle = UIBarStyleBlack;
@@ -837,18 +683,84 @@
     tapGesture.cancelsTouchesInView = NO;
     [self.view addGestureRecognizer:tapGesture];
 
-    CGFloat tableY = topOffset + 60;
-    CGFloat tableX = searchBarX;
-    CGFloat tableWidth = self.view.frame.size.width - searchBarX - 10;
-    self.tableView = [[UITableView alloc] initWithFrame:CGRectMake(tableX, tableY, tableWidth, self.view.frame.size.height - tableY) style:UITableViewStylePlain];
+    CGFloat tableTop = topOffset + 48;
+    self.tableView = [[UITableView alloc] initWithFrame:
+        CGRectMake(listLeft, tableTop, listW, bottomAreaTop - tableTop - 4)
+        style:UITableViewStylePlain];
     self.tableView.delegate = self;
     self.tableView.dataSource = self;
-    self.tableView.tableHeaderView = [[UIView alloc] initWithFrame:CGRectMake(0, 100, tableWidth, self.view.frame.size.height)];
+    self.tableView.tableHeaderView = [[UIView alloc] initWithFrame:CGRectMake(0, 100, listW, screenHeight)];
     self.tableView.tableFooterView = [UIView new];
     self.tableView.backgroundColor = [UIColor clearColor];
-    self.tableView.rowHeight = 60;
+    self.tableView.rowHeight = 56;
     self.tableView.keyboardDismissMode = UIScrollViewKeyboardDismissModeOnDrag;
     [self.view addSubview:self.tableView];
+
+    // ══════════════════════════════════════════
+    // 底部播放控制区
+    // ══════════════════════════════════════════
+    // 背景毛玻璃条
+    UIView *playBar = [[UIView alloc] initWithFrame:CGRectMake(0, bottomAreaTop, screenWidth, playAreaHeight + safeBottom)];
+    playBar.backgroundColor = [UIColor colorWithWhite:0.0 alpha:0.55];
+    // 上边框线
+    CALayer *topLine = [CALayer layer];
+    topLine.frame = CGRectMake(0, 0, screenWidth, 0.5);
+    topLine.backgroundColor = [UIColor colorWithWhite:1.0 alpha:0.12].CGColor;
+    [playBar.layer addSublayer:topLine];
+    [self.view addSubview:playBar];
+    self.playControlBarView = playBar;
+
+    // 三个播放按钮居中
+    CGFloat prevW = 52, playW = 64, nextW = 52;
+    CGFloat playH = 52;
+    CGFloat gap = 20;
+    CGFloat totalW = prevW + playW + nextW + gap * 2;
+    CGFloat startX = (screenWidth - totalW) / 2;
+    CGFloat btnCenterY = playAreaHeight / 2 - 4; // 在 playBar 内部的 Y
+
+    // 上一首
+    self.previousButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    if (@available(iOS 13.0, *)) {
+        UIImageSymbolConfiguration *cfg = [UIImageSymbolConfiguration configurationWithPointSize:22 weight:UIImageSymbolWeightMedium];
+        [self.previousButton setImage:[UIImage systemImageNamed:@"backward.end.fill" withConfiguration:cfg] forState:UIControlStateNormal];
+    }
+    [self.previousButton setTitle:@"" forState:UIControlStateNormal];
+    self.previousButton.tintColor = [UIColor colorWithWhite:0.9 alpha:1.0];
+    self.previousButton.backgroundColor = [UIColor colorWithWhite:1.0 alpha:0.08];
+    self.previousButton.layer.cornerRadius = prevW / 2;
+    self.previousButton.frame = CGRectMake(startX, btnCenterY - playH / 2, prevW, playH);
+    [self.previousButton addTarget:self action:@selector(previousButtonTapped:) forControlEvents:UIControlEventTouchUpInside];
+    [playBar addSubview:self.previousButton];
+
+    // 播放/暂停（更大更突出）
+    self.playPauseButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    if (@available(iOS 13.0, *)) {
+        UIImageSymbolConfiguration *cfg = [UIImageSymbolConfiguration configurationWithPointSize:28 weight:UIImageSymbolWeightBold];
+        [self.playPauseButton setImage:[UIImage systemImageNamed:@"play.fill" withConfiguration:cfg] forState:UIControlStateNormal];
+    }
+    [self.playPauseButton setTitle:@"" forState:UIControlStateNormal];
+    self.playPauseButton.tintColor = [UIColor whiteColor];
+    self.playPauseButton.backgroundColor = [UIColor colorWithRed:0.15 green:0.6 blue:0.3 alpha:0.9];
+    self.playPauseButton.layer.cornerRadius = playW / 2;
+    self.playPauseButton.layer.borderWidth = 1.5;
+    self.playPauseButton.layer.borderColor = [UIColor colorWithRed:0.3 green:0.85 blue:0.5 alpha:0.6].CGColor;
+    self.playPauseButton.frame = CGRectMake(startX + prevW + gap, btnCenterY - playW / 2, playW, playW);
+    [self.playPauseButton addTarget:self action:@selector(playPauseButtonTapped:) forControlEvents:UIControlEventTouchUpInside];
+    [playBar addSubview:self.playPauseButton];
+
+    // 下一首
+    self.nextButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    if (@available(iOS 13.0, *)) {
+        UIImageSymbolConfiguration *cfg = [UIImageSymbolConfiguration configurationWithPointSize:22 weight:UIImageSymbolWeightMedium];
+        [self.nextButton setImage:[UIImage systemImageNamed:@"forward.end.fill" withConfiguration:cfg] forState:UIControlStateNormal];
+    }
+    [self.nextButton setTitle:@"" forState:UIControlStateNormal];
+    self.nextButton.tintColor = [UIColor colorWithWhite:0.9 alpha:1.0];
+    self.nextButton.backgroundColor = [UIColor colorWithWhite:1.0 alpha:0.08];
+    self.nextButton.layer.cornerRadius = nextW / 2;
+    self.nextButton.frame = CGRectMake(startX + prevW + gap + playW + gap, btnCenterY - playH / 2, nextW, playH);
+    [self.nextButton addTarget:self action:@selector(nextButtonTapped:) forControlEvents:UIControlEventTouchUpInside];
+    [playBar addSubview:self.nextButton];
 
     [self bringControlButtonsToFront];
 }
@@ -1062,11 +974,11 @@
     BOOL isEnabled = self.visualEffectManager.aiAutoModeEnabled;
 
     if (isEnabled) {
-        [self.aiModeButton setTitle:@"🤖 AI" forState:UIControlStateNormal];
+        [self.aiModeButton setTitle:@"AI" forState:UIControlStateNormal];
         self.aiModeButton.backgroundColor = [UIColor colorWithRed:0.6 green:0.2 blue:0.8 alpha:0.9];
         self.aiModeButton.layer.borderColor = [UIColor colorWithRed:0.8 green:0.4 blue:1.0 alpha:1.0].CGColor;
     } else {
-        [self.aiModeButton setTitle:@"🔇 AI" forState:UIControlStateNormal];
+        [self.aiModeButton setTitle:@"AI" forState:UIControlStateNormal];
         self.aiModeButton.backgroundColor = [UIColor colorWithRed:0.3 green:0.3 blue:0.3 alpha:0.9];
         self.aiModeButton.layer.borderColor = [UIColor grayColor].CGColor;
     }
@@ -1107,17 +1019,24 @@
 #pragma mark - FPS
 
 - (void)setupFPSMonitor {
-    self.fpsLabel = [[UILabel alloc] initWithFrame:CGRectMake(self.view.bounds.size.width - 100, 40, 90, 70)];
-    self.fpsLabel.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.7];
-    self.fpsLabel.textColor = [UIColor greenColor];
-    self.fpsLabel.font = [UIFont monospacedDigitSystemFontOfSize:13 weight:UIFontWeightBold];
+    // 小型 FPS 指示器放在左上角 toggle 按钮右侧
+    CGFloat safeTop = 0;
+    if (@available(iOS 11.0, *)) {
+        safeTop = self.view.safeAreaInsets.top;
+    }
+    CGFloat fpsTop = MAX(safeTop, 44.0) + 12;
+
+    self.fpsLabel = [[UILabel alloc] initWithFrame:CGRectMake(54, fpsTop, 70, 26)];
+    self.fpsLabel.backgroundColor = [UIColor colorWithWhite:0.0 alpha:0.55];
+    self.fpsLabel.textColor = [UIColor colorWithRed:0.2 green:1.0 blue:0.4 alpha:1.0];
+    self.fpsLabel.font = [UIFont monospacedDigitSystemFontOfSize:11 weight:UIFontWeightMedium];
     self.fpsLabel.textAlignment = NSTextAlignmentCenter;
-    self.fpsLabel.numberOfLines = 4;
-    self.fpsLabel.layer.cornerRadius = 8;
+    self.fpsLabel.numberOfLines = 1;
+    self.fpsLabel.layer.cornerRadius = 6;
     self.fpsLabel.layer.masksToBounds = YES;
-    self.fpsLabel.layer.borderWidth = 1;
-    self.fpsLabel.layer.borderColor = [UIColor greenColor].CGColor;
-    self.fpsLabel.text = @"FPS: --\n目标: --\nMetal: --\n负载: --";
+    self.fpsLabel.layer.borderWidth = 0.5;
+    self.fpsLabel.layer.borderColor = [UIColor colorWithRed:0.2 green:1.0 blue:0.4 alpha:0.4].CGColor;
+    self.fpsLabel.text = @"-- FPS";
     [self.view addSubview:self.fpsLabel];
     [self.view bringSubviewToFront:self.fpsLabel];
 
@@ -1142,33 +1061,22 @@
     CGFloat displayFPS = isPaused ? 0 : targetFPS;
 
     UIColor *fpsColor = nil;
-    NSString *statusEmoji = nil;
     if (displayFPS >= 55) {
         fpsColor = [UIColor colorWithRed:0.0 green:1.0 blue:0.3 alpha:1.0];
-        statusEmoji = @"🟢";
     } else if (displayFPS >= 25) {
         fpsColor = [UIColor colorWithRed:1.0 green:0.8 blue:0.0 alpha:1.0];
-        statusEmoji = @"🟡";
     } else if (displayFPS > 0) {
         fpsColor = [UIColor colorWithRed:1.0 green:0.2 blue:0.2 alpha:1.0];
-        statusEmoji = @"🔴";
     } else {
         fpsColor = [UIColor grayColor];
-        statusEmoji = @"⚫️";
     }
 
     self.fpsLabel.textColor = fpsColor;
     self.fpsLabel.layer.borderColor = fpsColor.CGColor;
 
-    NSString *statusText = isPaused ? @"⏸暂停" : @"▶️运行";
-    NSString *loadText = isPaused ? @"0%" : @"100%";
-
-    self.fpsLabel.text = [NSString stringWithFormat:@"%@ %.0f FPS\n目标: %ld\n%@\n负载: %@",
-                          statusEmoji,
+    self.fpsLabel.text = [NSString stringWithFormat:@"%.0f/%ld FPS",
                           displayFPS,
-                          (long)targetFPS,
-                          statusText,
-                          loadText];
+                          (long)targetFPS];
 }
 
 #pragma mark - Agent Panel
@@ -1180,19 +1088,26 @@
     }
     CGFloat topOffset = MAX(safeTop, 44) + 10;
 
+    // agentStatusButton 放在右侧竖排（混音控件 mixAudioControlView 下方）
+    CGFloat btnSize = 44;
+    CGFloat btnSpacing = 10;
+    CGFloat rightX = self.view.bounds.size.width - btnSize - 12;
+    CGFloat rightY = topOffset + (btnSize + btnSpacing) * 7;
+
     self.agentStatusButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    [self.agentStatusButton setTitle:@"🧠" forState:UIControlStateNormal];
-    [self.agentStatusButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-    self.agentStatusButton.titleLabel.font = [UIFont boldSystemFontOfSize:24];
-    self.agentStatusButton.backgroundColor = [UIColor colorWithRed:0.3 green:0.2 blue:0.5 alpha:0.9];
-    self.agentStatusButton.layer.cornerRadius = 25;
-    self.agentStatusButton.layer.borderWidth = 2.0;
-    self.agentStatusButton.layer.borderColor = [UIColor colorWithRed:0.6 green:0.4 blue:0.9 alpha:1.0].CGColor;
-    self.agentStatusButton.frame = CGRectMake(self.view.bounds.size.width - 60, topOffset + 80, 50, 50);
-    self.agentStatusButton.layer.shadowColor = [UIColor purpleColor].CGColor;
-    self.agentStatusButton.layer.shadowOffset = CGSizeMake(0, 2);
-    self.agentStatusButton.layer.shadowOpacity = 0.8;
-    self.agentStatusButton.layer.shadowRadius = 4;
+    UIImage *agentIcon = nil;
+    if (@available(iOS 13.0, *)) {
+        UIImageSymbolConfiguration *cfg = [UIImageSymbolConfiguration configurationWithPointSize:18 weight:UIImageSymbolWeightMedium];
+        agentIcon = [UIImage systemImageNamed:@"brain.head.profile.fill" withConfiguration:cfg];
+    }
+    [self.agentStatusButton setImage:agentIcon forState:UIControlStateNormal];
+    [self.agentStatusButton setTitle:@"" forState:UIControlStateNormal];
+    self.agentStatusButton.tintColor = [UIColor whiteColor];
+    self.agentStatusButton.backgroundColor = [UIColor colorWithRed:0.22 green:0.12 blue:0.38 alpha:0.85];
+    self.agentStatusButton.layer.cornerRadius = btnSize / 2;
+    self.agentStatusButton.layer.borderWidth = 1.0;
+    self.agentStatusButton.layer.borderColor = [UIColor colorWithRed:0.6 green:0.4 blue:0.9 alpha:0.5].CGColor;
+    self.agentStatusButton.frame = CGRectMake(rightX, rightY, btnSize, btnSize);
     [self.agentStatusButton addTarget:self action:@selector(agentStatusButtonTapped:) forControlEvents:UIControlEventTouchUpInside];
     [self.view addSubview:self.agentStatusButton];
     [self.controlButtons addObject:self.agentStatusButton];
@@ -1215,7 +1130,7 @@
     [self.view addSubview:self.agentStatusPanel];
 
     UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(20, 15, panelWidth - 40, 30)];
-    titleLabel.text = @"🧠 Agent 状态面板";
+    titleLabel.text = @"Agent 状态面板";
     titleLabel.font = [UIFont boldSystemFontOfSize:18];
     titleLabel.textColor = [UIColor whiteColor];
     titleLabel.textAlignment = NSTextAlignmentCenter;
@@ -1223,14 +1138,19 @@
 
     UIButton *closeButton = [UIButton buttonWithType:UIButtonTypeSystem];
     closeButton.frame = CGRectMake(panelWidth - 40, 10, 30, 30);
-    [closeButton setTitle:@"✕" forState:UIControlStateNormal];
-    [closeButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+    UIImage *closeIcon = nil;
+    if (@available(iOS 13.0, *)) {
+        closeIcon = [UIImage systemImageNamed:@"xmark"];
+    }
+    [closeButton setImage:closeIcon forState:UIControlStateNormal];
+    [closeButton setTitle:@"" forState:UIControlStateNormal];
+    closeButton.tintColor = [UIColor whiteColor];
     closeButton.titleLabel.font = [UIFont systemFontOfSize:20];
     [closeButton addTarget:self action:@selector(closeAgentStatusPanel) forControlEvents:UIControlEventTouchUpInside];
     [self.agentStatusPanel addSubview:closeButton];
 
     UILabel *metricsTitle = [[UILabel alloc] initWithFrame:CGRectMake(20, 50, panelWidth - 40, 20)];
-    metricsTitle.text = @"📊 运行指标";
+    metricsTitle.text = @"运行指标";
     metricsTitle.font = [UIFont boldSystemFontOfSize:14];
     metricsTitle.textColor = [UIColor cyanColor];
     [self.agentStatusPanel addSubview:metricsTitle];
@@ -1243,7 +1163,7 @@
     [self.agentStatusPanel addSubview:self.agentMetricsLabel];
 
     UILabel *recTitle = [[UILabel alloc] initWithFrame:CGRectMake(20, 160, panelWidth - 40, 20)];
-    recTitle.text = @"💡 策略建议";
+    recTitle.text = @"策略建议";
     recTitle.font = [UIFont boldSystemFontOfSize:14];
     recTitle.textColor = [UIColor yellowColor];
     [self.agentStatusPanel addSubview:recTitle];
@@ -1256,7 +1176,7 @@
     [self.agentStatusPanel addSubview:self.agentRecommendationsLabel];
 
     UILabel *costTitle = [[UILabel alloc] initWithFrame:CGRectMake(20, 270, panelWidth - 40, 20)];
-    costTitle.text = @"💰 成本控制";
+    costTitle.text = @"成本控制";
     costTitle.font = [UIFont boldSystemFontOfSize:14];
     costTitle.textColor = [UIColor greenColor];
     [self.agentStatusPanel addSubview:costTitle];
@@ -1270,7 +1190,7 @@
 
     UIButton *reflectButton = [UIButton buttonWithType:UIButtonTypeSystem];
     reflectButton.frame = CGRectMake(20, 345, (panelWidth - 50) / 2, 40);
-    [reflectButton setTitle:@"🔄 执行反思" forState:UIControlStateNormal];
+    [reflectButton setTitle:@"执行反思" forState:UIControlStateNormal];
     [reflectButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
     reflectButton.backgroundColor = [UIColor colorWithRed:0.3 green:0.5 blue:0.8 alpha:1.0];
     reflectButton.layer.cornerRadius = 8;
@@ -1280,7 +1200,7 @@
 
     UIButton *reportButton = [UIButton buttonWithType:UIButtonTypeSystem];
     reportButton.frame = CGRectMake(panelWidth / 2 + 5, 345, (panelWidth - 50) / 2, 40);
-    [reportButton setTitle:@"📋 导出报告" forState:UIControlStateNormal];
+    [reportButton setTitle:@"导出报告" forState:UIControlStateNormal];
     [reportButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
     reportButton.backgroundColor = [UIColor colorWithRed:0.5 green:0.3 blue:0.6 alpha:1.0];
     reportButton.layer.cornerRadius = 8;
@@ -1348,7 +1268,7 @@
     NSString *costText = [NSString stringWithFormat:@"今日 LLM 调用: %ld / %ld\n状态: %@",
                           (long)todayCalls,
                           (long)budget,
-                          exceeded ? @"🔴 已超预算（强制本地）" : @"🟢 正常"];
+                          exceeded ? @"已超预算（强制本地）" : @"正常"];
     self.agentCostLabel.text = costText;
     self.agentCostLabel.textColor = exceeded ? [UIColor redColor] : [UIColor greenColor];
 }
@@ -1357,7 +1277,7 @@
     NSLog(@"🔄 手动触发 Agent 反思...");
     [[EffectDecisionAgent sharedAgent] performReflectionAndUpdate];
 
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"🔍 反思完成"
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"反思完成"
                                                                    message:@"Agent 已完成决策复盘，策略已更新。"
                                                             preferredStyle:UIAlertControllerStyleAlert];
     [alert addAction:[UIAlertAction actionWithTitle:@"确定" style:UIAlertActionStyleDefault handler:nil]];
@@ -1371,7 +1291,7 @@
     NSString *metricsReport = [[AgentMetricsCollector sharedCollector] generateSummaryReport];
     NSString *fullReport = [NSString stringWithFormat:@"%@\n\n%@", metricsReport, reflectionReport];
 
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"📋 Agent 分析报告"
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Agent 分析报告"
                                                                    message:fullReport
                                                             preferredStyle:UIAlertControllerStyleAlert];
     [alert addAction:[UIAlertAction actionWithTitle:@"复制" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {

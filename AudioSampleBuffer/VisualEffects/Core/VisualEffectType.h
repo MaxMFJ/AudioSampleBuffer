@@ -34,6 +34,7 @@ typedef NS_ENUM(NSUInteger, VisualEffectType) {
     VisualEffectTypeLiquidMetal,            // 液态金属
     VisualEffectTypeGeometricMorph,         // 几何变形
     VisualEffectTypeFractalPattern,         // 分形图案
+    VisualEffectTypeChromaticCaustics,      // 光绘焦散
     
     // 实验性效果
     VisualEffectTypeAuroraRipples,          // 极光波纹
@@ -43,7 +44,8 @@ typedef NS_ENUM(NSUInteger, VisualEffectType) {
     VisualEffectTypeTyndallBeam,            // 丁达尔效应/舞台灯光
     VisualEffectTypeNeuralResonance,        // 神经共振 - 仿神经网络拓扑脉冲
     VisualEffectTypeWormholeDrive,          // 虫洞穿梭 - 星尘柱状脉冲向屏幕袭来
-    
+    VisualEffectTypePrismResonance,         // 棱镜共振 - 清晰几何频段分层
+
     // 数量
     VisualEffectTypeCount
 };

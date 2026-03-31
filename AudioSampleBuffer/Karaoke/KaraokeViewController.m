@@ -217,7 +217,7 @@ static void CheckError(OSStatus error, const char *operation) {
     self.navigationItem.leftBarButtonItem = backButton;
     
     // 添加录音列表按钮
-    UIBarButtonItem *listButton = [[UIBarButtonItem alloc] initWithTitle:@"📝 录音列表" 
+    UIBarButtonItem *listButton = [[UIBarButtonItem alloc] initWithTitle:@"录音列表" 
                                                                    style:UIBarButtonItemStylePlain 
                                                                   target:self 
                                                                   action:@selector(showRecordingList)];
@@ -295,7 +295,7 @@ static void CheckError(OSStatus error, const char *operation) {
     
     // 暂停/恢复按钮
     self.pauseButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    [self.pauseButton setTitle:@"⏸️ 暂停" forState:UIControlStateNormal];
+    [self.pauseButton setTitle:@"暂停" forState:UIControlStateNormal];
     [self.pauseButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
     self.pauseButton.backgroundColor = [UIColor colorWithRed:1.0 green:0.6 blue:0.0 alpha:0.8];
     self.pauseButton.layer.cornerRadius = 8;
@@ -307,7 +307,7 @@ static void CheckError(OSStatus error, const char *operation) {
     
     // 完成录音按钮
     self.finishButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    [self.finishButton setTitle:@"✅ 完成" forState:UIControlStateNormal];
+    [self.finishButton setTitle:@"完成" forState:UIControlStateNormal];
     [self.finishButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
     self.finishButton.backgroundColor = [UIColor colorWithRed:0.0 green:0.8 blue:0.4 alpha:0.8];
     self.finishButton.layer.cornerRadius = 8;
@@ -319,7 +319,7 @@ static void CheckError(OSStatus error, const char *operation) {
     
     // 回退按钮
     self.rewindButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    [self.rewindButton setTitle:@"⏪ 回退10秒" forState:UIControlStateNormal];
+    [self.rewindButton setTitle:@"回退10秒" forState:UIControlStateNormal];
     [self.rewindButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
     self.rewindButton.backgroundColor = [UIColor colorWithRed:0.8 green:0.3 blue:0.3 alpha:0.8];
     self.rewindButton.layer.cornerRadius = 8;
@@ -374,7 +374,7 @@ static void CheckError(OSStatus error, const char *operation) {
     
     // 耳返开关
     self.earReturnLabel = [[UILabel alloc] init];
-    self.earReturnLabel.text = @"🎧 耳返";
+    self.earReturnLabel.text = @"耳返";
     self.earReturnLabel.textColor = [UIColor whiteColor];
     self.earReturnLabel.font = [UIFont systemFontOfSize:16];
     self.earReturnLabel.frame = CGRectMake(20, startY, 80, 30);
@@ -422,7 +422,7 @@ static void CheckError(OSStatus error, const char *operation) {
     
     // BGM音量滑块
     self.bgmVolumeLabel = [[UILabel alloc] init];
-    self.bgmVolumeLabel.text = @"🎵 BGM音量";
+    self.bgmVolumeLabel.text = @"BGM音量";
     self.bgmVolumeLabel.textColor = [UIColor whiteColor];
     self.bgmVolumeLabel.font = [UIFont systemFontOfSize:14];
     self.bgmVolumeLabel.frame = CGRectMake(20, startY + spacing * 3, 100, 20);
@@ -439,7 +439,7 @@ static void CheckError(OSStatus error, const char *operation) {
     
     // 🆕 BGM音高调整控件
     self.bgmPitchLabel = [[UILabel alloc] init];
-    self.bgmPitchLabel.text = @"🎵 BGM音高: 0";
+    self.bgmPitchLabel.text = @"BGM音高: 0";
     self.bgmPitchLabel.textColor = [UIColor whiteColor];
     self.bgmPitchLabel.font = [UIFont systemFontOfSize:14];
     self.bgmPitchLabel.frame = CGRectMake(20, startY + spacing * 4, 100, 20);
@@ -457,7 +457,7 @@ static void CheckError(OSStatus error, const char *operation) {
     
     // 🆕 智能降噪开关（放在 BGM 音高下方）
     UILabel *noiseReductionLabel = [[UILabel alloc] init];
-    noiseReductionLabel.text = @"🔇 智能降噪";
+    noiseReductionLabel.text = @"智能降噪";
     noiseReductionLabel.textColor = [UIColor whiteColor];
     noiseReductionLabel.font = [UIFont systemFontOfSize:14];
     noiseReductionLabel.frame = CGRectMake(20, startY + spacing * 5, 100, 20);
@@ -502,7 +502,7 @@ static void CheckError(OSStatus error, const char *operation) {
     CGFloat buttonY = 100;
     
     self.voiceEffectButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    [self.voiceEffectButton setTitle:@"🎤 音效：原声" forState:UIControlStateNormal];
+    [self.voiceEffectButton setTitle:@"音效：原声" forState:UIControlStateNormal];
     [self.voiceEffectButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
     self.voiceEffectButton.backgroundColor = [UIColor colorWithRed:0.2 green:0.4 blue:0.8 alpha:0.8];
     self.voiceEffectButton.layer.cornerRadius = 22;
@@ -517,7 +517,7 @@ static void CheckError(OSStatus error, const char *operation) {
     CGFloat agcButtonY = buttonY + buttonHeight + 10;
     
     self.agcButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    [self.agcButton setTitle:@"🎚️ AGC：关" forState:UIControlStateNormal];
+    [self.agcButton setTitle:@"AGC：关" forState:UIControlStateNormal];
     [self.agcButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
     self.agcButton.backgroundColor = [UIColor colorWithRed:0.5 green:0.3 blue:0.7 alpha:0.8];
     self.agcButton.layer.cornerRadius = 22;
@@ -542,7 +542,7 @@ static void CheckError(OSStatus error, const char *operation) {
     CGFloat buttonY = 100;
     
     self.segmentSelectorButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    [self.segmentSelectorButton setTitle:@"📍 选片段" forState:UIControlStateNormal];
+    [self.segmentSelectorButton setTitle:@"选片段" forState:UIControlStateNormal];
     [self.segmentSelectorButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
     self.segmentSelectorButton.backgroundColor = [UIColor colorWithRed:1.0 green:0.6 blue:0.0 alpha:0.8];
     self.segmentSelectorButton.layer.cornerRadius = 22;
@@ -598,7 +598,7 @@ static void CheckError(OSStatus error, const char *operation) {
     [self.recordingConfig setSegmentModeWithStart:startTime end:endTime];
     
     // 更新按钮显示
-    [self.segmentSelectorButton setTitle:@"🔄 重置片段" forState:UIControlStateNormal];
+    [self.segmentSelectorButton setTitle:@"重置片段" forState:UIControlStateNormal];
     self.segmentSelectorButton.backgroundColor = [UIColor colorWithRed:0.0 green:0.8 blue:0.4 alpha:0.8];
     
     NSLog(@"✅ 已选择片段: %.2f ~ %.2f 秒", startTime, endTime);
@@ -612,7 +612,7 @@ static void CheckError(OSStatus error, const char *operation) {
     [self.recordingConfig resetToFullMode];
     
     // 恢复按钮显示
-    [self.segmentSelectorButton setTitle:@"📍 选片段" forState:UIControlStateNormal];
+    [self.segmentSelectorButton setTitle:@"选片段" forState:UIControlStateNormal];
     self.segmentSelectorButton.backgroundColor = [UIColor colorWithRed:1.0 green:0.6 blue:0.0 alpha:0.8];
     
     NSLog(@"✅ 已重置为全曲模式");
@@ -650,7 +650,7 @@ static void CheckError(OSStatus error, const char *operation) {
     
     // 标题
     UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 20, panelWidth, 30)];
-    titleLabel.text = @"🎤 选择音效";
+    titleLabel.text = @"选择音效";
     titleLabel.textColor = [UIColor whiteColor];
     titleLabel.font = [UIFont boldSystemFontOfSize:20];
     titleLabel.textAlignment = NSTextAlignmentCenter;
@@ -658,15 +658,15 @@ static void CheckError(OSStatus error, const char *operation) {
     
     // 音效列表
     NSArray *effects = @[
-        @[@(VoiceEffectTypeNone), @"原声", @"💬"],
-        @[@(VoiceEffectTypeStudio), @"录音棚", @"🎙️"],
-        @[@(VoiceEffectTypeConcertHall), @"音乐厅", @"🎭"],
-        @[@(VoiceEffectTypeSuperReverb), @"超级混响", @"🌊"],
-        @[@(VoiceEffectTypeSinger), @"唱将", @"🎵"],
-        @[@(VoiceEffectTypeGodOfSong), @"歌神", @"👑"],
-        @[@(VoiceEffectTypeEthereal), @"空灵", @"✨"],
-        @[@(VoiceEffectTypeMagnetic), @"磁性", @"🔥"],
-        @[@(VoiceEffectTypeBright), @"明亮", @"💎"],
+        @[@(VoiceEffectTypeNone), @"原声", @"message.fill"],
+        @[@(VoiceEffectTypeStudio), @"录音棚", @"mic.fill"],
+        @[@(VoiceEffectTypeConcertHall), @"音乐厅", @"theatermasks.fill"],
+        @[@(VoiceEffectTypeSuperReverb), @"超级混响", @"waveform"],
+        @[@(VoiceEffectTypeSinger), @"唱将", @"music.note"],
+        @[@(VoiceEffectTypeGodOfSong), @"歌神", @"crown.fill"],
+        @[@(VoiceEffectTypeEthereal), @"空灵", @"sparkles"],
+        @[@(VoiceEffectTypeMagnetic), @"磁性", @"flame.fill"],
+        @[@(VoiceEffectTypeBright), @"明亮", @"diamond.fill"],
     ];
     
     CGFloat buttonStartY = 70;
@@ -677,14 +677,19 @@ static void CheckError(OSStatus error, const char *operation) {
         NSArray *effect = effects[i];
         VoiceEffectType effectType = [effect[0] integerValue];
         NSString *name = effect[1];
-        NSString *emoji = effect[2];
+        NSString *iconName = effect[2];
         
         UIButton *button = [UIButton buttonWithType:UIButtonTypeSystem];
         button.tag = effectType;
         button.frame = CGRectMake(20, buttonStartY + i * buttonSpacing, panelWidth - 40, buttonHeight);
         
-        NSString *buttonTitle = [NSString stringWithFormat:@"%@ %@", emoji, name];
-        [button setTitle:buttonTitle forState:UIControlStateNormal];
+        if (@available(iOS 13.0, *)) {
+            UIImage *iconImage = [UIImage systemImageNamed:iconName];
+            [button setImage:iconImage forState:UIControlStateNormal];
+            button.tintColor = [UIColor whiteColor];
+            button.imageView.contentMode = UIViewContentModeScaleAspectFit;
+        }
+        [button setTitle:name forState:UIControlStateNormal];
         [button setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
         button.backgroundColor = [UIColor colorWithRed:0.25 green:0.45 blue:0.85 alpha:0.6];
         button.layer.cornerRadius = 8;
@@ -762,7 +767,7 @@ static void CheckError(OSStatus error, const char *operation) {
     
     // 标题
     UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 25, panelWidth, 35)];
-    titleLabel.text = @"🎚️ 自动增益控制 (AGC)";
+    titleLabel.text = @"自动增益控制 (AGC)";
     titleLabel.textColor = [UIColor whiteColor];
     titleLabel.font = [UIFont boldSystemFontOfSize:22];
     titleLabel.textAlignment = NSTextAlignmentCenter;
@@ -984,7 +989,7 @@ static void CheckError(OSStatus error, const char *operation) {
 
 - (void)updateAGCButtonTitle {
     BOOL enabled = self.karaokeAudioEngine.voiceEffectProcessor.enableAGC;
-    NSString *title = enabled ? @"🎚️ AGC：开" : @"🎚️ AGC：关";
+    NSString *title = enabled ? @"AGC：开" : @"AGC：关";
     [self.agcButton setTitle:title forState:UIControlStateNormal];
     
     // 改变按钮颜色以反映状态
@@ -1050,7 +1055,7 @@ static void CheckError(OSStatus error, const char *operation) {
     
     // 更新按钮标题
     NSString *effectName = [VoiceEffectProcessor nameForEffectType:effectType];
-    [self.voiceEffectButton setTitle:[NSString stringWithFormat:@"🎤 音效：%@", effectName] forState:UIControlStateNormal];
+    [self.voiceEffectButton setTitle:[NSString stringWithFormat:@"音效：%@", effectName] forState:UIControlStateNormal];
     
     NSLog(@"🎵 选择音效: %@", effectName);
     
@@ -1621,7 +1626,7 @@ static void CheckError(OSStatus error, const char *operation) {
     
     // 标题
     UILabel *titleLabel = [[UILabel alloc] init];
-    titleLabel.text = @"🎬 预览模式 - 可调整参数后试听";
+    titleLabel.text = @"预览模式 - 可调整参数后试听";
     titleLabel.textColor = [UIColor colorWithRed:0.0 green:0.8 blue:1.0 alpha:1.0];
     titleLabel.font = [UIFont boldSystemFontOfSize:16];
     titleLabel.textAlignment = NSTextAlignmentCenter;
@@ -1650,7 +1655,7 @@ static void CheckError(OSStatus error, const char *operation) {
     
     // 🆕 提示文字
     UILabel *hintLabel = [[UILabel alloc] init];
-    hintLabel.text = @"⬇️ 下方可调整BGM/麦克风/音效参数";
+    hintLabel.text = @"下方可调整BGM/麦克风/音效参数";
     hintLabel.textColor = [UIColor colorWithRed:1.0 green:0.8 blue:0.0 alpha:1.0];
     hintLabel.font = [UIFont systemFontOfSize:11];
     hintLabel.textAlignment = NSTextAlignmentCenter;
@@ -1664,7 +1669,7 @@ static void CheckError(OSStatus error, const char *operation) {
     
     // 试听按钮
     self.previewButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    [self.previewButton setTitle:@"🎧 试听" forState:UIControlStateNormal];
+    [self.previewButton setTitle:@"试听" forState:UIControlStateNormal];
     [self.previewButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
     self.previewButton.backgroundColor = [UIColor colorWithRed:0.0 green:0.6 blue:1.0 alpha:1.0];
     self.previewButton.layer.cornerRadius = 8;
@@ -1675,7 +1680,7 @@ static void CheckError(OSStatus error, const char *operation) {
     
     // 重新录制按钮
     UIButton *reRecordButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    [reRecordButton setTitle:@"🔄 重录" forState:UIControlStateNormal];
+    [reRecordButton setTitle:@"重录" forState:UIControlStateNormal];
     [reRecordButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
     reRecordButton.backgroundColor = [UIColor colorWithRed:1.0 green:0.6 blue:0.0 alpha:1.0];
     reRecordButton.layer.cornerRadius = 8;
@@ -1686,7 +1691,7 @@ static void CheckError(OSStatus error, const char *operation) {
     
     // 保存按钮
     self.saveButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    [self.saveButton setTitle:@"✅ 保存" forState:UIControlStateNormal];
+    [self.saveButton setTitle:@"保存" forState:UIControlStateNormal];
     [self.saveButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
     self.saveButton.backgroundColor = [UIColor colorWithRed:0.0 green:0.8 blue:0.4 alpha:1.0];
     self.saveButton.layer.cornerRadius = 8;
@@ -1703,7 +1708,7 @@ static void CheckError(OSStatus error, const char *operation) {
     if ([self.karaokeAudioEngine isPlayingPreview]) {
         // 正在播放，停止
         [self.karaokeAudioEngine stopPreview];
-        [self.previewButton setTitle:@"🎧 试听" forState:UIControlStateNormal];
+        [self.previewButton setTitle:@"试听" forState:UIControlStateNormal];
         
         // 🆕 停止UI更新定时器
         [self stopPreviewUpdateTimer];
@@ -1712,7 +1717,7 @@ static void CheckError(OSStatus error, const char *operation) {
     } else {
         // 🆕 使用当前参数重新生成预览
         NSLog(@"🎧 开始播放预览（当前参数）");
-        [self.previewButton setTitle:@"⏸️ 停止" forState:UIControlStateNormal];
+        [self.previewButton setTitle:@"停止" forState:UIControlStateNormal];
         
         // 🆕 启动UI更新定时器
         [self startPreviewUpdateTimer];
@@ -1720,7 +1725,7 @@ static void CheckError(OSStatus error, const char *operation) {
         [self.karaokeAudioEngine playPreview:^(NSError *error) {
             dispatch_async(dispatch_get_main_queue(), ^{
                 // 播放完成或出错
-                [self.previewButton setTitle:@"🎧 试听" forState:UIControlStateNormal];
+                [self.previewButton setTitle:@"试听" forState:UIControlStateNormal];
                 
                 // 🆕 停止UI更新定时器
                 [self stopPreviewUpdateTimer];
@@ -1853,7 +1858,7 @@ static void CheckError(OSStatus error, const char *operation) {
     
     // 🆕 重置预览按钮状态
     if (self.previewButton) {
-        [self.previewButton setTitle:@"🎧 试听" forState:UIControlStateNormal];
+        [self.previewButton setTitle:@"试听" forState:UIControlStateNormal];
     }
     
     // 隐藏预览控制面板
@@ -1896,13 +1901,13 @@ static void CheckError(OSStatus error, const char *operation) {
         if (self.karaokeAudioEngine) {
             self.karaokeAudioEngine.bgmVolume = 0.3;
         }
-        self.bgmVolumeLabel.text = @"🎵 BGM音量: 30%";
+        self.bgmVolumeLabel.text = @"BGM音量: 30%";
     }
     
     // 4. 重置音效为原声
     if (self.karaokeAudioEngine.voiceEffectProcessor) {
         [self.karaokeAudioEngine.voiceEffectProcessor setPresetEffect:VoiceEffectTypeNone];
-        [self.voiceEffectButton setTitle:@"🎤 音效：原声" forState:UIControlStateNormal];
+        [self.voiceEffectButton setTitle:@"音效：原声" forState:UIControlStateNormal];
     }
     
     // 5. 关闭音效选择器（如果打开）
@@ -1934,7 +1939,7 @@ static void CheckError(OSStatus error, const char *operation) {
     
     // 🎯 重置片段选择配置
     [self.recordingConfig resetToFullMode];
-    [self.segmentSelectorButton setTitle:@"📍 选片段" forState:UIControlStateNormal];
+    [self.segmentSelectorButton setTitle:@"选片段" forState:UIControlStateNormal];
     self.segmentSelectorButton.backgroundColor = [UIColor colorWithRed:1.0 green:0.6 blue:0.0 alpha:0.8];
     
     // 3. 重置段落信息
@@ -2407,7 +2412,7 @@ static void CheckError(OSStatus error, const char *operation) {
         NSLog(@"✅ BGM音量已设置为: %.0f%%", sender.value * 100);
         
         // 更新标签
-        self.bgmVolumeLabel.text = [NSString stringWithFormat:@"🎵 BGM音量: %.0f%%", sender.value * 100];
+        self.bgmVolumeLabel.text = [NSString stringWithFormat:@"BGM音量: %.0f%%", sender.value * 100];
         
         // 🆕 如果在预览模式且正在播放，使用防抖延迟更新
         if (self.isInPreviewMode) {
@@ -2429,11 +2434,11 @@ static void CheckError(OSStatus error, const char *operation) {
         // 更新标签
         NSString *pitchText;
         if (pitchValue > 0) {
-            pitchText = [NSString stringWithFormat:@"🎵 BGM音高: +%.0f", pitchValue];
+            pitchText = [NSString stringWithFormat:@"BGM音高: +%.0f", pitchValue];
         } else if (pitchValue < 0) {
-            pitchText = [NSString stringWithFormat:@"🎵 BGM音高: %.0f", pitchValue];
+            pitchText = [NSString stringWithFormat:@"BGM音高: %.0f", pitchValue];
         } else {
-            pitchText = @"🎵 BGM音高: 0";
+            pitchText = @"BGM音高: 0";
         }
         self.bgmPitchLabel.text = pitchText;
         

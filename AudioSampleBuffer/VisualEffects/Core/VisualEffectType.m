@@ -145,6 +145,14 @@
                                             description:@"复杂的分形数学图案"
                                                category:EffectCategoryCreative
                                        performanceLevel:PerformanceLevelHigh]];
+
+    VisualEffectInfo *chromaticCaustics = [VisualEffectInfo effectWithType:VisualEffectTypeChromaticCaustics
+                                                                      name:@"光绘焦散"
+                                                               description:@"长曝光般的棱镜光带与水纹焦散交织，随节拍呼吸与绽放"
+                                                                  category:EffectCategoryCreative
+                                                          performanceLevel:PerformanceLevelHigh];
+    chromaticCaustics.requiresMetal = YES;
+    [effects addObject:chromaticCaustics];
     
     // 实验性效果
     [effects addObject:[VisualEffectInfo effectWithType:VisualEffectTypeAuroraRipples
@@ -188,6 +196,14 @@
                                             description:@"深空虫洞隧道中，星尘随音频自原点凝成光柱并向屏幕穿梭冲刺"
                                                category:EffectCategoryExperimental
                                        performanceLevel:PerformanceLevelHigh]];
+
+    VisualEffectInfo *prismResonance = [VisualEffectInfo effectWithType:VisualEffectTypePrismResonance
+                                                                   name:@"棱镜共振"
+                                                            description:@"梦幻漂浮的多层棱镜随频段闪烁、变圆或化作心形，带有远近层次与柔光氛围"
+                                                               category:EffectCategoryExperimental
+                                                       performanceLevel:PerformanceLevelMedium];
+    prismResonance.requiresMetal = YES;
+    [effects addObject:prismResonance];
     
     self.effects = [effects copy];
 }

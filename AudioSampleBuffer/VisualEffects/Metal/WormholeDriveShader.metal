@@ -75,7 +75,7 @@ fragment float4 wormholeDriveFragment(RasterizerData in [[stage_in]],
 
     int barCount = clamp((int)uniforms.galaxyParams1.x, 6, 10);
     int starLaneCount = clamp((int)uniforms.galaxyParams1.y, 10, 18);
-    float tunnelRadius = clamp(uniforms.galaxyParams1.z, 0.24, 0.44);
+    float tunnelRadius = clamp(uniforms.galaxyParams1.z, 0.30, 0.48);
     float flashIntensity = clamp(uniforms.galaxyParams1.w, 0.70, 1.60);
 
     float travelSpeed = clamp(uniforms.galaxyParams2.x, 0.55, 1.50);
@@ -83,7 +83,7 @@ fragment float4 wormholeDriveFragment(RasterizerData in [[stage_in]],
     float tunnelPulse = clamp(uniforms.galaxyParams2.z, 0.0, 1.0);
     float audioSensitivity = clamp(uniforms.galaxyParams2.w, 0.65, 1.80);
 
-    float aperture = clamp(uniforms.galaxyParams3.x, 0.07, 0.17);
+    float aperture = clamp(uniforms.galaxyParams3.x, 0.10, 0.20);
     float tunnelDensity = clamp(uniforms.galaxyParams3.y, 8.0, 22.0);
     float laneStretch = clamp(uniforms.galaxyParams3.z, 0.9, 2.2);
     float beatEnv = clamp(uniforms.galaxyParams3.w, 0.0, 1.3);

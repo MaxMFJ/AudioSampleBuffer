@@ -178,8 +178,11 @@
     NSLog(@"🎵 播放器已开始播放，更新系统媒体信息");
 
     dispatch_async(dispatch_get_main_queue(), ^{
-        [self.playPauseButton setTitle:@"⏸️" forState:UIControlStateNormal];
-        self.playPauseButton.backgroundColor = [UIColor colorWithRed:0.8 green:0.3 blue:0.2 alpha:0.85];
+        if (@available(iOS 13.0, *)) {
+            [self.playPauseButton setImage:[UIImage systemImageNamed:@"pause.fill"] forState:UIControlStateNormal];
+        }
+        [self.playPauseButton setTitle:@"" forState:UIControlStateNormal];
+        self.playPauseButton.backgroundColor = [UIColor colorWithRed:0.75 green:0.25 blue:0.15 alpha:0.9];
     });
 
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.3 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
@@ -231,8 +234,11 @@
         NSLog(@"▶️ 开始播放新曲目");
         if (self.displayedMusicItems.count > 0) {
             [self playCurrentTrack];
-            [self.playPauseButton setTitle:@"⏸️" forState:UIControlStateNormal];
-            self.playPauseButton.backgroundColor = [UIColor colorWithRed:0.8 green:0.3 blue:0.2 alpha:0.85];
+            if (@available(iOS 13.0, *)) {
+                [self.playPauseButton setImage:[UIImage systemImageNamed:@"pause.fill"] forState:UIControlStateNormal];
+            }
+            [self.playPauseButton setTitle:@"" forState:UIControlStateNormal];
+            self.playPauseButton.backgroundColor = [UIColor colorWithRed:0.75 green:0.25 blue:0.15 alpha:0.9];
         } else {
             NSLog(@"⚠️ 播放列表为空");
         }
@@ -244,12 +250,18 @@
 
     if (self.isSingleLoopMode) {
         NSLog(@"🔂 切换为单曲循环模式");
-        [self.loopButton setTitle:@"🔂" forState:UIControlStateNormal];
+        if (@available(iOS 13.0, *)) {
+            [self.loopButton setImage:[UIImage systemImageNamed:@"repeat.1"] forState:UIControlStateNormal];
+        }
+        [self.loopButton setTitle:@"" forState:UIControlStateNormal];
         self.loopButton.backgroundColor = [UIColor colorWithRed:0.8 green:0.2 blue:0.5 alpha:0.85];
         self.loopButton.layer.borderColor = [UIColor colorWithRed:0.9 green:0.3 blue:0.6 alpha:0.8].CGColor;
     } else {
         NSLog(@"🔁 切换为列表循环模式");
-        [self.loopButton setTitle:@"🔁" forState:UIControlStateNormal];
+        if (@available(iOS 13.0, *)) {
+            [self.loopButton setImage:[UIImage systemImageNamed:@"repeat"] forState:UIControlStateNormal];
+        }
+        [self.loopButton setTitle:@"" forState:UIControlStateNormal];
         self.loopButton.backgroundColor = [UIColor colorWithRed:0.6 green:0.4 blue:0.7 alpha:0.85];
         self.loopButton.layer.borderColor = [UIColor colorWithRed:0.7 green:0.5 blue:0.8 alpha:0.8].CGColor;
     }
@@ -549,8 +561,11 @@
     }
 
     dispatch_async(dispatch_get_main_queue(), ^{
-        [self.playPauseButton setTitle:@"▶️" forState:UIControlStateNormal];
-        self.playPauseButton.backgroundColor = [UIColor colorWithRed:0.2 green:0.7 blue:0.3 alpha:0.85];
+        if (@available(iOS 13.0, *)) {
+            [self.playPauseButton setImage:[UIImage systemImageNamed:@"play.fill"] forState:UIControlStateNormal];
+        }
+        [self.playPauseButton setTitle:@"" forState:UIControlStateNormal];
+        self.playPauseButton.backgroundColor = [UIColor colorWithRed:0.15 green:0.6 blue:0.3 alpha:0.9];
     });
 
     [self.player pauseEngine];
@@ -582,8 +597,11 @@
     }
 
     dispatch_async(dispatch_get_main_queue(), ^{
-        [self.playPauseButton setTitle:@"⏸️" forState:UIControlStateNormal];
-        self.playPauseButton.backgroundColor = [UIColor colorWithRed:0.8 green:0.3 blue:0.2 alpha:0.85];
+        if (@available(iOS 13.0, *)) {
+            [self.playPauseButton setImage:[UIImage systemImageNamed:@"pause.fill"] forState:UIControlStateNormal];
+        }
+        [self.playPauseButton setTitle:@"" forState:UIControlStateNormal];
+        self.playPauseButton.backgroundColor = [UIColor colorWithRed:0.75 green:0.25 blue:0.15 alpha:0.9];
     });
 
     NSMutableDictionary *nowPlayingInfo = [[MPNowPlayingInfoCenter defaultCenter].nowPlayingInfo mutableCopy];

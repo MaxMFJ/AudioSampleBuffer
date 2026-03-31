@@ -9,8 +9,8 @@
 #import <UIKit/UIKit.h>
 #import <MetalKit/MetalKit.h>
 #import "VisualEffectType.h"
-#import "MetalRenderer.h"
-#import "EffectSelectorView.h"
+#import "../Metal/MetalRenderer.h"
+#import "../UI/EffectSelectorView.h"
 
 NS_ASSUME_NONNULL_BEGIN
 

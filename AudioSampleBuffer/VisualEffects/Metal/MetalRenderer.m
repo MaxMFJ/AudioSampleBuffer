@@ -6,8 +6,8 @@
 //
 
 #import "MetalRenderer.h"
-#import "AIColorConfiguration.h"
-#import "MusicAIAnalyzer.h"
+#import "../../AI/AIColorConfiguration.h"
+#import "../../AI/MusicAIAnalyzer.h"
 #import <simd/simd.h>
 
 // 顶点结构体
@@ -63,7 +63,10 @@ typedef struct {
     vector_float4 aiColorPulseRing;           // 脉冲环颜色
 } UniformsAI;
 
-@interface BaseMetalRenderer ()
+@interface BaseMetalRenderer () {
+    float _smoothedAudioState[80];
+    float _previousAudioState[80];
+}
 @property (nonatomic, strong) id<MTLDevice> device;
 @property (nonatomic, strong) MTKView *metalView;
 @property (nonatomic, strong) id<MTLCommandQueue> commandQueue;
@@ -305,23 +308,31 @@ typedef struct {
     
     // 更新频谱数据 - 使用本地副本防止多线程问题
     NSArray<NSNumber *> *spectrumData = self.currentSpectrumData;
-    if (spectrumData && spectrumData.count > 0) {
-        NSUInteger count = MIN(spectrumData.count, 80);
-        for (NSUInteger i = 0; i < count; i++) {
+    for (NSUInteger i = 0; i < 80; i++) {
+        float rawValue = 0.0f;
+        if (spectrumData && i < spectrumData.count) {
             NSNumber *number = spectrumData[i];
-            // 防御性检查：确保数组元素不是nil
             if (number && [number isKindOfClass:[NSNumber class]]) {
                 float value = [number floatValue];
-                // 确保值是有效的（不是NaN或无穷大）
                 if (!isnan(value) && !isinf(value)) {
-                    uniforms->audioData[i] = (vector_float4){value, value * value, sqrt(fabs(value)), i / 80.0};
-                } else {
-                    uniforms->audioData[i] = (vector_float4){0.0, 0.0, 0.0, i / 80.0};
+                    rawValue = fmaxf(value, 0.0f);
                 }
-            } else {
-                uniforms->audioData[i] = (vector_float4){0.0, 0.0, 0.0, i / 80.0};
             }
         }
+
+        float previousSmoothed = _smoothedAudioState[i];
+        float smoothedValue = previousSmoothed + (rawValue - previousSmoothed) * 0.18f;
+        float transientValue = fmaxf(rawValue - previousSmoothed, 0.0f);
+
+        _smoothedAudioState[i] = smoothedValue;
+        _previousAudioState[i] = rawValue;
+
+        uniforms->audioData[i] = (vector_float4){
+            rawValue,
+            smoothedValue,
+            sqrtf(fabsf(rawValue)),
+            transientValue
+        };
     }
     
     // 更新星系参数（如果是星系渲染器）
@@ -365,6 +376,17 @@ typedef struct {
                                                                                           width:width
                                                                                          height:height
                                                                                       mipmapped:NO];
+    descriptor.usage = MTLTextureUsageShaderRead | MTLTextureUsageShaderWrite;
+    return [self.device newTextureWithDescriptor:descriptor];
+}
+
+- (id<MTLTexture>)createRenderTargetTextureWithWidth:(NSUInteger)width height:(NSUInteger)height {
+    MTLTextureDescriptor *descriptor = [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatBGRA8Unorm
+                                                                                          width:width
+                                                                                         height:height
+                                                                                      mipmapped:NO];
+    descriptor.storageMode = MTLStorageModePrivate;
+    descriptor.usage = MTLTextureUsageRenderTarget | MTLTextureUsageShaderRead;
     return [self.device newTextureWithDescriptor:descriptor];
 }
 
@@ -874,6 +896,68 @@ typedef struct {
     [encoder setFragmentBuffer:self.uniformBuffer offset:0 atIndex:0];
     
     // 绘制全屏四边形
+    [encoder drawPrimitives:MTLPrimitiveTypeTriangleStrip vertexStart:0 vertexCount:4];
+}
+
+@end
+
+@implementation ChromaticCausticsRenderer
+
+- (void)setupPipeline {
+    MTLRenderPipelineDescriptor *pipelineDescriptor = [[MTLRenderPipelineDescriptor alloc] init];
+    pipelineDescriptor.label = @"ChromaticCaustics";
+    pipelineDescriptor.vertexFunction = [self.defaultLibrary newFunctionWithName:@"neon_vertex"];
+    pipelineDescriptor.fragmentFunction = [self.defaultLibrary newFunctionWithName:@"chromaticCausticsFragment"];
+    pipelineDescriptor.colorAttachments[0].pixelFormat = self.metalView.colorPixelFormat;
+    pipelineDescriptor.sampleCount = self.metalView.sampleCount;
+    pipelineDescriptor.depthAttachmentPixelFormat = self.metalView.depthStencilPixelFormat;
+
+    pipelineDescriptor.colorAttachments[0].blendingEnabled = YES;
+    pipelineDescriptor.colorAttachments[0].rgbBlendOperation = MTLBlendOperationAdd;
+    pipelineDescriptor.colorAttachments[0].alphaBlendOperation = MTLBlendOperationAdd;
+    pipelineDescriptor.colorAttachments[0].sourceRGBBlendFactor = MTLBlendFactorSourceAlpha;
+    pipelineDescriptor.colorAttachments[0].sourceAlphaBlendFactor = MTLBlendFactorSourceAlpha;
+    pipelineDescriptor.colorAttachments[0].destinationRGBBlendFactor = MTLBlendFactorOneMinusSourceAlpha;
+    pipelineDescriptor.colorAttachments[0].destinationAlphaBlendFactor = MTLBlendFactorOneMinusSourceAlpha;
+
+    NSError *error;
+    self.pipelineState = [self.device newRenderPipelineStateWithDescriptor:pipelineDescriptor error:&error];
+
+    if (!self.pipelineState) {
+        NSLog(@"❌ 创建光绘焦散管线失败: %@", error);
+        return;
+    }
+}
+
+- (void)updateUniforms:(NSTimeInterval)time {
+    [super updateUniforms:time];
+
+    Uniforms *uniforms = (Uniforms *)[self.uniformBuffer contents];
+    NSDictionary *params = self.renderParameters;
+
+    float ribbonCount = params[@"ribbonCount"] ? [params[@"ribbonCount"] floatValue] : 3.0f;
+    float prismSeparation = params[@"prismSeparation"] ? [params[@"prismSeparation"] floatValue] : 0.14f;
+    float flowSpeed = params[@"flowSpeed"] ? [params[@"flowSpeed"] floatValue] : 0.82f;
+    float glowIntensity = params[@"glowIntensity"] ? [params[@"glowIntensity"] floatValue] : 1.18f;
+    uniforms->galaxyParams1 = (vector_float4){ribbonCount, prismSeparation, flowSpeed, glowIntensity};
+
+    float causticScale = params[@"causticScale"] ? [params[@"causticScale"] floatValue] : 1.05f;
+    float interference = params[@"interference"] ? [params[@"interference"] floatValue] : 0.72f;
+    float audioSensitivity = params[@"audioSensitivity"] ? [params[@"audioSensitivity"] floatValue] : 1.12f;
+    float sparkleDensity = params[@"sparkleDensity"] ? [params[@"sparkleDensity"] floatValue] : 0.32f;
+    uniforms->galaxyParams2 = (vector_float4){causticScale, interference, audioSensitivity, sparkleDensity};
+
+    float hueDrift = params[@"hueDrift"] ? [params[@"hueDrift"] floatValue] : 0.16f;
+    float vignette = params[@"vignette"] ? [params[@"vignette"] floatValue] : 0.22f;
+    float bassLift = params[@"bassLift"] ? [params[@"bassLift"] floatValue] : 0.18f;
+    uniforms->galaxyParams3 = (vector_float4){hueDrift, vignette, bassLift, 0.0f};
+}
+
+- (void)encodeRenderCommands:(id<MTLRenderCommandEncoder>)encoder {
+    if (!self.pipelineState) return;
+    [encoder setRenderPipelineState:self.pipelineState];
+    [encoder setVertexBuffer:self.uniformBuffer offset:0 atIndex:0];
+    [encoder setFragmentBuffer:self.uniformBuffer offset:0 atIndex:0];
     [encoder drawPrimitives:MTLPrimitiveTypeTriangleStrip vertexStart:0 vertexCount:4];
 }
 
@@ -1993,7 +2077,7 @@ typedef struct {
 
     params[@"silenceThreshold"] = params[@"silenceThreshold"] ?: @(0.02);
     params[@"flashIntensity"] = params[@"flashIntensity"] ?: @(1.12);
-    params[@"tunnelRadius"] = params[@"tunnelRadius"] ?: @(0.28);
+    params[@"tunnelRadius"] = params[@"tunnelRadius"] ?: @(0.34);
     params[@"swirlAmount"] = params[@"swirlAmount"] ?: @(1.00);
     params[@"paletteBoost"] = params[@"paletteBoost"] ?: @(1.08);
     params[@"audioSensitivity"] = params[@"audioSensitivity"] ?: @(1.10);
@@ -2085,7 +2169,7 @@ typedef struct {
 
     float barCount = params[@"barCount"] ? [params[@"barCount"] floatValue] : 10.0f;
     float starLaneCount = params[@"starLaneCount"] ? [params[@"starLaneCount"] floatValue] : 16.0f;
-    float tunnelRadius = params[@"tunnelRadius"] ? [params[@"tunnelRadius"] floatValue] : 0.30f;
+    float tunnelRadius = params[@"tunnelRadius"] ? [params[@"tunnelRadius"] floatValue] : 0.34f;
     float flashIntensity = params[@"flashIntensity"] ? [params[@"flashIntensity"] floatValue] : 1.35f;
     float swirlAmount = params[@"swirlAmount"] ? [params[@"swirlAmount"] floatValue] : 1.20f;
     float paletteBoost = params[@"paletteBoost"] ? [params[@"paletteBoost"] floatValue] : 1.10f;
@@ -2130,7 +2214,7 @@ typedef struct {
                                               swirlAmount,
                                               self.smoothedActivity,
                                               audioSensitivity};
-    uniforms->galaxyParams3 = (vector_float4){0.09f + bass * 0.05f,
+    uniforms->galaxyParams3 = (vector_float4){0.12f + bass * 0.055f,
                                               11.0f + mid * 8.0f + energy * 3.0f,
                                               1.05f + treble * 0.80f + beatInput * 0.18f,
                                               self.beatEnvelope};
@@ -2145,6 +2229,254 @@ typedef struct {
     [encoder setVertexBuffer:self.uniformBuffer offset:0 atIndex:0];
     [encoder setFragmentBuffer:self.uniformBuffer offset:0 atIndex:0];
     [encoder drawPrimitives:MTLPrimitiveTypeTriangleStrip vertexStart:0 vertexCount:4];
+}
+
+@end
+
+#pragma mark - 棱镜共振渲染器 (实验性效果)
+
+@interface PrismResonanceRenderer ()
+@property (nonatomic, strong) AIColorConfiguration *currentAIConfig;
+@property (nonatomic, strong) id<MTLRenderPipelineState> backgroundPipelineState;
+@property (nonatomic, strong) id<MTLTexture> backgroundTexture;
+@property (nonatomic, assign) int lowShapeState;
+@property (nonatomic, assign) int midShapeState;
+@property (nonatomic, assign) int highShapeState;
+@property (nonatomic, assign) NSTimeInterval lowTransitionStart;
+@property (nonatomic, assign) NSTimeInterval midTransitionStart;
+@property (nonatomic, assign) NSTimeInterval highTransitionStart;
+@property (nonatomic, assign) NSTimeInterval lowLockUntil;
+@property (nonatomic, assign) NSTimeInterval midLockUntil;
+@property (nonatomic, assign) NSTimeInterval highLockUntil;
+@end
+
+@implementation PrismResonanceRenderer
+
+- (instancetype)initWithMetalView:(MTKView *)metalView {
+    self = [super initWithMetalView:metalView];
+    if (self) {
+        [[NSNotificationCenter defaultCenter] addObserver:self
+                                                 selector:@selector(prismAIConfigurationDidChange:)
+                                                     name:kAIConfigurationDidChangeNotification
+                                                   object:nil];
+        _currentAIConfig = [MusicAIAnalyzer sharedAnalyzer].currentConfiguration;
+        _lowShapeState = 0;
+        _midShapeState = 0;
+        _highShapeState = 0;
+        _lowTransitionStart = -10.0;
+        _midTransitionStart = -10.0;
+        _highTransitionStart = -10.0;
+        _lowLockUntil = 0;
+        _midLockUntil = 0;
+        _highLockUntil = 0;
+
+        // 参考赛博朋克的低热量策略，进一步降低实际渲染成本
+        self.metalView.contentScaleFactor = 0.78;
+    }
+    return self;
+}
+
+- (void)dealloc {
+    [[NSNotificationCenter defaultCenter] removeObserver:self];
+}
+
+- (void)prismAIConfigurationDidChange:(NSNotification *)notification {
+    AIColorConfiguration *config = notification.userInfo[kAIConfigurationKey];
+    if (config) {
+        self.currentAIConfig = config;
+        NSLog(@"◇ 棱镜共振: 已应用 AI 主题色 %@ - %@", config.songName, config.artist ?: @"");
+    }
+}
+
+- (void)setupPipeline {
+    MTLRenderPipelineDescriptor *pipelineDescriptor = [[MTLRenderPipelineDescriptor alloc] init];
+    pipelineDescriptor.label = @"PrismResonance";
+    pipelineDescriptor.vertexFunction = [self.defaultLibrary newFunctionWithName:@"neon_vertex"];
+    pipelineDescriptor.fragmentFunction = [self.defaultLibrary newFunctionWithName:@"prismResonanceCompositeFragment"];
+    pipelineDescriptor.colorAttachments[0].pixelFormat = self.metalView.colorPixelFormat;
+    pipelineDescriptor.sampleCount = self.metalView.sampleCount;
+    pipelineDescriptor.depthAttachmentPixelFormat = self.metalView.depthStencilPixelFormat;
+
+    pipelineDescriptor.colorAttachments[0].blendingEnabled = YES;
+    pipelineDescriptor.colorAttachments[0].rgbBlendOperation = MTLBlendOperationAdd;
+    pipelineDescriptor.colorAttachments[0].alphaBlendOperation = MTLBlendOperationAdd;
+    pipelineDescriptor.colorAttachments[0].sourceRGBBlendFactor = MTLBlendFactorSourceAlpha;
+    pipelineDescriptor.colorAttachments[0].sourceAlphaBlendFactor = MTLBlendFactorSourceAlpha;
+    pipelineDescriptor.colorAttachments[0].destinationRGBBlendFactor = MTLBlendFactorOneMinusSourceAlpha;
+    pipelineDescriptor.colorAttachments[0].destinationAlphaBlendFactor = MTLBlendFactorOneMinusSourceAlpha;
+
+    NSError *error;
+    self.pipelineState = [self.device newRenderPipelineStateWithDescriptor:pipelineDescriptor error:&error];
+    if (!self.pipelineState) {
+        NSLog(@"❌ 创建棱镜共振管线失败: %@", error);
+        return;
+    }
+
+    MTLRenderPipelineDescriptor *backgroundDescriptor = [[MTLRenderPipelineDescriptor alloc] init];
+    backgroundDescriptor.label = @"PrismResonanceBackground";
+    backgroundDescriptor.vertexFunction = [self.defaultLibrary newFunctionWithName:@"neon_vertex"];
+    backgroundDescriptor.fragmentFunction = [self.defaultLibrary newFunctionWithName:@"prismResonanceBackgroundFragment"];
+    backgroundDescriptor.colorAttachments[0].pixelFormat = MTLPixelFormatBGRA8Unorm;
+    backgroundDescriptor.sampleCount = 1;
+
+    self.backgroundPipelineState = [self.device newRenderPipelineStateWithDescriptor:backgroundDescriptor error:&error];
+    if (!self.backgroundPipelineState) {
+        NSLog(@"❌ 创建棱镜共振背景管线失败: %@", error);
+        return;
+    }
+
+    [self setupPerformanceOptimizations];
+    [self rebuildBackgroundTexture];
+}
+
+- (void)setupPerformanceOptimizations {
+    NSMutableDictionary *params = [self.renderParameters mutableCopy] ?: [NSMutableDictionary dictionary];
+    // 减负：图元数量稍降
+    params[@"shapeLayers"]      = @(3);
+    params[@"glyphsPerLayer"]   = @(6);
+    params[@"morphSensitivity"] = @(1.00);
+    params[@"audioSensitivity"] = @(1.20);
+    params[@"glowIntensity"]    = @(1.00);
+    [self setRenderParameters:params];
+
+    // 进一步降载，减少整体卡顿
+    self.metalView.preferredFramesPerSecond = 24;
+}
+
+- (void)rebuildBackgroundTexture {
+    CGSize drawableSize = self.metalView.drawableSize;
+    NSUInteger bgWidth = MAX(1, (NSUInteger)lrint(drawableSize.width * 0.5));
+    NSUInteger bgHeight = MAX(1, (NSUInteger)lrint(drawableSize.height * 0.5));
+    self.backgroundTexture = [self createRenderTargetTextureWithWidth:bgWidth height:bgHeight];
+}
+
+- (void)mtkView:(MTKView *)view drawableSizeWillChange:(CGSize)size {
+    [super mtkView:view drawableSizeWillChange:size];
+    [self rebuildBackgroundTexture];
+}
+
+- (void)updateUniforms:(NSTimeInterval)time {
+    [super updateUniforms:time];
+
+    Uniforms *uniforms = (Uniforms *)[self.uniformBuffer contents];
+    NSDictionary *params = self.renderParameters;
+
+    float shapeLayers = params[@"shapeLayers"] ? [params[@"shapeLayers"] floatValue] : 2.0f;
+    float glyphsPerLayer = params[@"glyphsPerLayer"] ? [params[@"glyphsPerLayer"] floatValue] : 4.0f;
+    float glowIntensity = params[@"glowIntensity"] ? [params[@"glowIntensity"] floatValue] : 0.68f;
+    float morphSensitivity = params[@"morphSensitivity"] ? [params[@"morphSensitivity"] floatValue] : 0.92f;
+
+    vector_float3 atmosphere = (vector_float3){0.10f, 0.07f, 0.14f};
+    vector_float3 pulse = (vector_float3){0.96f, 0.62f, 0.84f};
+    vector_float3 corona = (vector_float3){0.58f, 0.88f, 1.0f};
+    float atmosphereIntensity = 0.42f;
+    float brightness = 1.0f;
+    float animSpeed = 1.0f;
+
+    if (self.currentAIConfig) {
+        atmosphere = self.currentAIConfig.atmosphereColor;
+        pulse = self.currentAIConfig.pulseRingColor;
+        corona = self.currentAIConfig.coronaFilamentsColor;
+        atmosphereIntensity = self.currentAIConfig.atmosphereIntensity;
+        brightness = self.currentAIConfig.brightnessMultiplier;
+        animSpeed = self.currentAIConfig.animationSpeed;
+    }
+
+    // 音频触发形变：低/中/高频分别驱动一组形态状态
+    // 触发后锁定3秒，不再受音频影响
+    float low  = uniforms->audioData[4].y;   // bass smooth
+    float mid  = uniforms->audioData[28].y;  // mid smooth
+    float high = uniforms->audioData[58].y;  // high smooth
+    NSTimeInterval lockDuration = 3.0;
+    float clampedMorphSensitivity = fmaxf(0.7f, fminf(morphSensitivity, 1.8f));
+    NSTimeInterval transitionDuration = 0.42 / clampedMorphSensitivity;
+
+    if (time >= self.lowLockUntil && low > 0.18f) {
+        self.lowShapeState = (self.lowShapeState + 1) % 3;
+        self.lowTransitionStart = time;
+        self.lowLockUntil = time + lockDuration;
+    }
+    if (time >= self.midLockUntil && mid > 0.15f) {
+        self.midShapeState = (self.midShapeState + 1) % 3;
+        self.midTransitionStart = time;
+        self.midLockUntil = time + lockDuration;
+    }
+    if (time >= self.highLockUntil && high > 0.12f) {
+        self.highShapeState = (self.highShapeState + 1) % 3;
+        self.highTransitionStart = time;
+        self.highLockUntil = time + lockDuration;
+    }
+
+    float lowMorphProgress = fminf(fmaxf((float)((time - self.lowTransitionStart) / transitionDuration), 0.0f), 1.0f);
+    float midMorphProgress = fminf(fmaxf((float)((time - self.midTransitionStart) / transitionDuration), 0.0f), 1.0f);
+    float highMorphProgress = fminf(fmaxf((float)((time - self.highTransitionStart) / transitionDuration), 0.0f), 1.0f);
+
+    uniforms->galaxyParams1 = (vector_float4){shapeLayers, glyphsPerLayer, glowIntensity, morphSensitivity};
+    uniforms->galaxyParams2 = (vector_float4){atmosphere.x, atmosphere.y, atmosphere.z, atmosphereIntensity};
+    uniforms->galaxyParams3 = (vector_float4){pulse.x, pulse.y, pulse.z, brightness};
+    uniforms->cyberpunkBackgroundParams = (vector_float4){corona.x, corona.y, corona.z, animSpeed};
+    uniforms->cyberpunkControls = (vector_float4){(float)self.lowShapeState, (float)self.midShapeState, (float)self.highShapeState, 0.0f};
+    uniforms->cyberpunkFrequencyControls = (vector_float4){lowMorphProgress, midMorphProgress, highMorphProgress, 0.0f};
+}
+
+- (void)encodeRenderCommands:(id<MTLRenderCommandEncoder>)encoder {
+    if (!self.pipelineState) return;
+    [encoder setRenderPipelineState:self.pipelineState];
+    [encoder setVertexBuffer:self.uniformBuffer offset:0 atIndex:0];
+    [encoder setFragmentBuffer:self.uniformBuffer offset:0 atIndex:0];
+    if (self.backgroundTexture) {
+        [encoder setFragmentTexture:self.backgroundTexture atIndex:0];
+    }
+    [encoder drawPrimitives:MTLPrimitiveTypeTriangleStrip vertexStart:0 vertexCount:4];
+}
+
+- (void)drawInMTKView:(MTKView *)view {
+    if (!self.isRendering || view.paused) {
+        return;
+    }
+
+    if (!self.backgroundTexture ||
+        self.backgroundTexture.width != MAX(1, (NSUInteger)lrint(view.drawableSize.width * 0.5)) ||
+        self.backgroundTexture.height != MAX(1, (NSUInteger)lrint(view.drawableSize.height * 0.5))) {
+        [self rebuildBackgroundTexture];
+    }
+
+    NSTimeInterval currentTime = CACurrentMediaTime() - self.startTime;
+    [self updateUniforms:currentTime];
+
+    id<MTLCommandBuffer> commandBuffer = [self.commandQueue commandBuffer];
+    commandBuffer.label = @"PrismResonanceMultiPass";
+
+    if (self.backgroundTexture) {
+        MTLRenderPassDescriptor *backgroundPass = [MTLRenderPassDescriptor renderPassDescriptor];
+        backgroundPass.colorAttachments[0].texture = self.backgroundTexture;
+        backgroundPass.colorAttachments[0].loadAction = MTLLoadActionClear;
+        backgroundPass.colorAttachments[0].storeAction = MTLStoreActionStore;
+        backgroundPass.colorAttachments[0].clearColor = MTLClearColorMake(0.0, 0.0, 0.0, 1.0);
+
+        id<MTLRenderCommandEncoder> backgroundEncoder = [commandBuffer renderCommandEncoderWithDescriptor:backgroundPass];
+        backgroundEncoder.label = @"PrismBackgroundEncoder";
+        [backgroundEncoder setRenderPipelineState:self.backgroundPipelineState];
+        [backgroundEncoder setVertexBuffer:self.uniformBuffer offset:0 atIndex:0];
+        [backgroundEncoder setFragmentBuffer:self.uniformBuffer offset:0 atIndex:0];
+        [backgroundEncoder drawPrimitives:MTLPrimitiveTypeTriangleStrip vertexStart:0 vertexCount:4];
+        [backgroundEncoder endEncoding];
+    }
+
+    MTLRenderPassDescriptor *renderPassDescriptor = view.currentRenderPassDescriptor;
+    if (renderPassDescriptor) {
+        id<MTLRenderCommandEncoder> renderEncoder = [commandBuffer renderCommandEncoderWithDescriptor:renderPassDescriptor];
+        renderEncoder.label = @"PrismCompositeEncoder";
+        [self encodeRenderCommands:renderEncoder];
+        [renderEncoder endEncoding];
+        [commandBuffer presentDrawable:view.currentDrawable];
+    }
+
+    [commandBuffer commit];
+
+    if ([self.delegate respondsToSelector:@selector(metalRenderer:didFinishFrame:)]) {
+        [self.delegate metalRenderer:self didFinishFrame:currentTime];
+    }
 }
 
 @end
@@ -2212,6 +2544,9 @@ typedef struct {
             
         case VisualEffectTypeFractalPattern:
             return [[FractalPatternRenderer alloc] initWithMetalView:metalView];
+
+        case VisualEffectTypeChromaticCaustics:
+            return [[ChromaticCausticsRenderer alloc] initWithMetalView:metalView];
             
         // 实验性效果
         case VisualEffectTypeAuroraRipples:
@@ -2234,6 +2569,9 @@ typedef struct {
 
         case VisualEffectTypeWormholeDrive:
             return [[WormholeDriveRenderer alloc] initWithMetalView:metalView];
+
+        case VisualEffectTypePrismResonance:
+            return [[PrismResonanceRenderer alloc] initWithMetalView:metalView];
             
         default:
             return [[DefaultEffectRenderer alloc] initWithMetalView:metalView];

@@ -29,12 +29,12 @@ typedef NS_ENUM(NSInteger, LyricsEffectType) {
 
 @property (nonatomic, assign) LyricsEffectType type;
 @property (nonatomic, copy) NSString *name;
-@property (nonatomic, copy) NSString *emoji;
+@property (nonatomic, copy) NSString *iconName; // SF Symbols system image name
 @property (nonatomic, copy) NSString *effectDescription;
 
 + (instancetype)infoWithType:(LyricsEffectType)type
                         name:(NSString *)name
-                       emoji:(NSString *)emoji
+                    iconName:(NSString *)iconName
                  description:(NSString *)effectDescription;
 
 @end
@@ -48,8 +48,8 @@ typedef NS_ENUM(NSInteger, LyricsEffectType) {
 /// 获取特效名称
 + (NSString *)nameForEffect:(LyricsEffectType)type;
 
-/// 获取特效Emoji
-+ (NSString *)emojiForEffect:(LyricsEffectType)type;
+/// 获取特效图标（SF Symbols system image name）
++ (NSString *)iconNameForEffect:(LyricsEffectType)type;
 
 @end
 

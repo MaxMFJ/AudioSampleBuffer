@@ -9,7 +9,7 @@
 #import <Metal/Metal.h>
 #import <MetalKit/MetalKit.h>
 #import <QuartzCore/QuartzCore.h>
-#import "VisualEffectType.h"
+#import "../Core/VisualEffectType.h"
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -93,6 +93,7 @@ NS_ASSUME_NONNULL_BEGIN
  */
 - (id<MTLBuffer>)createBufferWithData:(const void *)data length:(NSUInteger)length;
 - (id<MTLTexture>)createTextureWithWidth:(NSUInteger)width height:(NSUInteger)height;
+- (id<MTLTexture>)createRenderTargetTextureWithWidth:(NSUInteger)width height:(NSUInteger)height;
 
 @end
 
@@ -187,6 +188,13 @@ NS_ASSUME_NONNULL_BEGIN
 @end
 
 /**
+ * 光绘焦散渲染器
+ * 以长曝光光绘轨迹与焦散干涉纹理构建偏艺术化的创意效果
+ */
+@interface ChromaticCausticsRenderer : BaseMetalRenderer
+@end
+
+/**
  * 极光波纹渲染器 - 实验性效果
  * 融合北极光流动美学与音频驱动的多层波纹效果
  */
@@ -234,6 +242,13 @@ NS_ASSUME_NONNULL_BEGIN
  * 星尘在原点汇聚成柱状脉冲，并沿虫洞纵深冲向观察者
  */
 @interface WormholeDriveRenderer : BaseMetalRenderer
+@end
+
+/**
+ * 棱镜共振渲染器 - 实验性效果
+ * 以清晰几何线稿分层表现低频、中频与高频，强调边缘锐度与结构可读性
+ */
+@interface PrismResonanceRenderer : BaseMetalRenderer
 @end
 
 /**

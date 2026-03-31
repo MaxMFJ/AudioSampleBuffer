@@ -45,6 +45,7 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic, strong) UIButton *previousButton;
 @property (nonatomic, strong) UIButton *playPauseButton;
 @property (nonatomic, strong) UIButton *nextButton;
+@property (nonatomic, strong) UIView *playControlBarView;
 @property (nonatomic, strong) UIButton *loopButton;
 @property (nonatomic, assign) BOOL isSingleLoopMode;
 

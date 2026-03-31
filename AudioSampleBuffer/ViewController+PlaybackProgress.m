@@ -34,68 +34,41 @@ static const void *kProgressViewKey = &kProgressViewKey;
 #pragma mark - 设置
 
 - (void)setupProgressView {
-    // 计算进度条位置 - 放在屏幕最底部
-    CGFloat screenWidth = self.view.bounds.size.width;
+    CGFloat screenWidth  = self.view.bounds.size.width;
     CGFloat screenHeight = self.view.bounds.size.height;
-    
-    CGFloat progressHeight = 50;  // 增加高度以容纳时间标签
-    CGFloat sidePadding = 0;  // 无边距，全宽
-    
-    // 检查是否有底部安全区域
+
     CGFloat safeAreaBottom = 0;
     if (@available(iOS 11.0, *)) {
         safeAreaBottom = self.view.safeAreaInsets.bottom;
     }
-    
-    // 放在屏幕最底部，考虑安全区域
-    CGFloat progressY = screenHeight - progressHeight - safeAreaBottom;
-    CGFloat progressWidth = screenWidth;
-    
-    // 创建容器视图（带毛玻璃效果）
-    UIView *containerView = [[UIView alloc] initWithFrame:CGRectMake(0, progressY, screenWidth, progressHeight + safeAreaBottom)];
-    containerView.backgroundColor = [UIColor clearColor];
+
+    // 进度条放在底部播放栏（高100pt）的顶部区域，避免与播放按钮重叠
+    // 底部播放栏起始 Y = screenHeight - safeAreaBottom - 100
+    // 进度条高度 36pt，放在播放栏起始 Y 的上方贴合
+    CGFloat progressHeight = 36;
+    CGFloat playBarTop     = screenHeight - safeAreaBottom - 100;
+    CGFloat progressY      = playBarTop - progressHeight;
+
+    UIView *containerView = [[UIView alloc] initWithFrame:CGRectMake(0, progressY, screenWidth, progressHeight)];
+    containerView.backgroundColor = [UIColor colorWithWhite:0.0 alpha:0.45];
     containerView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleTopMargin;
-    containerView.tag = 9999;  // 用于后续查找
-    
-    // 添加毛玻璃效果背景
-    UIBlurEffect *blurEffect = [UIBlurEffect effectWithStyle:UIBlurEffectStyleDark];
-    UIVisualEffectView *blurView = [[UIVisualEffectView alloc] initWithEffect:blurEffect];
-    blurView.frame = containerView.bounds;
-    blurView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-    [containerView addSubview:blurView];
-    
-    // 添加顶部分割线
-    UIView *topLine = [[UIView alloc] initWithFrame:CGRectMake(0, 0, screenWidth, 0.5)];
-    topLine.backgroundColor = [UIColor colorWithWhite:0.4 alpha:0.5];
-    topLine.autoresizingMask = UIViewAutoresizingFlexibleWidth;
-    [containerView addSubview:topLine];
-    
-    // 添加顶部渐变边缘
-    CAGradientLayer *topGradient = [CAGradientLayer layer];
-    topGradient.frame = CGRectMake(0, 0, screenWidth, 3);
-    topGradient.colors = @[
-        (id)[UIColor colorWithRed:0.0 green:0.8 blue:1.0 alpha:0.6].CGColor,
-        (id)[UIColor clearColor].CGColor
-    ];
-    [containerView.layer addSublayer:topGradient];
-    
-    // 创建进度条视图
-    AudioProgressView *progressView = [[AudioProgressView alloc] initWithFrame:CGRectMake(sidePadding, 0, progressWidth, progressHeight)];
+    containerView.tag = 9999;
+
+    // 进度条视图
+    AudioProgressView *progressView = [[AudioProgressView alloc] initWithFrame:CGRectMake(0, 0, screenWidth, progressHeight)];
     progressView.delegate = self;
     progressView.autoresizingMask = UIViewAutoresizingFlexibleWidth;
-    
-    // 霓虹风格颜色
-    progressView.progressColor = [UIColor colorWithRed:0.0 green:0.8 blue:1.0 alpha:1.0];
-    progressView.trackColor = [UIColor colorWithWhite:0.15 alpha:0.95];
-    progressView.thumbColor = [UIColor whiteColor];
+    progressView.progressColor = [UIColor colorWithRed:0.2 green:0.8 blue:0.5 alpha:1.0];
+    progressView.trackColor    = [UIColor colorWithWhite:0.2 alpha:0.8];
+    progressView.thumbColor    = [UIColor whiteColor];
     progressView.timeTextColor = [UIColor whiteColor];
     progressView.backgroundColor = [UIColor clearColor];
-    
+
     [containerView addSubview:progressView];
     [self.view addSubview:containerView];
     self.progressView = progressView;
-    
-    NSLog(@"✅ 进度条已创建（底部全宽样式），容器位置: (%.0f, %.0f)", 
+
+    NSLog(@"✅ 进度条已创建（播放栏上方），容器位置: (%.0f, %.0f)",
           containerView.frame.origin.x, containerView.frame.origin.y);
 }
 
