@@ -2248,6 +2248,8 @@ typedef struct {
 @property (nonatomic, assign) NSTimeInterval lowLockUntil;
 @property (nonatomic, assign) NSTimeInterval midLockUntil;
 @property (nonatomic, assign) NSTimeInterval highLockUntil;
+// 背景降频绘制：背景慢速漂移，每 3 帧更新一次即可，节省约 30% 背景 pass 开销
+@property (nonatomic, assign) NSUInteger backgroundFrameCounter;
 @end
 
 @implementation PrismResonanceRenderer
@@ -2447,7 +2449,10 @@ typedef struct {
     id<MTLCommandBuffer> commandBuffer = [self.commandQueue commandBuffer];
     commandBuffer.label = @"PrismResonanceMultiPass";
 
-    if (self.backgroundTexture) {
+    // 背景降频绘制：每 3 帧更新一次背景纹理
+    // 背景气泡以 0.07-0.18 rad/s 漂移，3 帧（@24fps ≈ 125ms）的位移 < 0.02，不可察觉
+    self.backgroundFrameCounter = (self.backgroundFrameCounter + 1) % 3;
+    if (self.backgroundTexture && self.backgroundFrameCounter == 0) {
         MTLRenderPassDescriptor *backgroundPass = [MTLRenderPassDescriptor renderPassDescriptor];
         backgroundPass.colorAttachments[0].texture = self.backgroundTexture;
         backgroundPass.colorAttachments[0].loadAction = MTLLoadActionClear;

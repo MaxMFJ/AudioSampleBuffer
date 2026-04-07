@@ -371,6 +371,11 @@ static const CGFloat kDefaultEffectRenderScale = 0.85f;
         CGFloat renderScale = 0.58;
         _metalView.drawableSize = CGSizeMake(containerSize.width * screenScale * renderScale,
                                              containerSize.height * screenScale * renderScale);
+    } else if (effectType == VisualEffectTypeNeuralResonance) {
+        // 神经共振：点线 halo 效果，对像素密度要求低，使用正方形 0.65 缩放降低 fragment 负载
+        CGFloat renderScale = 0.65;
+        CGFloat drawableSize = squareSize * screenScale * renderScale;
+        _metalView.drawableSize = CGSizeMake(drawableSize, drawableSize);
     } else {
         // 保持正方形逻辑画布不变，只温和降低实际渲染分辨率。
         // 这样圆形/极坐标类效果不会重新出现拉伸变形问题。

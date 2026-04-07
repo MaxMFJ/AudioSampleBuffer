@@ -132,6 +132,8 @@ static inline float3 prismResonanceForeground(float2 p,
         float dAmp   = mix(0.006,0.024,lF);
         float dRate  = mix(0.18,0.45,lF)*aspd;
         float feath  = fw*mix(2.4,1.0,lF);
+        // 当前 layer 的最大棱镜半径（aura = sz*3.5，sz_max = szBase*1.09）
+        float maxAuraRadius = szBase * 1.09 * 3.5;
 
         for(int slot=0; slot<8; slot++){
             if(slot>=nSlots) continue;
@@ -170,26 +172,43 @@ static inline float3 prismResonanceForeground(float2 p,
             float2 anchor = float2((prH(seed*1.37)-0.5)*0.90, (prH(seed*2.53)-0.5)*0.88);
             float2 drift  = float2(sin(t*dRate+seed*1.8)*dAmp,
                                    cos(t*dRate*0.75+seed*1.4)*dAmp*0.7);
+
+            // 距离 early-out：像素到棱镜中心超过 aura 范围直接跳过
+            float2 center = anchor + drift;
+            float2 dp = p - center;
+            if(dot(dp,dp) > (maxAuraRadius+0.015)*(maxAuraRadius+0.015)) continue;
+
             float rot = (prH(seed*3.7)-0.5)*1.2 + t*(prH(seed*0.43)-0.5)*0.03;
-            float2 lp = prRot(p-anchor-drift, rot);
+            float2 lp = prRot(dp, rot);
             float slotEnergy = clamp(ev * 0.82 + bandTransient * 0.24, 0.0, 1.4);
             float sz  = szBase*(0.82+slotEnergy*0.26);
 
             int prevState = (state + 2) % 3;
             float morphT = smoothstep(0.0, 1.0, morphProgress);
             float transitionDip = 1.0 - 0.42 * sin(morphT * 3.14159265);
-            float dPrev = prShapeDistance(prevState, lp, sz);
+
+            // morphProgress 完成优化：过渡结束后跳过 prev 的 SDF 计算
             float dCurr = prShapeDistance(state, lp, sz);
             float th   = sz*0.13;
-            float ringPrev = prRing(dPrev,feath,th);
-            float ringCurr = prRing(dCurr,feath,th);
-            float bodyPrev = prFill(dPrev-th,feath)*(0.05+slotEnergy*0.16);
-            float bodyCurr = prFill(dCurr-th,feath)*(0.05+slotEnergy*0.16);
-            float corePrev = prFill(dPrev-sz*0.65,feath*0.7);
-            float coreCurr = prFill(dCurr-sz*0.65,feath*0.7);
-            float ring = (ringPrev * (1.0 - morphT) + ringCurr * morphT) * transitionDip;
-            float body = (bodyPrev * (1.0 - morphT) + bodyCurr * morphT) * transitionDip;
-            float core = (corePrev * (1.0 - morphT) + coreCurr * morphT) * transitionDip;
+            float ring, body, core;
+            if(morphT >= 0.99){
+                // 形变已完成，只计算 curr
+                ring = prRing(dCurr,feath,th);
+                body = prFill(dCurr-th,feath)*(0.05+slotEnergy*0.16);
+                core = prFill(dCurr-sz*0.65,feath*0.7);
+            } else {
+                float dPrev = prShapeDistance(prevState, lp, sz);
+                float ringPrev = prRing(dPrev,feath,th);
+                float ringCurr = prRing(dCurr,feath,th);
+                float bodyPrev = prFill(dPrev-th,feath)*(0.05+slotEnergy*0.16);
+                float bodyCurr = prFill(dCurr-th,feath)*(0.05+slotEnergy*0.16);
+                float corePrev = prFill(dPrev-sz*0.65,feath*0.7);
+                float coreCurr = prFill(dCurr-sz*0.65,feath*0.7);
+                ring = (ringPrev * (1.0 - morphT) + ringCurr * morphT) * transitionDip;
+                body = (bodyPrev * (1.0 - morphT) + bodyCurr * morphT) * transitionDip;
+                core = (corePrev * (1.0 - morphT) + coreCurr * morphT) * transitionDip;
+            }
+
             float aura = prFill(prSDCircle(lp,sz*3.5),feath*11.0) * (0.03+slotEnergy*0.08);
             float gain = alpha*bright*(0.78+0.22*sin(t*(1.7+prH(seed)*1.4)+seed));
             gain = clamp(gain,0.,2.0);
@@ -377,12 +396,12 @@ fragment float4 prismResonanceFragment(RasterizerData in [[stage_in]],
         float dAmp   = mix(0.006,0.024,lF);
         float dRate  = mix(0.18,0.45,lF)*aspd;
         float feath  = fw*mix(2.4,1.0,lF);
+        float maxAuraRadius = szBase * 1.09 * 3.5;
 
         for(int slot=0; slot<8; slot++){
             if(slot>=nSlots) continue;
             float seed=float(layer*43+slot*71)+3.14;
 
-            // 每个棱形绑定到不同频谱索引，避免整组共用同一触发
             int slotIndex = layer * nSlots + slot;
             int bandIndex = 4 + ((slotIndex * 9 + layer * 5 + 3) % 68);
             float bandSmooth = clamp(uniforms.audioData[bandIndex].y * 1.85, 0.0, 1.35);
@@ -409,37 +428,49 @@ fragment float4 prismResonanceFragment(RasterizerData in [[stage_in]],
                 bc=float3(0.86,0.24,1.00);
             }
 
-            // 同一频段内再做轻微错相，让相邻棱形不再同步硬切
             int stateOffset = (bandIndex + slot + layer) % 3;
             state = (state + stateOffset) % 3;
 
             float3 dc = mix(bc*float3(0.50,0.65,1.18), bc, lF) * mix(0.25,1.0,lF);
 
-            // 可移动，不固定位置
             float2 anchor = float2((prH(seed*1.37)-0.5)*0.90, (prH(seed*2.53)-0.5)*0.88);
             float2 drift  = float2(sin(t*dRate+seed*1.8)*dAmp,
                                    cos(t*dRate*0.75+seed*1.4)*dAmp*0.7);
+
+            // 距离 early-out
+            float2 center = anchor + drift;
+            float2 dp = p - center;
+            if(dot(dp,dp) > (maxAuraRadius+0.015)*(maxAuraRadius+0.015)) continue;
+
             float rot = (prH(seed*3.7)-0.5)*1.2 + t*(prH(seed*0.43)-0.5)*0.03;
-            float2 lp = prRot(p-anchor-drift, rot);
+            float2 lp = prRot(dp, rot);
             float slotEnergy = clamp(ev * 0.82 + bandTransient * 0.24, 0.0, 1.4);
             float sz  = szBase*(0.82+slotEnergy*0.26);
 
-            // 形态锁定（由CPU状态控制，3s锁定）
             int prevState = (state + 2) % 3;
             float morphT = smoothstep(0.0, 1.0, morphProgress);
             float transitionDip = 1.0 - 0.42 * sin(morphT * 3.14159265);
-            float dPrev = prShapeDistance(prevState, lp, sz);
+
             float dCurr = prShapeDistance(state, lp, sz);
             float th   = sz*0.13;
-            float ringPrev = prRing(dPrev,feath,th);
-            float ringCurr = prRing(dCurr,feath,th);
-            float bodyPrev = prFill(dPrev-th,feath)*(0.05+slotEnergy*0.16);
-            float bodyCurr = prFill(dCurr-th,feath)*(0.05+slotEnergy*0.16);
-            float corePrev = prFill(dPrev-sz*0.65,feath*0.7);
-            float coreCurr = prFill(dCurr-sz*0.65,feath*0.7);
-            float ring = (ringPrev * (1.0 - morphT) + ringCurr * morphT) * transitionDip;
-            float body = (bodyPrev * (1.0 - morphT) + bodyCurr * morphT) * transitionDip;
-            float core = (corePrev * (1.0 - morphT) + coreCurr * morphT) * transitionDip;
+            float ring, body, core;
+            if(morphT >= 0.99){
+                ring = prRing(dCurr,feath,th);
+                body = prFill(dCurr-th,feath)*(0.05+slotEnergy*0.16);
+                core = prFill(dCurr-sz*0.65,feath*0.7);
+            } else {
+                float dPrev = prShapeDistance(prevState, lp, sz);
+                float ringPrev = prRing(dPrev,feath,th);
+                float ringCurr = prRing(dCurr,feath,th);
+                float bodyPrev = prFill(dPrev-th,feath)*(0.05+slotEnergy*0.16);
+                float bodyCurr = prFill(dCurr-th,feath)*(0.05+slotEnergy*0.16);
+                float corePrev = prFill(dPrev-sz*0.65,feath*0.7);
+                float coreCurr = prFill(dCurr-sz*0.65,feath*0.7);
+                ring = (ringPrev * (1.0 - morphT) + ringCurr * morphT) * transitionDip;
+                body = (bodyPrev * (1.0 - morphT) + bodyCurr * morphT) * transitionDip;
+                core = (corePrev * (1.0 - morphT) + coreCurr * morphT) * transitionDip;
+            }
+
             float aura = prFill(prSDCircle(lp,sz*3.5),feath*11.0) * (0.03+slotEnergy*0.08);
             float gain = alpha*bright*(0.78+0.22*sin(t*(1.7+prH(seed)*1.4)+seed));
             gain = clamp(gain,0.,2.0);

@@ -39,6 +39,13 @@ static inline float capsuleGlow(float2 p, float2 a, float2 b, float radius) {
     return exp(-dot(d, d) / r2);
 }
 
+// AABB 快速剔除：像素是否在线段的膨胀包围盒内
+static inline bool capsuleInAABB(float2 p, float2 a, float2 b, float margin) {
+    float2 lo = min(a, b) - margin;
+    float2 hi = max(a, b) + margin;
+    return p.x >= lo.x && p.x <= hi.x && p.y >= lo.y && p.y <= hi.y;
+}
+
 static inline float ringGlow(float value, float center, float width) {
     float w = max(width, 0.0001);
     float delta = (value - center) / w;
@@ -160,6 +167,9 @@ fragment float4 wormholeDriveFragment(RasterizerData in [[stage_in]],
 
     float laneRotation = motionTime * 0.05 * swirlAmount;
 
+    // 频谱柱的 AABB 剔除 margin：等于最大 capsule width 的 3 倍
+    const float barCullMargin = 0.028;
+
     for (int i = 0; i < 10; i++) {
         if (i >= barCount) continue;
 
@@ -181,19 +191,23 @@ fragment float4 wormholeDriveFragment(RasterizerData in [[stage_in]],
         float sourceWidth = mix(0.0026, 0.0068, morph);
         float2 sourceA = dir * (aperture * 0.58);
         float2 sourceB = dir * (aperture * 0.58 + sourceLength);
-        float sourceBar = capsuleGlow(p, sourceA, sourceB, sourceWidth);
+
+        // AABB 剔除源柱
+        if (capsuleInAABB(p, sourceA, sourceB, barCullMargin)) {
+            float sourceBar = capsuleGlow(p, sourceA, sourceB, sourceWidth);
+            float3 laneColor = mix(coolColor, hotColor, 0.18 + lanePhase * 0.52);
+            color += laneColor * sourceBar * (0.16 + sample * 0.34 + beatEnv * 0.12);
+        }
 
         float3 laneColor = mix(coolColor, hotColor, 0.18 + lanePhase * 0.52);
-        color += laneColor * sourceBar * (0.16 + sample * 0.34 + beatEnv * 0.12);
 
-        for (int pulseIndex = 0; pulseIndex < 2; pulseIndex++) {
-            float pulseSeed = whHash(fi * 13.1 + (float)pulseIndex * 29.7);
-            float pulseSpeed = 0.09 + travelSpeed * 0.09 + sample * 0.08 + (float)pulseIndex * 0.016;
+        // pulse 循环从 2 降为 1：减少约 10 次 capsuleGlow，视觉差异极小
+        {
+            float pulseSeed = whHash(fi * 13.1);
+            float pulseSpeed = 0.09 + travelSpeed * 0.09 + sample * 0.08;
             float z = fract(pulseSeed + motionTime * pulseSpeed);
             float perspective = pow(z, 1.75);
-            float radial = mix(aperture * (0.90 + 0.06 * (float)pulseIndex),
-                               1.08 + 0.11 * (float)pulseIndex,
-                               perspective);
+            float radial = mix(aperture * 0.90, 1.08, perspective);
             float trail = mix(0.012,
                               0.11 + sample * 0.26 + laneStretch * 0.10 + beatEnv * 0.07,
                               morph) * (0.28 + perspective * 1.28);
@@ -201,13 +215,18 @@ fragment float4 wormholeDriveFragment(RasterizerData in [[stage_in]],
 
             float2 head = dir * radial;
             float2 tail = dir * max(aperture * 0.72, radial - trail);
-            float body = capsuleGlow(p, tail, head, width);
-            float tip = exp(-dot(p - head, p - head) / max(width * width * 2.8, 0.00002));
-            float nearBoost = smoothstep(0.35, 1.0, perspective);
-            float gain = (0.05 + sample * 0.44 + beatEnv * 0.18) * (0.34 + nearBoost * 1.08);
 
-            color += laneColor * body * gain;
-            color += mix(float3(1.0), laneColor, 0.32) * tip * gain * (0.60 + morph * 0.75);
+            // AABB 剔除脉冲拖尾
+            if (capsuleInAABB(p, tail, head, width * 3.5)) {
+                float body = capsuleGlow(p, tail, head, width);
+                float2 dh = p - head;
+                float tip = exp(-dot(dh, dh) / max(width * width * 2.8, 0.00002));
+                float nearBoost = smoothstep(0.35, 1.0, perspective);
+                float gain = (0.05 + sample * 0.44 + beatEnv * 0.18) * (0.34 + nearBoost * 1.08);
+
+                color += laneColor * body * gain;
+                color += mix(float3(1.0), laneColor, 0.32) * tip * gain * (0.60 + morph * 0.75);
+            }
         }
     }
 
@@ -241,9 +260,15 @@ fragment float4 wormholeDriveFragment(RasterizerData in [[stage_in]],
 
         float2 head = dir * radial;
         float2 tail = dir * max(aperture * 0.84, radial - trail);
+
+        // AABB 剔除：绝大多数像素不在任何拖尾附近
+        if (!capsuleInAABB(p, tail, head, width * 6.0)) continue;
+
         float streak = capsuleGlow(p, tail, head, width);
-        float spark = exp(-dot(p - head, p - head) / max(width * width * 10.0, 0.00004));
-        float headBloom = exp(-dot(p - head, p - head) / max(width * width * 28.0, 0.00008));
+        float2 dh = p - head;
+        float dh2 = dot(dh, dh);
+        float spark = exp(-dh2 / max(width * width * 10.0, 0.00004));
+        float headBloom = exp(-dh2 / max(width * width * 28.0, 0.00008));
 
         float hue = fract(selector * 0.83 + fi * 0.071);
         float3 accentColor = hsv2rgb(float3(hue, 0.34, 1.0));

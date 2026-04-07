@@ -107,10 +107,11 @@ fragment float4 neuralResonanceFragment(RasterizerData in [[stage_in]],
     color += mix(float3(0.96, 0.98, 1.0), theme, 0.28) * pulseOnLine * (0.25 + 0.55 * activity);
 
     // 背景板神经节点（低成本）：缓慢随机移动 + 音乐闪烁
+    // early-out 阈值：halo exp(-d2/0.0048) < 0.005 时 d2 > 0.025，直接跳过
+    const float bgNodeMaxD2 = 0.028;
     const int bgNodeCount = 8;
     for (int i = 0; i < bgNodeCount; i++) {
         float fi = float(i);
-        // 背景节点也用互质种子确保全屏分布
         float sx = nrHash(float2(fi * 1.732 + 0.3, fi * 2.618 + 1.9));
         float sy = nrHash(float2(fi * 3.302 + 2.1, fi * 1.273 + 4.7));
         float sd = nrHash(float2(fi * 2.449 + 6.3, fi * 0.809 + 3.1));
@@ -124,6 +125,9 @@ fragment float4 neuralResonanceFragment(RasterizerData in [[stage_in]],
         float2 bn = base + drift;
         float2 db = p - bn;
         float d2b = dot(db, db);
+
+        // 距离 early-out：超出 halo 可见范围直接跳过
+        if (d2b > bgNodeMaxD2) continue;
 
         float band = (i % 3 == 0) ? bass : ((i % 3 == 1) ? mid : treb);
         float blink = 0.72 + 0.28 * sin(t * (2.0 + sd) + band * 6.0 + fi);
@@ -145,17 +149,17 @@ fragment float4 neuralResonanceFragment(RasterizerData in [[stage_in]],
     // 音乐很弱时可关闭节点大幅运动（避免空段乱动）
     float nodeMotionOn = step(0.10, activity);
 
+    // early-out 阈值：halo exp(-d2/0.0032) < 0.005 时 d2 > 0.017
+    const float nodeMaxD2 = 0.020;
+
     for (int i = 0; i < nodeCount; i++) {
         float fi = float(i);
-        // 使用互质种子确保全屏均匀分布
         float seedA = nrHash(float2(fi * 1.618 + 0.5, fi * 2.713 + 3.7));
         float seedB = nrHash(float2(fi * 3.141 + 1.2, fi * 1.414 + 7.3));
         float seedC = nrHash(float2(fi * 2.236 + 5.1, fi * 0.577 + 2.9));
 
-        // 初始随机全屏分布（-0.46 ~ +0.46 四象限均匀覆盖）
         float2 base = float2(seedA * 0.92 - 0.46, seedB * 0.92 - 0.46);
 
-        // 双频游走：节点可跨区域移动（左上可到右下）
         float walkX = sin(t * (0.24 + seedA * 0.20) + seedC * 6.28318) * 0.18
                     + sin(t * (0.13 + seedB * 0.12) + fi * 1.2) * 0.09;
         float walkY = cos(t * (0.22 + seedB * 0.18) + seedA * 6.28318) * 0.18
@@ -164,7 +168,6 @@ fragment float4 neuralResonanceFragment(RasterizerData in [[stage_in]],
         float2 moved = base + float2(walkX, walkY) * nodeMotionOn;
         nodes[i] = clamp(moved, float2(-0.48, -0.48), float2(0.48, 0.48));
 
-        // 生命周期：出现 -> 存在 -> 消失
         float lifePhase = fract(t * (0.052 + seedA * 0.020) + seedB * 2.2);
         float fadeIn = smoothstep(0.08, 0.26, lifePhase);
         float fadeOut = 1.0 - smoothstep(0.70, 0.94, lifePhase);
@@ -175,18 +178,24 @@ fragment float4 neuralResonanceFragment(RasterizerData in [[stage_in]],
 
         float2 d = p - nodes[i];
         float d2 = dot(d, d);
-        float core = exp(-d2 / 0.00024);
-        float halo = exp(-d2 / 0.0032);
 
-        color += nodeC * (0.32 * core + 0.13 * halo) * twinkle * (0.78 + 0.48 * band) * lives[i];
+        // 距离 early-out：超出 halo 可见范围直接跳过（连线循环仍需 nodes[i]，故继续存储）
+        if (d2 <= nodeMaxD2) {
+            float core = exp(-d2 / 0.00024);
+            float halo = exp(-d2 / 0.0032);
+            color += nodeC * (0.32 * core + 0.13 * halo) * twinkle * (0.78 + 0.48 * band) * lives[i];
+        }
     }
 
     // 连线：树杈算法（parent-child），长度超阈值断开
     float linkRange = 0.35 + 0.06 * activity;
     float linkWidth = 0.00215 + 0.00065 * activity;
+    // segGlow 的可见边界：exp(-d^2/w^2) < 0.005 => d > w*sqrt(-ln(0.005)) ≈ w*2.32
+    // 用 linkWidth_max*2.5 作为像素到线段端点的 AABB 快速剔除距离
+    float linkCullDist = linkWidth * 3.2;
+    float linkCullDist2 = linkCullDist * linkCullDist;
 
     for (int i = 0; i < nodeCount; i++) {
-        // 树杈：每个节点连接 parent 与 branch
         int parent = (i == 0) ? -1 : (i - 1);
         int branch = (i + 4) % nodeCount;
 
@@ -199,22 +208,27 @@ fragment float4 neuralResonanceFragment(RasterizerData in [[stage_in]],
             float2 b = nodes[parent];
             float distAB = length(a - b);
             if (distAB < linkRange) {
-                float nearStrength = 1.0 - smoothstep(linkRange * 0.62, linkRange, distAB);
-                float line = segGlow(p, a, b, linkWidth);
-                float lifeMix = lives[i] * lives[parent];
+                // AABB 快速剔除：像素到线段包围盒的最小距离
+                float2 minAB = min(a, b) - linkCullDist;
+                float2 maxAB = max(a, b) + linkCullDist;
+                if (p.x >= minAB.x && p.x <= maxAB.x && p.y >= minAB.y && p.y <= maxAB.y) {
+                    float nearStrength = 1.0 - smoothstep(linkRange * 0.62, linkRange, distAB);
+                    float line = segGlow(p, a, b, linkWidth);
+                    float lifeMix = lives[i] * lives[parent];
 
-                color += linkC * line * (0.13 + 0.34 * nearStrength) * lifeMix;
+                    color += linkC * line * (0.13 + 0.34 * nearStrength) * lifeMix;
 
-                float2 pa = p - a;
-                float2 ba = b - a;
-                float h = clamp(dot(pa, ba) / max(dot(ba, ba), 0.0001), 0.0, 1.0);
+                    float2 pa = p - a;
+                    float2 ba = b - a;
+                    float h = clamp(dot(pa, ba) / max(dot(ba, ba), 0.0001), 0.0, 1.0);
 
-                float seed = nrHash(float2(float(i) * 0.91, float(parent) * 1.27));
-                float speed = 0.20 + 0.82 * trigger;
-                float phase = fract(tMotion * speed + seed);
-                float pulse = currentPulse(h, phase, 0.056);
+                    float seed = nrHash(float2(float(i) * 0.91, float(parent) * 1.27));
+                    float speed = 0.20 + 0.82 * trigger;
+                    float phase = fract(tMotion * speed + seed);
+                    float pulse = currentPulse(h, phase, 0.056);
 
-                color += pulseC * pulse * line * (0.24 + 0.52 * nearStrength) * trigger * lifeMix;
+                    color += pulseC * pulse * line * (0.24 + 0.52 * nearStrength) * trigger * lifeMix;
+                }
             }
         }
 
@@ -224,22 +238,26 @@ fragment float4 neuralResonanceFragment(RasterizerData in [[stage_in]],
             float2 b = nodes[branch];
             float distAB = length(a - b);
             if (distAB < linkRange * 0.92) {
-                float nearStrength = 1.0 - smoothstep(linkRange * 0.58, linkRange * 0.92, distAB);
-                float line = segGlow(p, a, b, linkWidth * 0.82);
-                float lifeMix = lives[i] * lives[branch];
+                float2 minAB = min(a, b) - linkCullDist;
+                float2 maxAB = max(a, b) + linkCullDist;
+                if (p.x >= minAB.x && p.x <= maxAB.x && p.y >= minAB.y && p.y <= maxAB.y) {
+                    float nearStrength = 1.0 - smoothstep(linkRange * 0.58, linkRange * 0.92, distAB);
+                    float line = segGlow(p, a, b, linkWidth * 0.82);
+                    float lifeMix = lives[i] * lives[branch];
 
-                color += linkC * line * (0.06 + 0.14 * nearStrength) * lifeMix;
+                    color += linkC * line * (0.06 + 0.14 * nearStrength) * lifeMix;
 
-                float2 pa = p - a;
-                float2 ba = b - a;
-                float h = clamp(dot(pa, ba) / max(dot(ba, ba), 0.0001), 0.0, 1.0);
+                    float2 pa = p - a;
+                    float2 ba = b - a;
+                    float h = clamp(dot(pa, ba) / max(dot(ba, ba), 0.0001), 0.0, 1.0);
 
-                float seed = nrHash(float2(float(i) * 1.07, float(branch) * 1.19));
-                float speed = 0.16 + 0.58 * trigger;
-                float phase = fract(tMotion * speed + seed);
-                float pulse = currentPulse(h, phase, 0.060);
+                    float seed = nrHash(float2(float(i) * 1.07, float(branch) * 1.19));
+                    float speed = 0.16 + 0.58 * trigger;
+                    float phase = fract(tMotion * speed + seed);
+                    float pulse = currentPulse(h, phase, 0.060);
 
-                color += pulseC * pulse * line * (0.07 + 0.16 * nearStrength) * trigger * lifeMix;
+                    color += pulseC * pulse * line * (0.07 + 0.16 * nearStrength) * trigger * lifeMix;
+                }
             }
         }
     }
