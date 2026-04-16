@@ -234,6 +234,7 @@
     self.lyricsView.autoScroll = YES;
 
     [self.lyricsContainer addSubview:self.lyricsView];
+    [self setupVisualLyricsOverlay];
     [self addGradientMaskToLyricsContainer];
 
     self.lyricsContainer.hidden = YES;
@@ -262,6 +263,127 @@
     self.lyricsContainer.layer.mask = gradientMask;
 }
 
+- (void)setupVisualLyricsOverlay {
+    if (self.visualLyricsOverlayView) {
+        [self.visualLyricsOverlayView removeFromSuperview];
+    }
+
+    UIView *overlay = [[UIView alloc] initWithFrame:self.view.bounds];
+    overlay.userInteractionEnabled = NO;
+    overlay.backgroundColor = [UIColor clearColor];
+    overlay.hidden = YES;
+
+    NSMutableArray<UILabel *> *labels = [NSMutableArray array];
+    NSArray<NSNumber *> *angles = @[@(-45.0), @(-45.0), @(-45.0), @(-45.0)];
+    NSArray<NSValue *> *centers = @[
+        [NSValue valueWithCGPoint:CGPointMake(self.view.bounds.size.width * 0.28, self.view.bounds.size.height * 0.80)],
+        [NSValue valueWithCGPoint:CGPointMake(self.view.bounds.size.width * 0.78, self.view.bounds.size.height * 0.26)],
+        [NSValue valueWithCGPoint:CGPointMake(self.view.bounds.size.width * 0.44, self.view.bounds.size.height * 0.58)],
+        [NSValue valueWithCGPoint:CGPointMake(self.view.bounds.size.width * 0.64, self.view.bounds.size.height * 0.44)]
+    ];
+
+    for (NSInteger i = 0; i < angles.count; i++) {
+        UILabel *label = [[UILabel alloc] initWithFrame:CGRectMake(0, 0, self.view.bounds.size.width * 0.84, 52)];
+        label.textAlignment = NSTextAlignmentCenter;
+        label.numberOfLines = 2;
+        label.adjustsFontSizeToFitWidth = YES;
+        label.minimumScaleFactor = 0.42;
+        label.textColor = [UIColor colorWithWhite:1.0 alpha:0.32];
+        label.font = [UIFont boldSystemFontOfSize:(i == 0 ? 30.0 : 24.0)];
+        label.layer.shadowColor = [UIColor colorWithRed:0.55 green:0.85 blue:1.0 alpha:1.0].CGColor;
+        label.layer.shadowOpacity = 0.85;
+        label.layer.shadowRadius = 14.0;
+        label.layer.shadowOffset = CGSizeZero;
+        label.center = [centers[i] CGPointValue];
+        label.transform = CGAffineTransformMakeRotation((CGFloat)([angles[i] doubleValue] * M_PI / 180.0));
+        label.hidden = YES;
+        [overlay addSubview:label];
+        [labels addObject:label];
+    }
+
+    [self.view addSubview:overlay];
+    self.visualLyricsOverlayView = overlay;
+    self.visualLyricsOverlayLabels = [labels copy];
+    self.visualLyricsOverlayBaseCenters = centers;
+}
+
+- (void)updateVisualLyricsOverlayForCurrentIndex:(NSInteger)currentIndex {
+    if (!self.visualLyricsOverlayLabels.count) {
+        return;
+    }
+
+    NSArray<LRCLine *> *lyrics = self.lyricsView.parser.lyrics;
+    NSMutableArray<NSString *> *texts = [NSMutableArray array];
+    NSString *currentText = (currentIndex >= 0 && currentIndex < lyrics.count) ? (lyrics[currentIndex].text ?: @"") : @"";
+    if (currentIndex >= 0 && currentIndex < lyrics.count) {
+        NSInteger start = MAX(0, currentIndex - 3);
+        NSInteger end = MIN((NSInteger)lyrics.count - 1, currentIndex + 3);
+        for (NSInteger i = start; i <= end; i++) {
+            NSString *text = lyrics[i].text ?: @"";
+            if (text.length > 0) {
+                [texts addObject:text];
+            }
+        }
+    }
+
+    BOOL shouldRefreshHighlightSlot = NO;
+    if (currentText.length == 0) {
+        self.visualLyricsHighlightSlot = NSNotFound;
+        self.visualLyricsLastHighlightedText = nil;
+    } else {
+        if (self.visualLyricsHighlightSlot == NSNotFound || self.visualLyricsHighlightSlot >= self.visualLyricsOverlayLabels.count) {
+            shouldRefreshHighlightSlot = YES;
+        }
+        if (![self.visualLyricsLastHighlightedText isEqualToString:currentText]) {
+            shouldRefreshHighlightSlot = YES;
+        }
+    }
+    if (shouldRefreshHighlightSlot) {
+        self.visualLyricsHighlightSlot = arc4random_uniform((uint32_t)MAX((NSUInteger)1, self.visualLyricsOverlayLabels.count));
+        self.visualLyricsLastHighlightedText = [currentText copy];
+    }
+
+    for (NSInteger i = 0; i < self.visualLyricsOverlayLabels.count; i++) {
+        UILabel *label = self.visualLyricsOverlayLabels[i];
+        CGPoint baseCenter = (i < self.visualLyricsOverlayBaseCenters.count) ? [self.visualLyricsOverlayBaseCenters[i] CGPointValue] : label.center;
+        label.center = baseCenter;
+
+        NSString *newText = i < texts.count ? texts[i] : @"";
+        BOOL isCurrent = currentText.length > 0 && (i == self.visualLyricsHighlightSlot);
+        if (isCurrent && currentText.length > 0) {
+            newText = currentText;
+        }
+        BOOL wasVisible = !label.hidden && label.text.length > 0;
+        BOOL textChanged = !((label.text == nil && newText.length == 0) || [label.text isEqualToString:newText]);
+
+        label.text = newText;
+        label.hidden = (newText.length == 0);
+        label.alpha = newText.length == 0 ? 0.0 : (isCurrent ? 1.0 : (i == 0 ? 0.68 : 0.46));
+        label.textColor = isCurrent ? [UIColor colorWithRed:1.0 green:0.96 blue:0.88 alpha:1.0] : [UIColor colorWithWhite:1.0 alpha:(i == 0 ? 0.38 : 0.28)];
+        label.font = [UIFont boldSystemFontOfSize:isCurrent ? 34.0 : (i == 0 ? 30.0 : 24.0)];
+        label.layer.shadowColor = (isCurrent ? [UIColor colorWithRed:1.0 green:0.72 blue:0.40 alpha:1.0] : [UIColor colorWithRed:0.55 green:0.85 blue:1.0 alpha:1.0]).CGColor;
+        label.layer.shadowRadius = isCurrent ? 20.0 : 12.0;
+
+        if (textChanged && wasVisible) {
+            label.layer.opacity = label.alpha;
+        }
+    }
+
+    [self refreshVisualLyricsOverlayVisibility];
+}
+
+- (void)animateVisualLyricsOverlayWithBass:(CGFloat)bass mid:(CGFloat)mid treble:(CGFloat)treble {
+    // 关闭前景歌词抖动，避免 UIView 频繁位移导致 GPU 飙升
+}
+
+- (void)refreshVisualLyricsOverlayVisibility {
+    BOOL shouldShow = self.visualEffectManager.currentEffectType == VisualEffectTypeVisualLyricsTunnel && self.lyricsView.parser.lyrics.count > 0;
+    self.visualLyricsOverlayView.hidden = !shouldShow;
+    if (shouldShow) {
+        [self.view bringSubviewToFront:self.visualLyricsOverlayView];
+    }
+}
+
 - (void)toggleLyricsView:(UITapGestureRecognizer *)gesture {
     [UIView animateWithDuration:0.3 animations:^{
         self.lyricsContainer.alpha = self.lyricsContainer.alpha > 0.5 ? 0.3 : 1.0;
@@ -286,6 +408,9 @@
 
     [UIView animateWithDuration:0.3 animations:^{
         self.lyricsContainer.alpha = isVisible ? 1.0 : 0.0;
+    } completion:^(BOOL finished) {
+        self.lyricsContainer.hidden = !isVisible;
+        [self refreshVisualLyricsOverlayVisibility];
     }];
 
     UIImpactFeedbackGenerator *feedback = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleLight];

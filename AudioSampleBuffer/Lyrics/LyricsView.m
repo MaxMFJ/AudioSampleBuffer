@@ -9,11 +9,15 @@
 #import "LyricsEffectCell.h"
 #import <QuartzCore/QuartzCore.h>
 
+NSString *const kLyricsViewDidUpdateVisualTextNotification = @"LyricsViewDidUpdateVisualTextNotification";
+NSString *const kLyricsViewDidUpdateVisualLinesNotification = @"LyricsViewDidUpdateVisualLinesNotification";
+
 @interface LyricsView () <UITableViewDelegate, UITableViewDataSource>
 
 @property (nonatomic, strong) UITableView *tableView;
 @property (nonatomic, assign) NSInteger currentIndex;
 @property (nonatomic, strong) UILabel *noLyricsLabel;
+@property (nonatomic, copy, nullable) NSString *currentVisualText;
 
 @end
 
@@ -94,6 +98,7 @@
 - (void)setParser:(LRCParser *)parser {
     _parser = parser;
     _currentIndex = -1;
+    self.currentVisualText = nil;
     
     // ⚠️ 关键修复：确保所有 UI 更新都在主线程执行
     // 如果已经在主线程，直接执行；否则调度到主线程
@@ -132,6 +137,7 @@
     }
     
     NSInteger newIndex = [_parser indexForTime:currentTime];
+    [self notifyVisualDelegateForTime:currentTime currentIndex:newIndex];
     
     if (newIndex != _currentIndex && newIndex >= 0) {
         NSInteger oldIndex = _currentIndex;
@@ -183,8 +189,10 @@
 
 - (void)reset {
     _currentIndex = -1;
+    self.currentVisualText = nil;
     [_tableView reloadData];
     [_tableView setContentOffset:CGPointMake(0, -_tableView.contentInset.top) animated:NO];
+    [self notifyVisualDelegateForTime:0 currentIndex:-1];
 }
 
 - (void)scrollToIndex:(NSInteger)index animated:(BOOL)animated {
@@ -303,6 +311,63 @@
 - (void)setLyricsEffect:(LyricsEffectType)effectType {
     _currentEffect = effectType;
     [_tableView reloadData];
+}
+
+- (void)notifyVisualDelegateForTime:(NSTimeInterval)currentTime currentIndex:(NSInteger)currentIndex {
+    BOOL hasVisualDelegate = (self.visualDelegate != nil);
+
+    NSString *currentText = nil;
+    CGFloat progress = 0.0;
+
+    if (currentIndex >= 0 && currentIndex < self.parser.lyrics.count) {
+        LRCLine *currentLine = self.parser.lyrics[currentIndex];
+        currentText = currentLine.text;
+
+        NSTimeInterval startTime = currentLine.time;
+        NSTimeInterval endTime = currentIndex + 1 < self.parser.lyrics.count ? self.parser.lyrics[currentIndex + 1].time : startTime + 4.0;
+        NSTimeInterval duration = MAX(0.25, endTime - startTime);
+        progress = (CGFloat)((currentTime - startTime) / duration);
+        progress = MAX(0.0, MIN(1.0, progress));
+    }
+
+    NSMutableArray<NSString *> *visibleLines = [NSMutableArray array];
+    if (currentIndex >= 0) {
+        NSInteger start = MAX(0, currentIndex - 5);
+        NSInteger end = MIN((NSInteger)self.parser.lyrics.count - 1, currentIndex + 5);
+        for (NSInteger i = start; i <= end; i++) {
+            NSString *text = self.parser.lyrics[i].text ?: @"";
+            if (text.length > 0) {
+                [visibleLines addObject:text];
+            }
+        }
+    }
+
+    // 视觉歌词特效没有可读文字输入时，仍然保留一组占位行，确保 45° 斜向轨道始终可见。
+    if (visibleLines.count == 0) {
+        [visibleLines addObjectsFromArray:@[@"MUSIC", @"FLOW", @"LYRIC", @"PULSE"]];
+    }
+
+    BOOL textChanged = !((self.currentVisualText == nil && currentText == nil) || [self.currentVisualText isEqualToString:currentText]);
+    BOOL linesChanged = (currentIndex != self.currentIndex) || textChanged;
+    self.currentVisualText = currentText;
+
+    if (linesChanged && hasVisualDelegate && [self.visualDelegate respondsToSelector:@selector(lyricsView:didUpdateVisualLyricLines:currentIndex:)]) {
+        [self.visualDelegate lyricsView:self didUpdateVisualLyricLines:[visibleLines copy] currentIndex:currentIndex];
+    }
+    if (linesChanged) {
+        [[NSNotificationCenter defaultCenter] postNotificationName:kLyricsViewDidUpdateVisualLinesNotification
+                                                            object:self
+                                                          userInfo:@{ @"lines": [visibleLines copy],
+                                                                      @"currentIndex": @(currentIndex) }];
+    }
+
+    if (hasVisualDelegate && [self.visualDelegate respondsToSelector:@selector(lyricsView:didUpdateVisualLyricText:progress:)]) {
+        [self.visualDelegate lyricsView:self didUpdateVisualLyricText:currentText progress:progress];
+    }
+    [[NSNotificationCenter defaultCenter] postNotificationName:kLyricsViewDidUpdateVisualTextNotification
+                                                        object:self
+                                                      userInfo:@{ @"text": currentText ?: @"",
+                                                                  @"progress": @(progress) }];
 }
 
 @end

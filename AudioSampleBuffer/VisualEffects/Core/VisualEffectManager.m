@@ -333,12 +333,12 @@ static const CGFloat kDefaultEffectRenderScale = 0.85f;
             settings[@"beatDecay"] = @(5.4);
             break;
 
-        case VisualEffectTypePrismResonance:
-            settings[@"shapeLayers"] = @(3);         // 3层景深，降低热量同时保留层次
-            settings[@"glyphsPerLayer"] = @(6);       // 每层6个棱镜，共18个，但每个都独立绑定频段
-            settings[@"morphSensitivity"] = @(1.20);  // 变形灵敏度（瞬态驱动◇→○/❤）
-            settings[@"audioSensitivity"] = @(1.20);  // 整体音频灵敏度
-            settings[@"glowIntensity"] = @(1.00);     // 光晕强度
+        case VisualEffectTypeVisualLyricsTunnel:
+            settings[@"lineDensity"] = @(6.0);
+            settings[@"glowIntensity"] = @(1.15);
+            settings[@"travelSpeed"] = @(0.82);
+            settings[@"audioSensitivity"] = @(1.05);
+            settings[@"trailSoftness"] = @(0.85);
             break;
             
         default:
@@ -369,6 +369,11 @@ static const CGFloat kDefaultEffectRenderScale = 0.85f;
     } else if (effectType == VisualEffectTypePrismResonance) {
         // 棱镜共振：参考赛博朋克的低热量策略，进一步压低实际绘制分辨率
         CGFloat renderScale = 0.58;
+        _metalView.drawableSize = CGSizeMake(containerSize.width * screenScale * renderScale,
+                                             containerSize.height * screenScale * renderScale);
+    } else if (effectType == VisualEffectTypeVisualLyricsTunnel) {
+        // 视觉歌词以宽屏斜向流动构图为主，直接使用容器宽高，保留对角线运动的空间感。
+        CGFloat renderScale = 0.72;
         _metalView.drawableSize = CGSizeMake(containerSize.width * screenScale * renderScale,
                                              containerSize.height * screenScale * renderScale);
     } else if (effectType == VisualEffectTypeNeuralResonance) {
@@ -491,6 +496,12 @@ static const CGFloat kDefaultEffectRenderScale = 0.85f;
                     if (_metalView.preferredFramesPerSecond != targetFPS) {
                         _metalView.preferredFramesPerSecond = targetFPS;
                         NSLog(@"🌀 虫洞穿梭启用稳定帧率: %ldfps", (long)targetFPS);
+                    }
+                } else if (effectType == VisualEffectTypeVisualLyricsTunnel) {
+                    NSInteger targetFPS = 24;
+                    if (_metalView.preferredFramesPerSecond != targetFPS) {
+                        _metalView.preferredFramesPerSecond = targetFPS;
+                        NSLog(@"📝 视觉歌词启用电影感帧率: %ldfps", (long)targetFPS);
                     }
                 } else if (!_savedPerformanceSettings && _metalView.preferredFramesPerSecond < 30) {
                     _metalView.preferredFramesPerSecond = 30;
@@ -770,6 +781,7 @@ static const CGFloat kDefaultEffectRenderScale = 0.85f;
         case VisualEffectTypeNeuralResonance:
         case VisualEffectTypeWormholeDrive:
         case VisualEffectTypePrismResonance:
+        case VisualEffectTypeVisualLyricsTunnel:
             return YES;
             
         case VisualEffectTypeClassicSpectrum:

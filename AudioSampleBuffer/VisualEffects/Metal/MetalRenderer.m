@@ -8,6 +8,8 @@
 #import "MetalRenderer.h"
 #import "../../AI/AIColorConfiguration.h"
 #import "../../AI/MusicAIAnalyzer.h"
+#import "../../AudioSampleBuffer/AudioSpectrumPlayer.h"
+#import "../../Lyrics/LyricsView.h"
 #import <simd/simd.h>
 
 // 顶点结构体
@@ -62,6 +64,21 @@ typedef struct {
     vector_float4 aiColorCoronaFilaments;     // 外围长丝 + 放射日冕丝颜色
     vector_float4 aiColorPulseRing;           // 脉冲环颜色
 } UniformsAI;
+
+typedef struct {
+    vector_float4 colorAndAlpha;
+    vector_float4 layout;
+    vector_float4 glow;
+} VisualLyricLineUniform;
+
+typedef struct {
+    Uniforms base;
+    vector_float4 accentColor;
+    vector_float4 emotionColor;
+    vector_float4 timeline;
+    vector_float4 lyricMetrics;
+    VisualLyricLineUniform lines[8];
+} VisualLyricsUniforms;
 
 @interface BaseMetalRenderer () {
     float _smoothedAudioState[80];
@@ -1370,6 +1387,259 @@ typedef struct {
 
 @end
 
+@interface VisualLyricsTunnelRenderer ()
+@property (nonatomic, strong) AIColorConfiguration *currentAIConfig;
+@property (nonatomic, strong) NSArray<NSString *> *visualLyricLines;
+@property (nonatomic, copy) NSString *currentLyricText;
+@property (nonatomic, assign) float lyricProgress;
+@property (nonatomic, assign) float smoothedEnergy;
+@property (nonatomic, assign) float travelPhase;
+@property (nonatomic, assign) NSTimeInterval beatLockUntil;
+@property (nonatomic, assign) NSUInteger relayoutCounter;
+@end
+
+@implementation VisualLyricsTunnelRenderer
+
+- (instancetype)initWithMetalView:(MTKView *)metalView {
+    self = [super initWithMetalView:metalView];
+    if (self) {
+        self.uniformBuffer = [self.device newBufferWithLength:sizeof(VisualLyricsUniforms)
+                                                      options:MTLResourceStorageModeShared];
+        [[NSNotificationCenter defaultCenter] addObserver:self
+                                                 selector:@selector(visualLyricsAIConfigurationDidChange:)
+                                                     name:kAIConfigurationDidChangeNotification
+                                                   object:nil];
+        [[NSNotificationCenter defaultCenter] addObserver:self
+                                                 selector:@selector(visualLyricsTextDidChange:)
+                                                     name:kLyricsViewDidUpdateVisualTextNotification
+                                                   object:nil];
+        [[NSNotificationCenter defaultCenter] addObserver:self
+                                                 selector:@selector(visualLyricsLinesDidChange:)
+                                                     name:kLyricsViewDidUpdateVisualLinesNotification
+                                                   object:nil];
+        _currentAIConfig = [MusicAIAnalyzer sharedAnalyzer].currentConfiguration;
+        _visualLyricLines = @[];
+        _currentLyricText = @"";
+        _beatLockUntil = 0.0;
+        _relayoutCounter = 0;
+    }
+    return self;
+}
+
+- (void)dealloc {
+    [[NSNotificationCenter defaultCenter] removeObserver:self];
+}
+
+- (void)visualLyricsAIConfigurationDidChange:(NSNotification *)notification {
+    AIColorConfiguration *config = notification.userInfo[kAIConfigurationKey];
+    if (config) {
+        self.currentAIConfig = config;
+        NSLog(@"📝 视觉歌词: 已应用 AI 情绪色 %@ - %@", config.songName, config.artist ?: @"");
+    }
+}
+
+- (void)visualLyricsTextDidChange:(NSNotification *)notification {
+    NSString *text = notification.userInfo[@"text"];
+    self.currentLyricText = text ?: @"";
+    self.lyricProgress = [notification.userInfo[@"progress"] floatValue];
+}
+
+- (void)visualLyricsLinesDidChange:(NSNotification *)notification {
+    NSArray<NSString *> *lines = notification.userInfo[@"lines"];
+    if ([lines isKindOfClass:[NSArray class]]) {
+        self.visualLyricLines = lines;
+    } else {
+        self.visualLyricLines = @[];
+    }
+}
+
+- (void)setupPipeline {
+    MTLRenderPipelineDescriptor *pipelineDescriptor = [[MTLRenderPipelineDescriptor alloc] init];
+    pipelineDescriptor.label = @"VisualLyricsTunnel";
+    pipelineDescriptor.vertexFunction = [self.defaultLibrary newFunctionWithName:@"neon_vertex"];
+    pipelineDescriptor.fragmentFunction = [self.defaultLibrary newFunctionWithName:@"visualLyricsTunnelFragment"];
+    pipelineDescriptor.colorAttachments[0].pixelFormat = self.metalView.colorPixelFormat;
+    pipelineDescriptor.sampleCount = self.metalView.sampleCount;
+    pipelineDescriptor.depthAttachmentPixelFormat = self.metalView.depthStencilPixelFormat;
+    pipelineDescriptor.colorAttachments[0].blendingEnabled = NO;
+
+    NSError *error;
+    self.pipelineState = [self.device newRenderPipelineStateWithDescriptor:pipelineDescriptor error:&error];
+    if (!self.pipelineState) {
+        NSLog(@"❌ 创建视觉歌词管线失败: %@", error);
+        return;
+    }
+
+    [self setupPerformanceOptimizations];
+    NSLog(@"✅ 视觉歌词渲染器初始化成功");
+}
+
+- (void)setupPerformanceOptimizations {
+    NSMutableDictionary *params = [self.renderParameters mutableCopy] ?: [NSMutableDictionary dictionary];
+    params[@"lineDensity"] = params[@"lineDensity"] ?: @(4.1);
+    params[@"glowIntensity"] = params[@"glowIntensity"] ?: @(0.98);
+    params[@"travelSpeed"] = params[@"travelSpeed"] ?: @(0.62);
+    params[@"audioSensitivity"] = params[@"audioSensitivity"] ?: @(1.10);
+    params[@"trailSoftness"] = params[@"trailSoftness"] ?: @(0.70);
+    params[@"beatLock"] = params[@"beatLock"] ?: @(1.35);
+    [self setRenderParameters:params];
+    self.metalView.preferredFramesPerSecond = 24;
+    self.metalView.sampleCount = 1;
+    self.metalView.contentScaleFactor = 0.68;
+}
+
+- (void)updateUniforms:(NSTimeInterval)time {
+    [super updateUniforms:time];
+
+    VisualLyricsUniforms *uniforms = (VisualLyricsUniforms *)[self.uniformBuffer contents];
+    uniforms->base = *(Uniforms *)[self.uniformBuffer contents];
+
+    float bass = 0.0f;
+    float mid = 0.0f;
+    float treble = 0.0f;
+    NSUInteger count = MIN(self.currentSpectrumData.count, (NSUInteger)80);
+    for (NSUInteger i = 0; i < count; i++) {
+        float v = [self.currentSpectrumData[i] floatValue];
+        if (i <= 16) {
+            bass += v;
+        } else if (i <= 48) {
+            mid += v;
+        } else {
+            treble += v;
+        }
+    }
+    bass /= 17.0f;
+    mid /= 32.0f;
+    treble /= 31.0f;
+
+    float energy = fminf(1.4f, bass * 0.45f + mid * 0.33f + treble * 0.22f);
+    self.smoothedEnergy = self.smoothedEnergy + (energy - self.smoothedEnergy) * 0.12f;
+
+    NSDictionary *params = self.renderParameters;
+    NSTimeInterval beatLock = params[@"beatLock"] ? [params[@"beatLock"] doubleValue] : 1.2;
+    float beatStrength = fmaxf(bass * 0.95f, treble * 0.82f + mid * 0.35f);
+    if (time >= self.beatLockUntil && beatStrength > 0.34f) {
+        self.beatLockUntil = time + beatLock;
+        self.relayoutCounter = (self.relayoutCounter + 1) % 7;
+    }
+
+    float travelSpeed = params[@"travelSpeed"] ? [params[@"travelSpeed"] floatValue] : 0.68f;
+    self.travelPhase += 0.012f * (0.55f + travelSpeed + self.smoothedEnergy * 0.55f);
+
+    vector_float3 theme = (vector_float3){0.50f, 0.72f, 1.0f};
+    vector_float3 accent = (vector_float3){0.95f, 0.58f, 0.82f};
+    vector_float3 emotion = (vector_float3){0.35f, 1.0f, 0.82f};
+
+    if (self.currentAIConfig) {
+        theme = self.currentAIConfig.atmosphereColor * 0.55f + self.currentAIConfig.volumetricBeamColor * 0.45f;
+        accent = self.currentAIConfig.pulseRingColor;
+        emotion = self.currentAIConfig.coronaFilamentsColor;
+    }
+
+    uniforms->accentColor = (vector_float4){accent.x, accent.y, accent.z, 1.0f};
+    uniforms->emotionColor = (vector_float4){emotion.x, emotion.y, emotion.z, 1.0f};
+    uniforms->timeline = (vector_float4){self.travelPhase, self.lyricProgress, self.smoothedEnergy, 0.8f + bass * 0.6f};
+    uniforms->lyricMetrics = (vector_float4){(float)MIN(self.visualLyricLines.count, (NSUInteger)8),
+                                             params[@"lineDensity"] ? [params[@"lineDensity"] floatValue] : 6.0f,
+                                             params[@"glowIntensity"] ? [params[@"glowIntensity"] floatValue] : 1.15f,
+                                             params[@"trailSoftness"] ? [params[@"trailSoftness"] floatValue] : 0.85f};
+
+    uniforms->base.cyberpunkControls = (vector_float4){1.0f, self.smoothedEnergy, bass, mid};
+    uniforms->base.cyberpunkFrequencyControls = (vector_float4){treble, energy, self.travelPhase, self.currentAIConfig.isLLMGenerated ? 1.0f : 0.0f};
+    uniforms->base.cyberpunkBackgroundParams = (vector_float4){theme.x, theme.y, theme.z, 1.0f};
+
+    for (int i = 0; i < 8; i++) {
+        float alpha = 0.0f;
+        float direction = 0.0f;
+        float offset = 0.0f;
+        float lateral = 0.0f;
+        float width = 0.0f;
+        float density = 0.0f;
+        float glow = 0.0f;
+        float drift = 0.0f;
+        float pulse = 0.0f;
+        float thickness = 0.0f;
+        vector_float3 lineColor = theme * 0.7f;
+
+        BOOL isForwardPrimary = (i == 0);
+        BOOL isForwardSecondary = (i == 1);
+        BOOL isReverse = (i == 2);
+        if (!(isForwardPrimary || isForwardSecondary || isReverse)) {
+            uniforms->lines[i].colorAndAlpha = (vector_float4){0.0f, 0.0f, 0.0f, 0.0f};
+            uniforms->lines[i].layout = (vector_float4){0.0f, 0.0f, 0.0f, 0.0f};
+            uniforms->lines[i].glow = (vector_float4){0.0f, 0.0f, 0.0f, 0.0f};
+            continue;
+        }
+
+        NSUInteger pattern = self.relayoutCounter % 4;
+        if (isForwardPrimary) {
+            direction = 1.0f;
+            offset = -0.92f + 0.06f * pattern;
+            lateral = -0.34f + 0.05f * ((self.relayoutCounter / 2) % 3);
+            width = 0.26f;
+            density = 3.3f;
+            glow = 0.92f;
+            drift = 0.14f;
+            pulse = 0.24f;
+            thickness = 0.108f;
+        } else if (isForwardSecondary) {
+            direction = 1.0f;
+            offset = -0.50f + 0.04f * ((self.relayoutCounter + 1) % 4);
+            lateral = 0.02f + 0.04f * (pattern - 1);
+            width = 0.22f;
+            density = 3.0f;
+            glow = 0.78f;
+            drift = 0.11f;
+            pulse = 0.38f;
+            thickness = 0.090f;
+        } else {
+            direction = -1.0f;
+            offset = -0.72f + 0.05f * ((self.relayoutCounter + 2) % 4);
+            lateral = 0.32f - 0.06f * (self.relayoutCounter % 3);
+            width = 0.21f;
+            density = 2.9f;
+            glow = 0.74f;
+            drift = 0.10f;
+            pulse = 0.52f;
+            thickness = 0.086f;
+        }
+
+        if (i < self.visualLyricLines.count) {
+            NSString *lineText = self.visualLyricLines[i];
+            alpha = MIN(isForwardPrimary ? 0.92f : 0.78f, MAX(0.28f, (float)lineText.length / 16.0f));
+            float textInfluence = MIN(1.0f, (float)lineText.length / 16.0f);
+            density += textInfluence * 0.65f;
+            width += textInfluence * 0.022f;
+            thickness += textInfluence * 0.012f;
+            lineColor = isReverse ? simd_mix(theme, emotion, 0.34f) : simd_mix(theme, accent, 0.26f + 0.12f * i);
+            lineColor = simd_mix(lineColor, emotion, MIN(0.42f, self.lyricProgress * 0.24f));
+
+            if (self.currentLyricText.length > 0 && [lineText isEqualToString:self.currentLyricText]) {
+                alpha = 1.0f;
+                glow += 0.28f;
+                thickness += 0.022f;
+                width += 0.035f;
+                lineColor = simd_mix(lineColor, (vector_float3){1.0f, 0.97f, 0.90f}, 0.40f);
+            }
+        }
+
+        uniforms->lines[i].colorAndAlpha = (vector_float4){lineColor.x, lineColor.y, lineColor.z, direction > 0.0f ? 1.0f : 0.0f};
+        uniforms->lines[i].layout = (vector_float4){offset, lateral, width, density};
+        uniforms->lines[i].glow = (vector_float4){glow, drift, pulse, thickness};
+        uniforms->lines[i].colorAndAlpha.a = alpha;
+    }
+}
+
+- (void)encodeRenderCommands:(id<MTLRenderCommandEncoder>)encoder {
+    if (!self.pipelineState) return;
+    [encoder setRenderPipelineState:self.pipelineState];
+    [encoder setVertexBuffer:self.uniformBuffer offset:0 atIndex:0];
+    [encoder setFragmentBuffer:self.uniformBuffer offset:0 atIndex:0];
+    [encoder drawPrimitives:MTLPrimitiveTypeTriangleStrip vertexStart:0 vertexCount:4];
+}
+
+@end
+
 @implementation DefaultEffectRenderer
 
 - (void)setupPipeline {
@@ -2577,6 +2847,9 @@ typedef struct {
 
         case VisualEffectTypePrismResonance:
             return [[PrismResonanceRenderer alloc] initWithMetalView:metalView];
+
+        case VisualEffectTypeVisualLyricsTunnel:
+            return [[VisualLyricsTunnelRenderer alloc] initWithMetalView:metalView];
             
         default:
             return [[DefaultEffectRenderer alloc] initWithMetalView:metalView];

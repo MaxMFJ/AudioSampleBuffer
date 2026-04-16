@@ -204,6 +204,14 @@
                                                        performanceLevel:PerformanceLevelMedium];
     prismResonance.requiresMetal = YES;
     [effects addObject:prismResonance];
+
+    VisualEffectInfo *visualLyricsTunnel = [VisualEffectInfo effectWithType:VisualEffectTypeVisualLyricsTunnel
+                                                                       name:@"视觉歌词"
+                                                                description:@"歌词以 45° 斜向穿梭入场，多行交错缓慢滑动，并根据 AI 情绪分析切换发光色彩"
+                                                                   category:EffectCategoryExperimental
+                                                           performanceLevel:PerformanceLevelHigh];
+    visualLyricsTunnel.requiresMetal = YES;
+    [effects addObject:visualLyricsTunnel];
     
     self.effects = [effects copy];
 }

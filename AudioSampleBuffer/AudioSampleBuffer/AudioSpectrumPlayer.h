@@ -5,6 +5,13 @@ NS_ASSUME_NONNULL_BEGIN
 
 @class LRCParser;
 
+/// 歌词加载完成通知，userInfo: parser, filePath
+extern NSString *const kAudioPlayerDidLoadLyricsNotification;
+/// 播放时间更新通知，userInfo: currentTime
+extern NSString *const kAudioPlayerDidUpdateTimeNotification;
+/// 开始播放通知，userInfo: filePath
+extern NSString *const kAudioPlayerDidStartPlaybackNotification;
+
 @protocol AudioSpectrumPlayerDelegate <NSObject>
 
 - (void)playerDidGenerateSpectrum:(NSArray *)spectrums;

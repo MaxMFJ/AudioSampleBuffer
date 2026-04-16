@@ -8,6 +8,10 @@
 #import "LRCParser.h"
 #import "MusicAIAnalyzer.h"
 
+NSString *const kAudioPlayerDidLoadLyricsNotification = @"AudioPlayerDidLoadLyricsNotification";
+NSString *const kAudioPlayerDidUpdateTimeNotification = @"AudioPlayerDidUpdateTimeNotification";
+NSString *const kAudioPlayerDidStartPlaybackNotification = @"AudioPlayerDidStartPlaybackNotification";
+
 @interface AudioSpectrumPlayer ()
 {
     AVAudioFramePosition lastStartFramePosition;
@@ -171,6 +175,10 @@
     if ([self.delegate respondsToSelector:@selector(playerDidLoadLyrics:)]) {
         [self.delegate playerDidLoadLyrics:nil];
     }
+    [[NSNotificationCenter defaultCenter] postNotificationName:kAudioPlayerDidLoadLyricsNotification
+                                                        object:self
+                                                      userInfo:@{ @"parser": [NSNull null],
+                                                                  @"filePath": self.currentFilePath ?: @"" }];
     
     // 🔧 修复：支持完整路径和文件名两种方式
     NSURL *fileUrl = nil;
@@ -235,6 +243,9 @@
         if ([self.delegate respondsToSelector:@selector(playerDidStartPlaying)]) {
             [self.delegate playerDidStartPlaying];
         }
+        [[NSNotificationCenter defaultCenter] postNotificationName:kAudioPlayerDidStartPlaybackNotification
+                                                            object:self
+                                                          userInfo:@{ @"filePath": self.currentFilePath ?: @"" }];
     });
   
     
@@ -296,6 +307,9 @@
                 if ([self.delegate respondsToSelector:@selector(playerDidUpdateTime:)]) {
                     [self.delegate playerDidUpdateTime:elapsedTime];
                 }
+                [[NSNotificationCenter defaultCenter] postNotificationName:kAudioPlayerDidUpdateTimeNotification
+                                                                    object:self
+                                                                  userInfo:@{ @"currentTime": @(elapsedTime) }];
             });
             
             // 以0.1秒为单位递增
@@ -564,6 +578,9 @@
                 if ([strongSelf.delegate respondsToSelector:@selector(playerDidUpdateTime:)]) {
                     [strongSelf.delegate playerDidUpdateTime:elapsedTime];
                 }
+                [[NSNotificationCenter defaultCenter] postNotificationName:kAudioPlayerDidUpdateTimeNotification
+                                                                    object:strongSelf
+                                                                  userInfo:@{ @"currentTime": @(elapsedTime) }];
             });
             
             elapsedTime += 0.1;
@@ -606,6 +623,10 @@
                 if ([strongSelf.delegate respondsToSelector:@selector(playerDidLoadLyrics:)]) {
                     [strongSelf.delegate playerDidLoadLyrics:nil];
                 }
+                [[NSNotificationCenter defaultCenter] postNotificationName:kAudioPlayerDidLoadLyricsNotification
+                                                                    object:strongSelf
+                                                                  userInfo:@{ @"parser": [NSNull null],
+                                                                              @"filePath": strongSelf.currentFilePath ?: @"" }];
             } else {
                 strongSelf.lyricsParser = parser;
                 NSLog(@"歌词加载成功，共 %lu 行", (unsigned long)parser.lyrics.count);
@@ -614,6 +635,10 @@
                 if ([strongSelf.delegate respondsToSelector:@selector(playerDidLoadLyrics:)]) {
                     [strongSelf.delegate playerDidLoadLyrics:parser];
                 }
+                [[NSNotificationCenter defaultCenter] postNotificationName:kAudioPlayerDidLoadLyricsNotification
+                                                                    object:strongSelf
+                                                                  userInfo:@{ @"parser": parser,
+                                                                              @"filePath": strongSelf.currentFilePath ?: @"" }];
             }
         });
     }];

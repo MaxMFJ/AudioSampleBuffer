@@ -8,10 +8,23 @@
 #import <UIKit/UIKit.h>
 #import "LRCParser.h"
 #import "LyricsEffectType.h"
+#import <simd/simd.h>
 
 NS_ASSUME_NONNULL_BEGIN
 
+/// 视觉歌词回调，便于外部驱动 Metal 风格歌词特效
+@protocol LyricsViewVisualDelegate <NSObject>
+@optional
+- (void)lyricsView:(id)lyricsView didUpdateVisualLyricText:(nullable NSString *)text progress:(CGFloat)progress;
+- (void)lyricsView:(id)lyricsView didUpdateVisualLyricLines:(NSArray<NSString *> *)lines currentIndex:(NSInteger)currentIndex;
+@end
+
 @class LyricsView;
+
+/// 视觉歌词文本更新通知，userInfo: text, progress
+extern NSString *const kLyricsViewDidUpdateVisualTextNotification;
+/// 视觉歌词多行更新通知，userInfo: lines, currentIndex
+extern NSString *const kLyricsViewDidUpdateVisualLinesNotification;
 
 /// 歌词点击代理
 @protocol LyricsViewDelegate <NSObject>
@@ -31,6 +44,9 @@ NS_ASSUME_NONNULL_BEGIN
 
 /// 代理
 @property (nonatomic, weak, nullable) id<LyricsViewDelegate> delegate;
+
+/// 视觉歌词代理
+@property (nonatomic, weak, nullable) id<LyricsViewVisualDelegate> visualDelegate;
 
 /// 歌词解析器
 @property (nonatomic, strong, nullable) LRCParser *parser;
@@ -55,6 +71,9 @@ NS_ASSUME_NONNULL_BEGIN
 
 /// 当前特效类型
 @property (nonatomic, assign) LyricsEffectType currentEffect;
+
+/// 当前高亮歌词索引（只读）
+@property (nonatomic, assign, readonly) NSInteger currentIndex;
 
 /**
  * 更新当前播放时间，自动高亮并滚动到对应歌词

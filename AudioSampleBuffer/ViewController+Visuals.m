@@ -16,6 +16,7 @@
     self.visualEffectManager = [[VisualEffectManager alloc] initWithContainerView:self.view];
     self.visualEffectManager.delegate = self;
     [self.visualEffectManager setCurrentEffect:VisualEffectTypeNeonGlow animated:NO];
+    [self refreshVisualLyricsOverlayVisibility];
 
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(handleEffectSettingsButtonTapped:)
@@ -879,6 +880,7 @@
 - (void)visualEffectManager:(VisualEffectManager *)manager didChangeEffect:(VisualEffectType)effectType {
     [manager startRendering];
     [self updateEffectButtonStates:effectType];
+    [self refreshVisualLyricsOverlayVisibility];
 }
 
 - (void)visualEffectManager:(VisualEffectManager *)manager didUpdatePerformance:(NSDictionary *)stats {

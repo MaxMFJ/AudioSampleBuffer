@@ -252,6 +252,13 @@ NS_ASSUME_NONNULL_BEGIN
 @end
 
 /**
+ * 视觉歌词隧道渲染器 - 实验性效果
+ * 45° 斜向歌词流在屏幕中持续穿行，结合歌曲情绪颜色做发光氛围渲染
+ */
+@interface VisualLyricsTunnelRenderer : BaseMetalRenderer
+@end
+
+/**
  * 默认效果渲染器
  */
 @interface DefaultEffectRenderer : BaseMetalRenderer

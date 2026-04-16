@@ -128,7 +128,10 @@
 
         if (spectrums.count > 0) {
             NSArray *firstChannelData = spectrums.firstObject;
+            self.latestSpectrumData = firstChannelData;
             [self.visualEffectManager updateSpectrumData:firstChannelData];
+        } else {
+            self.latestSpectrumData = nil;
         }
     });
 }
@@ -166,11 +169,14 @@
             NSLog(@"   歌词行数: %lu", (unsigned long)parser.lyrics.count);
             self.lyricsContainer.hidden = NO;
             self.lyricsView.parser = parser;
+            [self updateVisualLyricsOverlayForCurrentIndex:0];
         } else {
             NSLog(@"⚠️ 未找到歌词");
             self.lyricsContainer.hidden = NO;
             self.lyricsView.parser = nil;
+            [self updateVisualLyricsOverlayForCurrentIndex:-1];
         }
+        [self refreshVisualLyricsOverlayVisibility];
     });
 }
 
@@ -195,6 +201,27 @@
 - (void)playerDidUpdateTime:(NSTimeInterval)currentTime {
     [self.lyricsView updateWithTime:currentTime];
     [self updateProgressWithCurrentTime:currentTime];
+    [self updateVisualLyricsOverlayForCurrentIndex:self.lyricsView.currentIndex];
+
+    NSArray<NSNumber *> *spectrum = self.latestSpectrumData ?: @[];
+    CGFloat bass = 0.0, mid = 0.0, treble = 0.0;
+    NSUInteger spectrumCount = MIN(spectrum.count, (NSUInteger)80);
+    for (NSUInteger i = 0; i < spectrumCount; i++) {
+        CGFloat value = [spectrum[i] doubleValue];
+        if (i <= 16) {
+            bass += value;
+        } else if (i <= 48) {
+            mid += value;
+        } else {
+            treble += value;
+        }
+    }
+    if (spectrumCount > 0) {
+        bass /= 17.0;
+        mid /= 32.0;
+        treble /= 31.0;
+    }
+    [self animateVisualLyricsOverlayWithBass:bass mid:mid treble:treble];
 
     NSTimeInterval now = [[NSDate date] timeIntervalSince1970];
     if (now - self.lastNowPlayingUpdateTime >= 5.0) {

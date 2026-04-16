@@ -23,6 +23,7 @@
 		4C110D5C2EAD500000D59E12 /* NeuralResonanceShader.metal in Sources */ = {isa = PBXBuildFile; fileRef = 4C110D5D2EAD500000D59E12 /* NeuralResonanceShader.metal */; };
 		4C110D5E2EAD600000D59E12 /* WormholeDriveShader.metal in Sources */ = {isa = PBXBuildFile; fileRef = 4C110D5F2EAD600000D59E12 /* WormholeDriveShader.metal */; };
 		4C8A100130BA500000ACCA11 /* PrismResonanceShader.metal in Sources */ = {isa = PBXBuildFile; fileRef = 4C8A100230BA500000ACCA11 /* PrismResonanceShader.metal */; };
+		4C8B200130BA600000ACCA11 /* VisualLyricsTunnelShader.metal in Sources */ = {isa = PBXBuildFile; fileRef = 4C8B200230BA600000ACCA11 /* VisualLyricsTunnelShader.metal */; };
 		4C6F9A0130B8401000ACCA11 /* ChromaticCausticsShader.metal in Sources */ = {isa = PBXBuildFile; fileRef = 4C6F9A0230B8401000ACCA11 /* ChromaticCausticsShader.metal */; };
 		4C2A51832F499DC700094D15 /* AgentMetricsCollector.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C2A517E2F499DC700094D15 /* AgentMetricsCollector.m */; };
 		4C2A51842F499DC700094D15 /* AgentReflectionEngine.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C2A51822F499DC700094D15 /* AgentReflectionEngine.m */; };
@@ -179,6 +180,7 @@
 		4C110D5D2EAD500000D59E12 /* NeuralResonanceShader.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = NeuralResonanceShader.metal; sourceTree = "<group>"; };
 		4C110D5F2EAD600000D59E12 /* WormholeDriveShader.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = WormholeDriveShader.metal; sourceTree = "<group>"; };
 		4C8A100230BA500000ACCA11 /* PrismResonanceShader.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = PrismResonanceShader.metal; sourceTree = "<group>"; };
+		4C8B200230BA600000ACCA11 /* VisualLyricsTunnelShader.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = VisualLyricsTunnelShader.metal; sourceTree = "<group>"; };
 		4C6F9A0230B8401000ACCA11 /* ChromaticCausticsShader.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = ChromaticCausticsShader.metal; sourceTree = "<group>"; };
 		4C2A517B2F499DC700094D15 /* AgentGoalManager.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AgentGoalManager.h; sourceTree = "<group>"; };
 		4C2A517C2F499DC700094D15 /* AgentGoalManager.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AgentGoalManager.m; sourceTree = "<group>"; };
@@ -776,6 +778,7 @@
 				4C110D5D2EAD500000D59E12 /* NeuralResonanceShader.metal */,
 				4C110D5F2EAD600000D59E12 /* WormholeDriveShader.metal */,
 				4C8A100230BA500000ACCA11 /* PrismResonanceShader.metal */,
+				4C8B200230BA600000ACCA11 /* VisualLyricsTunnelShader.metal */,
 				4C6F9A0230B8401000ACCA11 /* ChromaticCausticsShader.metal */,
 				4C66E7A12E8A9256003200DA /* SpectrumReduce.metal */,
 			);
@@ -1017,6 +1020,7 @@
 				4C110D5C2EAD500000D59E12 /* NeuralResonanceShader.metal in Sources */,
 				4C110D5E2EAD600000D59E12 /* WormholeDriveShader.metal in Sources */,
 				4C8A100130BA500000ACCA11 /* PrismResonanceShader.metal in Sources */,
+				4C8B200130BA600000ACCA11 /* VisualLyricsTunnelShader.metal in Sources */,
 				4C6F9A0130B8401000ACCA11 /* ChromaticCausticsShader.metal in Sources */,
 				4C66E7A02E8A9256003200DA /* SpectrumReduce.metal in Sources */,
 				4C699F8F2E9F951A009090AB /* AAFilter.cpp in Sources */,

@@ -76,6 +76,12 @@ NS_ASSUME_NONNULL_BEGIN
 
 @property (nonatomic, strong) LyricsView *lyricsView;
 @property (nonatomic, strong) UIView *lyricsContainer;
+@property (nonatomic, strong) NSArray<NSNumber *> *latestSpectrumData;
+@property (nonatomic, strong) UIView *visualLyricsOverlayView;
+@property (nonatomic, strong) NSArray<UILabel *> *visualLyricsOverlayLabels;
+@property (nonatomic, strong) NSArray<NSValue *> *visualLyricsOverlayBaseCenters;
+@property (nonatomic, assign) NSInteger visualLyricsHighlightSlot;
+@property (nonatomic, copy) NSString *visualLyricsLastHighlightedText;
 
 @property (nonatomic, strong) UIButton *karaokeButton;
 
@@ -146,6 +152,10 @@ NS_ASSUME_NONNULL_BEGIN
 @interface ViewController (Lyrics) <LyricsEffectControlDelegate, LyricsEditorViewControllerDelegate>
 
 - (void)setupLyricsView;
+- (void)setupVisualLyricsOverlay;
+- (void)updateVisualLyricsOverlayForCurrentIndex:(NSInteger)currentIndex;
+- (void)animateVisualLyricsOverlayWithBass:(CGFloat)bass mid:(CGFloat)mid treble:(CGFloat)treble;
+- (void)refreshVisualLyricsOverlayVisibility;
 - (void)karaokeButtonTapped:(UIButton *)sender;
 - (void)lyricsEffectButtonTapped:(UIButton *)sender;
 - (void)importLyricsButtonTapped:(UIButton *)sender;

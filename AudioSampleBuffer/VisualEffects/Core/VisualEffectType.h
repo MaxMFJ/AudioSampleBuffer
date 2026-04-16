@@ -45,6 +45,7 @@ typedef NS_ENUM(NSUInteger, VisualEffectType) {
     VisualEffectTypeNeuralResonance,        // 神经共振 - 仿神经网络拓扑脉冲
     VisualEffectTypeWormholeDrive,          // 虫洞穿梭 - 星尘柱状脉冲向屏幕袭来
     VisualEffectTypePrismResonance,         // 棱镜共振 - 清晰几何频段分层
+    VisualEffectTypeVisualLyricsTunnel,     // 视觉歌词隧道 - 45° 斜向歌词流持续入场与离场
 
     // 数量
     VisualEffectTypeCount
