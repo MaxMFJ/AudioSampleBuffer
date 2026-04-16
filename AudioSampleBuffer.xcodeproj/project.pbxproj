@@ -22,17 +22,11 @@
 		4C110D5A2EAD400000D59E12 /* TyndallBeamShader.metal in Sources */ = {isa = PBXBuildFile; fileRef = 4C110D5B2EAD400000D59E12 /* TyndallBeamShader.metal */; };
 		4C110D5C2EAD500000D59E12 /* NeuralResonanceShader.metal in Sources */ = {isa = PBXBuildFile; fileRef = 4C110D5D2EAD500000D59E12 /* NeuralResonanceShader.metal */; };
 		4C110D5E2EAD600000D59E12 /* WormholeDriveShader.metal in Sources */ = {isa = PBXBuildFile; fileRef = 4C110D5F2EAD600000D59E12 /* WormholeDriveShader.metal */; };
-		4C8A100130BA500000ACCA11 /* PrismResonanceShader.metal in Sources */ = {isa = PBXBuildFile; fileRef = 4C8A100230BA500000ACCA11 /* PrismResonanceShader.metal */; };
-		4C8B200130BA600000ACCA11 /* VisualLyricsTunnelShader.metal in Sources */ = {isa = PBXBuildFile; fileRef = 4C8B200230BA600000ACCA11 /* VisualLyricsTunnelShader.metal */; };
-		4C6F9A0130B8401000ACCA11 /* ChromaticCausticsShader.metal in Sources */ = {isa = PBXBuildFile; fileRef = 4C6F9A0230B8401000ACCA11 /* ChromaticCausticsShader.metal */; };
 		4C2A51832F499DC700094D15 /* AgentMetricsCollector.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C2A517E2F499DC700094D15 /* AgentMetricsCollector.m */; };
 		4C2A51842F499DC700094D15 /* AgentReflectionEngine.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C2A51822F499DC700094D15 /* AgentReflectionEngine.m */; };
 		4C2A51852F499DC700094D15 /* AgentGoalManager.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C2A517C2F499DC700094D15 /* AgentGoalManager.m */; };
 		4C2A51862F499DC700094D15 /* AgentPlanner.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C2A51802F499DC700094D15 /* AgentPlanner.m */; };
-		4C2C69F02EA216AF00D18118 /* 队长 - 楼顶上的小斑鸠.ncm in Resources */ = {isa = PBXBuildFile; fileRef = 4C2C69EC2EA216AF00D18118 /* 队长 - 楼顶上的小斑鸠.ncm */; };
 		4C2C69F12EA216AF00D18118 /* 小霞,海洋Bo - 向云端.ncm in Resources */ = {isa = PBXBuildFile; fileRef = 4C2C69EF2EA216AF00D18118 /* 小霞,海洋Bo - 向云端.ncm */; };
-		4C2C69F22EA216AF00D18118 /* 郭顶 - 凄美地.ncm in Resources */ = {isa = PBXBuildFile; fileRef = 4C2C69ED2EA216AF00D18118 /* 郭顶 - 凄美地.ncm */; };
-		4C2C69F32EA216AF00D18118 /* 黄绮珊 - 离不开你 (Live).ncm in Resources */ = {isa = PBXBuildFile; fileRef = 4C2C69EE2EA216AF00D18118 /* 黄绮珊 - 离不开你 (Live).ncm */; };
 		4C2C6A232EA2170A00D18118 /* smallft.c in Sources */ = {isa = PBXBuildFile; fileRef = 4C2C6A122EA2170A00D18118 /* smallft.c */; };
 		4C2C6A252EA2170A00D18118 /* resample.c in Sources */ = {isa = PBXBuildFile; fileRef = 4C2C6A0D2EA2170A00D18118 /* resample.c */; };
 		4C2C6A282EA2170A00D18118 /* jitter.c in Sources */ = {isa = PBXBuildFile; fileRef = 4C2C6A022EA2170A00D18118 /* jitter.c */; };
@@ -61,10 +55,6 @@
 		4C5168842E9E5FD500853960 /* LRCParser.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C5168722E9E5FD500853960 /* LRCParser.m */; };
 		4C51693FE5D91950459F8E6D /* VoiceEffectProcessor.mm in Sources */ = {isa = PBXBuildFile; fileRef = 4C51DB61D13DB2C847B685D5 /* VoiceEffectProcessor.mm */; };
 		4C5C27AE2E9CC24D00D9AEA9 /* PerformanceControlPanel.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C5C27AD2E9CC24D00D9AEA9 /* PerformanceControlPanel.m */; };
-		4C5E4BB82EA10825009B5708 /* 队长 - 哪里都是你.mp3 in Resources */ = {isa = PBXBuildFile; fileRef = 4C5E4B9D2EA10825009B5708 /* 队长 - 哪里都是你.mp3 */; };
-		4C5E4BC02EA10DA5009B5708 /* 赵雷 - 吉姆餐厅.ncm in Resources */ = {isa = PBXBuildFile; fileRef = 4C5E4BBD2EA10DA5009B5708 /* 赵雷 - 吉姆餐厅.ncm */; };
-		4C5E4BC12EA10DA5009B5708 /* Jessie J - Thunder.ncm in Resources */ = {isa = PBXBuildFile; fileRef = 4C5E4BBF2EA10DA5009B5708 /* Jessie J - Thunder.ncm */; };
-		4C5E4BC22EA10DA5009B5708 /* G.E.M.邓紫棋 - 句号.ncm in Resources */ = {isa = PBXBuildFile; fileRef = 4C5E4BBE2EA10DA5009B5708 /* G.E.M.邓紫棋 - 句号.ncm */; };
 		4C5E4BC52EA10E13009B5708 /* MusicLibraryManager.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C5E4BC42EA10E13009B5708 /* MusicLibraryManager.m */; };
 		4C65485C2EA0A47E006DD8DD /* AudioFileFormats.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C65485B2EA0A47E006DD8DD /* AudioFileFormats.m */; };
 		4C6548652EA0AB71006DD8DD /* QQMusicLyricsAPI.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C6548642EA0AB71006DD8DD /* QQMusicLyricsAPI.m */; };
@@ -77,7 +67,6 @@
 		4C6548852EA0C500006DD8DD /* extract_ncm_lyrics.sh in Resources */ = {isa = PBXBuildFile; fileRef = 4C6548722EA0C500006DD8DD /* extract_ncm_lyrics.sh */; };
 		4C6548862EA0C500006DD8DD /* ncm_lyrics_extractor.py in Resources */ = {isa = PBXBuildFile; fileRef = 4C6548752EA0C500006DD8DD /* ncm_lyrics_extractor.py */; };
 		4C6548872EA0C500006DD8DD /* decrypt_ncm_to_mp3.py in Resources */ = {isa = PBXBuildFile; fileRef = 4C6548702EA0C500006DD8DD /* decrypt_ncm_to_mp3.py */; };
-		4C6548B52EA0E643006DD8DD /* 福禄寿FloruitShow - 我用什么把你留住.ncm in Resources */ = {isa = PBXBuildFile; fileRef = 4C6548B42EA0E643006DD8DD /* 福禄寿FloruitShow - 我用什么把你留住.ncm */; };
 		4C66E7062E8A8DBB003200DA /* AnimationCoordinator.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C66E6F82E8A8DBB003200DA /* AnimationCoordinator.m */; };
 		4C66E7072E8A8DBB003200DA /* RotationAnimationManager.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C66E7012E8A8DBB003200DA /* RotationAnimationManager.m */; };
 		4C66E7082E8A8DBB003200DA /* SpectrumAnimationManager.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C66E7032E8A8DBB003200DA /* SpectrumAnimationManager.m */; };
@@ -119,6 +108,7 @@
 		4C699F8D2E9F951A009090AB /* cpu_detect_x86.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4C699F6A2E9F951A009090AB /* cpu_detect_x86.cpp */; };
 		4C699F8E2E9F951A009090AB /* SoundTouchBridge.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4C699F7D2E9F951A009090AB /* SoundTouchBridge.cpp */; };
 		4C699F8F2E9F951A009090AB /* AAFilter.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 4C699F662E9F951A009090AB /* AAFilter.cpp */; };
+		4C6F9A0130B8401000ACCA11 /* ChromaticCausticsShader.metal in Sources */ = {isa = PBXBuildFile; fileRef = 4C6F9A0230B8401000ACCA11 /* ChromaticCausticsShader.metal */; };
 		4C77CD1B2E990F61008EA7C6 /* CyberpunkControlPanel.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C77CD1A2E990F61008EA7C6 /* CyberpunkControlPanel.m */; };
 		4C7D33972EFEEC8D0027CBC8 /* ViewController+PlaybackProgress.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C7D33962EFEEC8D0027CBC8 /* ViewController+PlaybackProgress.m */; };
 		4C7D339A2EFEEC950027CBC8 /* AudioProgressView.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C7D33992EFEEC950027CBC8 /* AudioProgressView.m */; };
@@ -130,6 +120,8 @@
 		4C7D33C02F11200000000005 /* LyricsTimingControlView.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C7D33B02F1110000000000A /* LyricsTimingControlView.m */; };
 		4C7D33C02F11200000000006 /* AudioWaveformView.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C7D33B02F1110000000000C /* AudioWaveformView.m */; };
 		4C7D33C02F11200000000007 /* LocalLyricsListViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C7D33B02F1110000000000E /* LocalLyricsListViewController.m */; };
+		4C8A100130BA500000ACCA11 /* PrismResonanceShader.metal in Sources */ = {isa = PBXBuildFile; fileRef = 4C8A100230BA500000ACCA11 /* PrismResonanceShader.metal */; };
+		4C8B200130BA600000ACCA11 /* VisualLyricsTunnelShader.metal in Sources */ = {isa = PBXBuildFile; fileRef = 4C8B200230BA600000ACCA11 /* VisualLyricsTunnelShader.metal */; };
 		4CCDEFC82F497C7C00A2DB9C /* VisualEffectAIController.m in Sources */ = {isa = PBXBuildFile; fileRef = 4CCDEFC72F497C7C00A2DB9C /* VisualEffectAIController.m */; };
 		4CCDEFC92F497C7C00A2DB9C /* UserPreferenceEngine.m in Sources */ = {isa = PBXBuildFile; fileRef = 4CCDEFC52F497C7C00A2DB9C /* UserPreferenceEngine.m */; };
 		4CCDEFCA2F497C7C00A2DB9C /* EffectDecisionAgent.m in Sources */ = {isa = PBXBuildFile; fileRef = 4CCDEFBB2F497C7C00A2DB9C /* EffectDecisionAgent.m */; };
@@ -179,9 +171,6 @@
 		4C110D5B2EAD400000D59E12 /* TyndallBeamShader.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = TyndallBeamShader.metal; sourceTree = "<group>"; };
 		4C110D5D2EAD500000D59E12 /* NeuralResonanceShader.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = NeuralResonanceShader.metal; sourceTree = "<group>"; };
 		4C110D5F2EAD600000D59E12 /* WormholeDriveShader.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = WormholeDriveShader.metal; sourceTree = "<group>"; };
-		4C8A100230BA500000ACCA11 /* PrismResonanceShader.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = PrismResonanceShader.metal; sourceTree = "<group>"; };
-		4C8B200230BA600000ACCA11 /* VisualLyricsTunnelShader.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = VisualLyricsTunnelShader.metal; sourceTree = "<group>"; };
-		4C6F9A0230B8401000ACCA11 /* ChromaticCausticsShader.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = ChromaticCausticsShader.metal; sourceTree = "<group>"; };
 		4C2A517B2F499DC700094D15 /* AgentGoalManager.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AgentGoalManager.h; sourceTree = "<group>"; };
 		4C2A517C2F499DC700094D15 /* AgentGoalManager.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AgentGoalManager.m; sourceTree = "<group>"; };
 		4C2A517D2F499DC700094D15 /* AgentMetricsCollector.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AgentMetricsCollector.h; sourceTree = "<group>"; };
@@ -190,9 +179,6 @@
 		4C2A51802F499DC700094D15 /* AgentPlanner.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AgentPlanner.m; sourceTree = "<group>"; };
 		4C2A51812F499DC700094D15 /* AgentReflectionEngine.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AgentReflectionEngine.h; sourceTree = "<group>"; };
 		4C2A51822F499DC700094D15 /* AgentReflectionEngine.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AgentReflectionEngine.m; sourceTree = "<group>"; };
-		4C2C69EC2EA216AF00D18118 /* 队长 - 楼顶上的小斑鸠.ncm */ = {isa = PBXFileReference; lastKnownFileType = file; path = "队长 - 楼顶上的小斑鸠.ncm"; sourceTree = "<group>"; };
-		4C2C69ED2EA216AF00D18118 /* 郭顶 - 凄美地.ncm */ = {isa = PBXFileReference; lastKnownFileType = file; path = "郭顶 - 凄美地.ncm"; sourceTree = "<group>"; };
-		4C2C69EE2EA216AF00D18118 /* 黄绮珊 - 离不开你 (Live).ncm */ = {isa = PBXFileReference; lastKnownFileType = file; path = "黄绮珊 - 离不开你 (Live).ncm"; sourceTree = "<group>"; };
 		4C2C69EF2EA216AF00D18118 /* 小霞,海洋Bo - 向云端.ncm */ = {isa = PBXFileReference; lastKnownFileType = file; path = "小霞,海洋Bo - 向云端.ncm"; sourceTree = "<group>"; };
 		4C2C69F42EA2170A00D18118 /* _kiss_fft_guts.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = _kiss_fft_guts.h; sourceTree = "<group>"; };
 		4C2C69F52EA2170A00D18118 /* arch.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = arch.h; sourceTree = "<group>"; };
@@ -262,10 +248,6 @@
 		4C51DB61D13DB2C847B685D5 /* VoiceEffectProcessor.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = VoiceEffectProcessor.mm; sourceTree = "<group>"; };
 		4C5C27AC2E9CC24D00D9AEA9 /* PerformanceControlPanel.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = PerformanceControlPanel.h; sourceTree = "<group>"; };
 		4C5C27AD2E9CC24D00D9AEA9 /* PerformanceControlPanel.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = PerformanceControlPanel.m; sourceTree = "<group>"; };
-		4C5E4B9D2EA10825009B5708 /* 队长 - 哪里都是你.mp3 */ = {isa = PBXFileReference; lastKnownFileType = audio.mp3; path = "队长 - 哪里都是你.mp3"; sourceTree = "<group>"; };
-		4C5E4BBD2EA10DA5009B5708 /* 赵雷 - 吉姆餐厅.ncm */ = {isa = PBXFileReference; lastKnownFileType = file; path = "赵雷 - 吉姆餐厅.ncm"; sourceTree = "<group>"; };
-		4C5E4BBE2EA10DA5009B5708 /* G.E.M.邓紫棋 - 句号.ncm */ = {isa = PBXFileReference; lastKnownFileType = file; path = "G.E.M.邓紫棋 - 句号.ncm"; sourceTree = "<group>"; };
-		4C5E4BBF2EA10DA5009B5708 /* Jessie J - Thunder.ncm */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Jessie J - Thunder.ncm"; sourceTree = "<group>"; };
 		4C5E4BC32EA10E13009B5708 /* MusicLibraryManager.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = MusicLibraryManager.h; sourceTree = "<group>"; };
 		4C5E4BC42EA10E13009B5708 /* MusicLibraryManager.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = MusicLibraryManager.m; sourceTree = "<group>"; };
 		4C65485A2EA0A47E006DD8DD /* AudioFileFormats.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AudioFileFormats.h; sourceTree = "<group>"; };
@@ -281,7 +263,6 @@
 		4C6548782EA0C500006DD8DD /* sync_lyrics_to_sandbox.sh */ = {isa = PBXFileReference; lastKnownFileType = text.script.sh; path = sync_lyrics_to_sandbox.sh; sourceTree = "<group>"; };
 		4C6548792EA0C500006DD8DD /* test_qqmusic_lyrics.sh */ = {isa = PBXFileReference; lastKnownFileType = text.script.sh; path = test_qqmusic_lyrics.sh; sourceTree = "<group>"; };
 		4C65487A2EA0C500006DD8DD /* unlock_qq_music.py */ = {isa = PBXFileReference; lastKnownFileType = text.script.python; path = unlock_qq_music.py; sourceTree = "<group>"; };
-		4C6548B42EA0E643006DD8DD /* 福禄寿FloruitShow - 我用什么把你留住.ncm */ = {isa = PBXFileReference; lastKnownFileType = file; path = "福禄寿FloruitShow - 我用什么把你留住.ncm"; sourceTree = "<group>"; };
 		4C66E6F72E8A8DBB003200DA /* AnimationCoordinator.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AnimationCoordinator.h; sourceTree = "<group>"; };
 		4C66E6F82E8A8DBB003200DA /* AnimationCoordinator.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AnimationCoordinator.m; sourceTree = "<group>"; };
 		4C66E6F92E8A8DBB003200DA /* AnimationProtocol.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AnimationProtocol.h; sourceTree = "<group>"; };
@@ -354,6 +335,7 @@
 		4C699F7F2E9F951A009090AB /* STTypes.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = STTypes.h; sourceTree = "<group>"; };
 		4C699F802E9F951A009090AB /* TDStretch.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = TDStretch.h; sourceTree = "<group>"; };
 		4C699F812E9F951A009090AB /* TDStretch.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = TDStretch.cpp; sourceTree = "<group>"; };
+		4C6F9A0230B8401000ACCA11 /* ChromaticCausticsShader.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = ChromaticCausticsShader.metal; sourceTree = "<group>"; };
 		4C77CD192E990F61008EA7C6 /* CyberpunkControlPanel.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = CyberpunkControlPanel.h; sourceTree = "<group>"; };
 		4C77CD1A2E990F61008EA7C6 /* CyberpunkControlPanel.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = CyberpunkControlPanel.m; sourceTree = "<group>"; };
 		4C7D33952EFEEC8D0027CBC8 /* ViewController+PlaybackProgress.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "ViewController+PlaybackProgress.h"; sourceTree = "<group>"; };
@@ -376,6 +358,8 @@
 		4C7D33B02F1110000000000C /* AudioWaveformView.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AudioWaveformView.m; sourceTree = "<group>"; };
 		4C7D33B02F1110000000000D /* LocalLyricsListViewController.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = LocalLyricsListViewController.h; sourceTree = "<group>"; };
 		4C7D33B02F1110000000000E /* LocalLyricsListViewController.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = LocalLyricsListViewController.m; sourceTree = "<group>"; };
+		4C8A100230BA500000ACCA11 /* PrismResonanceShader.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = PrismResonanceShader.metal; sourceTree = "<group>"; };
+		4C8B200230BA600000ACCA11 /* VisualLyricsTunnelShader.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = VisualLyricsTunnelShader.metal; sourceTree = "<group>"; };
 		4CCDEFB82F497C7C00A2DB9C /* AudioFeatureExtractor.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AudioFeatureExtractor.h; sourceTree = "<group>"; };
 		4CCDEFB92F497C7C00A2DB9C /* AudioFeatureExtractor.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AudioFeatureExtractor.m; sourceTree = "<group>"; };
 		4CCDEFBA2F497C7C00A2DB9C /* EffectDecisionAgent.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = EffectDecisionAgent.h; sourceTree = "<group>"; };
@@ -573,15 +557,7 @@
 		4C66E6D82E8A89E8003200DA /* Audio */ = {
 			isa = PBXGroup;
 			children = (
-				4C6548B42EA0E643006DD8DD /* 福禄寿FloruitShow - 我用什么把你留住.ncm */,
 				4C6548DE2EA0ECE0006DD8DD /* lrc */,
-				4C5E4B9D2EA10825009B5708 /* 队长 - 哪里都是你.mp3 */,
-				4C5E4BBD2EA10DA5009B5708 /* 赵雷 - 吉姆餐厅.ncm */,
-				4C5E4BBE2EA10DA5009B5708 /* G.E.M.邓紫棋 - 句号.ncm */,
-				4C5E4BBF2EA10DA5009B5708 /* Jessie J - Thunder.ncm */,
-				4C2C69EC2EA216AF00D18118 /* 队长 - 楼顶上的小斑鸠.ncm */,
-				4C2C69ED2EA216AF00D18118 /* 郭顶 - 凄美地.ncm */,
-				4C2C69EE2EA216AF00D18118 /* 黄绮珊 - 离不开你 (Live).ncm */,
 				4C2C69EF2EA216AF00D18118 /* 小霞,海洋Bo - 向云端.ncm */,
 			);
 			path = Audio;
@@ -954,20 +930,12 @@
 			buildActionMask = 2147483647;
 			files = (
 				64C5447028C838D400C23393 /* LaunchScreen.storyboard in Resources */,
-				4C6548B52EA0E643006DD8DD /* 福禄寿FloruitShow - 我用什么把你留住.ncm in Resources */,
 				64C5446D28C838D400C23393 /* Assets.xcassets in Resources */,
 				4C65487C2EA0C500006DD8DD /* test_qqmusic_lyrics.sh in Resources */,
 				4C65487D2EA0C500006DD8DD /* check_mp3_lyrics.py in Resources */,
 				4C6548802EA0C500006DD8DD /* unlock_qq_music.py in Resources */,
-				4C5E4BC02EA10DA5009B5708 /* 赵雷 - 吉姆餐厅.ncm in Resources */,
-				4C5E4BC12EA10DA5009B5708 /* Jessie J - Thunder.ncm in Resources */,
-				4C5E4BC22EA10DA5009B5708 /* G.E.M.邓紫棋 - 句号.ncm in Resources */,
-				4C5E4BB82EA10825009B5708 /* 队长 - 哪里都是你.mp3 in Resources */,
 				4C09454D2F7A4F8000D48B3B /* SKILL.md in Resources */,
-				4C2C69F02EA216AF00D18118 /* 队长 - 楼顶上的小斑鸠.ncm in Resources */,
 				4C2C69F12EA216AF00D18118 /* 小霞,海洋Bo - 向云端.ncm in Resources */,
-				4C2C69F22EA216AF00D18118 /* 郭顶 - 凄美地.ncm in Resources */,
-				4C2C69F32EA216AF00D18118 /* 黄绮珊 - 离不开你 (Live).ncm in Resources */,
 				4C6548822EA0C500006DD8DD /* ncm_enhanced_lyrics_checker.py in Resources */,
 				4C6548832EA0C500006DD8DD /* batch_extract_lyrics.sh in Resources */,
 				4C6548842EA0C500006DD8DD /* sync_lyrics_to_sandbox.sh in Resources */,
