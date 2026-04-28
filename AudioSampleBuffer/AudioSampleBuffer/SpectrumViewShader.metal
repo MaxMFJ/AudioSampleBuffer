@@ -31,6 +31,9 @@ struct SpectrumUniforms {
     float  colorSaturation; // 饱和度 (0-1)
     float  colorBrightness; // 亮度倍数 (0.5-2.0)
     float  hueShift;        // 色相偏移 (0-1)
+    float  opacity;         // 整体透明度
+    int    layoutStyle;     // 0=圆环, 1=竖向音柱, 2=双向音柱
+    float2 layoutOffset;    // 归一化偏移，基于视图中心
 };
 
 struct SpectrumVertex {
@@ -126,66 +129,135 @@ fragment float4 spectrumFragmentShader(
 ) {
     float2 uv = in.texCoord;
     float2 res = u.resolution.xy;
-    float2 d = (uv - 0.5) * res;
-    float r = radiusInscribedCircle(uv, res);  // 真圆半径，1.0 = 内接圆
-    float theta = atan2(-d.x, d.y);
-    if (theta < 0.0) theta += 2.0 * M_PI_F;
-
     int bandCount = u.bandCount;
-    float bandAngle = 2.0 * M_PI_F / float(bandCount);
-    float gapRatio = 0.15;
-    float barAngle = bandAngle * (1.0 - gapRatio);
+    float2 centerUV = float2(0.5 + u.layoutOffset.x, 0.5 + u.layoutOffset.y);
 
-    int bandIdx = int(theta / bandAngle);
-    if (bandIdx >= bandCount) bandIdx = bandCount - 1;
-    float localAngle = theta - float(bandIdx) * bandAngle;
-    bool inBar = (localAngle >= 0.0 && localAngle <= barAngle);
+    if (u.layoutStyle == 0) {
+        float2 d = (uv - centerUV) * res;
+        float r = 2.0 * length(d) / min(res.x, res.y);
+        float theta = atan2(-d.x, d.y);
+        if (theta < 0.0) theta += 2.0 * M_PI_F;
 
-    float amplitude = amplitudes[bandIdx];
-    float barHeight = amplitude * u.amplitudeScale;
-    barHeight = clamp(barHeight, 0.002, u.maxBarHeight);
-    float outerR = u.innerRadius + barHeight;
-    bool inRadius = (r >= u.innerRadius && r <= outerR);
+        float bandAngle = 2.0 * M_PI_F / float(bandCount);
+        float gapRatio = 0.15;
+        float barAngle = bandAngle * (1.0 - gapRatio);
 
-    if (inBar && inRadius) {
-        // 计算径向位置用于亮度渐变
-        float radialPos = (r - u.innerRadius) / max(barHeight, 0.001);
-        float baseBrightness = mix(0.85, 1.0, radialPos) * u.colorBrightness;
-        
-        // 使用新的颜色计算函数
-        float3 rgb = computeBarColor(u.colorMode, u.primaryColor, u.secondaryColor,
-                                     u.colorSaturation, baseBrightness, u.hueShift,
-                                     bandIdx, bandCount, u.time, u.rotationSpeed, radialPos);
+        int bandIdx = int(theta / bandAngle);
+        if (bandIdx >= bandCount) bandIdx = bandCount - 1;
+        float localAngle = theta - float(bandIdx) * bandAngle;
+        bool inBar = (localAngle >= 0.0 && localAngle <= barAngle);
 
-        float edgeSoft = 0.008;
-        float radialAlpha = smoothstep(u.innerRadius - edgeSoft, u.innerRadius, r)
-                          * smoothstep(outerR + edgeSoft, outerR, r);
-        float angularAlpha = smoothstep(0.0, edgeSoft, localAngle)
-                           * smoothstep(barAngle, barAngle - edgeSoft, localAngle);
-        float alpha = radialAlpha * angularAlpha;
+        float amplitude = amplitudes[bandIdx];
+        float barHeight = clamp(amplitude * u.amplitudeScale, 0.002, u.maxBarHeight);
+        float outerR = u.innerRadius + barHeight;
+        bool inRadius = (r >= u.innerRadius && r <= outerR);
 
-        float glow = 0.0;
-        if (u.glowIntensity > 0.0 && r > outerR - barHeight * 0.2) {
-            float glowRange = barHeight * 0.3;
-            float glowDist = max(0.0, r - outerR);
-            if (glowDist < glowRange)
-                glow = (1.0 - glowDist / glowRange) * u.glowIntensity * amplitude;
-        }
-        return float4(rgb, alpha + glow * 0.5);
-    }
-
-    if (u.glowIntensity > 0.0 && inBar) {
-        float amplitude2 = amplitudes[bandIdx];
-        float barH = clamp(amplitude2 * u.amplitudeScale, 0.002, u.maxBarHeight);
-        float outerR2 = u.innerRadius + barH;
-        float glowRange = max(barH * 0.25, 0.01);
-        if (r > outerR2 && r < outerR2 + glowRange) {
-            // 使用相同的颜色模式计算光晕颜色
+        if (inBar && inRadius) {
+            float radialPos = (r - u.innerRadius) / max(barHeight, 0.001);
+            float baseBrightness = mix(0.85, 1.0, radialPos) * u.colorBrightness;
             float3 rgb = computeBarColor(u.colorMode, u.primaryColor, u.secondaryColor,
-                                         u.colorSaturation * 0.8, u.colorBrightness, u.hueShift,
-                                         bandIdx, bandCount, u.time, u.rotationSpeed, 1.0);
-            float glowAlpha = (1.0 - (r - outerR2) / glowRange) * u.glowIntensity * amplitude2 * 0.4;
-            return float4(rgb, glowAlpha);
+                                         u.colorSaturation, baseBrightness, u.hueShift,
+                                         bandIdx, bandCount, u.time, u.rotationSpeed, radialPos);
+
+            float edgeSoft = 0.008;
+            float radialAlpha = smoothstep(u.innerRadius - edgeSoft, u.innerRadius, r)
+                              * smoothstep(outerR + edgeSoft, outerR, r);
+            float angularAlpha = smoothstep(0.0, edgeSoft, localAngle)
+                               * smoothstep(barAngle, barAngle - edgeSoft, localAngle);
+            float alpha = radialAlpha * angularAlpha;
+
+            return float4(rgb, alpha * u.opacity);
+        }
+
+        if (u.glowIntensity > 0.0 && inBar) {
+            float amplitude2 = amplitudes[bandIdx];
+            float barH = clamp(amplitude2 * u.amplitudeScale, 0.002, u.maxBarHeight);
+            float outerR2 = u.innerRadius + barH;
+            float glowRange = max(barH * 0.25, 0.01);
+            if (r > outerR2 && r < outerR2 + glowRange) {
+                float3 rgb = computeBarColor(u.colorMode, u.primaryColor, u.secondaryColor,
+                                             u.colorSaturation * 0.8, u.colorBrightness, u.hueShift,
+                                             bandIdx, bandCount, u.time, u.rotationSpeed, 1.0);
+                float glowAlpha = (1.0 - (r - outerR2) / glowRange) * u.glowIntensity * amplitude2 * 0.4;
+                return float4(rgb, glowAlpha * u.opacity);
+            }
+        }
+    } else {
+        float contentWidth = 0.78;
+        float slotWidth = contentWidth / float(bandCount);
+        float barWidth = slotWidth * 0.68;
+        float halfBarWidth = barWidth * 0.5;
+        float leftX = centerUV.x - contentWidth * 0.5;
+        float localX = uv.x - leftX;
+
+        if (localX >= 0.0 && localX <= contentWidth) {
+            int bandIdx = min(int(localX / slotWidth), bandCount - 1);
+            float barCenterX = leftX + (float(bandIdx) + 0.5) * slotWidth;
+            float xDist = abs(uv.x - barCenterX);
+            float amplitude = clamp(amplitudes[bandIdx], 0.0, 1.0);
+            float scaledHeight = clamp(amplitude * 0.52, 0.015, 0.42);
+            float edgeSoftX = max(slotWidth * 0.12, 0.0025);
+
+            if (u.layoutStyle == 1) {
+                float baseY = clamp(0.84 + u.layoutOffset.y, 0.38, 0.92);
+                float topY = max(0.05, baseY - scaledHeight);
+                bool inRect = (xDist <= halfBarWidth && uv.y >= topY && uv.y <= baseY);
+                if (inRect) {
+                    float radialPos = clamp((baseY - uv.y) / max(baseY - topY, 0.001), 0.0, 1.0);
+                    float baseBrightness = mix(0.8, 1.08, radialPos) * u.colorBrightness;
+                    float3 rgb = computeBarColor(u.colorMode, u.primaryColor, u.secondaryColor,
+                                                 u.colorSaturation, baseBrightness, u.hueShift,
+                                                 bandIdx, bandCount, u.time, u.rotationSpeed, radialPos);
+                    float alphaX = smoothstep(halfBarWidth + edgeSoftX, halfBarWidth - edgeSoftX, xDist);
+                    float edgeSoftY = 0.01;
+                    float alphaY = smoothstep(topY - edgeSoftY, topY + edgeSoftY, uv.y)
+                                 * smoothstep(baseY + edgeSoftY, baseY - edgeSoftY, uv.y);
+                    return float4(rgb, alphaX * alphaY * u.opacity);
+                }
+            } else {
+                float centerY = clamp(centerUV.y, 0.18, 0.82);
+                float topY = max(0.04, centerY - scaledHeight);
+                float bottomY = min(0.96, centerY + scaledHeight);
+                bool inRect = (xDist <= halfBarWidth && uv.y >= topY && uv.y <= bottomY);
+                if (inRect) {
+                    float radialPos = 1.0 - clamp(abs(uv.y - centerY) / max(scaledHeight, 0.001), 0.0, 1.0);
+                    float baseBrightness = mix(0.82, 1.12, radialPos) * u.colorBrightness;
+                    float3 rgb = computeBarColor(u.colorMode, u.primaryColor, u.secondaryColor,
+                                                 u.colorSaturation, baseBrightness, u.hueShift,
+                                                 bandIdx, bandCount, u.time, u.rotationSpeed, radialPos);
+                    float alphaX = smoothstep(halfBarWidth + edgeSoftX, halfBarWidth - edgeSoftX, xDist);
+                    float edgeSoftY = 0.01;
+                    float alphaY = smoothstep(topY - edgeSoftY, topY + edgeSoftY, uv.y)
+                                 * smoothstep(bottomY + edgeSoftY, bottomY - edgeSoftY, uv.y);
+                    return float4(rgb, alphaX * alphaY * u.opacity);
+                }
+            }
+
+            if (u.glowIntensity > 0.0 && xDist <= halfBarWidth + slotWidth * 0.25) {
+                float3 rgb = computeBarColor(u.colorMode, u.primaryColor, u.secondaryColor,
+                                             u.colorSaturation * 0.85, u.colorBrightness, u.hueShift,
+                                             bandIdx, bandCount, u.time, u.rotationSpeed, 1.0);
+                float glowAlpha = 0.0;
+                if (u.layoutStyle == 1) {
+                    float baseY = clamp(0.84 + u.layoutOffset.y, 0.38, 0.92);
+                    float topY = max(0.05, baseY - scaledHeight);
+                    if (uv.y < topY && uv.y > topY - 0.035) {
+                        glowAlpha = (1.0 - (topY - uv.y) / 0.035) * amplitude * 0.22 * u.glowIntensity;
+                    }
+                } else {
+                    float centerY = clamp(centerUV.y, 0.18, 0.82);
+                    float topY = max(0.04, centerY - scaledHeight);
+                    float bottomY = min(0.96, centerY + scaledHeight);
+                    if (uv.y < topY && uv.y > topY - 0.03) {
+                        glowAlpha = (1.0 - (topY - uv.y) / 0.03) * amplitude * 0.18 * u.glowIntensity;
+                    } else if (uv.y > bottomY && uv.y < bottomY + 0.03) {
+                        glowAlpha = (1.0 - (uv.y - bottomY) / 0.03) * amplitude * 0.18 * u.glowIntensity;
+                    }
+                }
+                if (glowAlpha > 0.0) {
+                    return float4(rgb, glowAlpha * u.opacity);
+                }
+            }
         }
     }
 

@@ -13,6 +13,10 @@
 - (void)hadEnterBackGround {
     NSLog(@"🔄 进入后台，停止所有GPU渲染...");
     self.isInBackground = YES;
+    if (self.isBackgroundMediaEffectActive) {
+        [self.backgroundVideoPlayer pause];
+        self.backgroundVideoLayer.hidden = NO;
+    }
     [self.animationCoordinator applicationDidEnterBackground];
 
     [self.visualEffectManager pauseRendering];
@@ -94,6 +98,10 @@
     }
 
     self.wasPlayingBeforeBackground = NO;
+
+    if (self.isBackgroundMediaEffectActive) {
+        [self playSelectedBackgroundMediaIfNeeded];
+    }
 
     NSLog(@"✅ 前台恢复完成，GPU渲染已重新启动");
 }

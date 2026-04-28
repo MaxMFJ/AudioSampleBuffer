@@ -30,6 +30,9 @@ typedef struct {
     float       colorSaturation; // 饱和度 (0-1)
     float       colorBrightness; // 亮度倍数 (0.5-2.0)
     float       hueShift;        // 色相偏移 (0-1)
+    float       opacity;         // 整体透明度
+    int         layoutStyle;     // 0=圆环, 1=竖向音柱, 2=双向音柱
+    simd_float2 layoutOffset;    // 归一化偏移，基于视图中心
 } SpectrumUniforms;
 
 // 颜色模式枚举
@@ -87,6 +90,10 @@ typedef NS_ENUM(NSInteger, SpectrumColorMode) {
         _colorSaturation = 1.0;
         _colorBrightness = 1.0;
         _hueShift = 0.0;
+        _opacity = 1.0;
+        _layoutStyle = ADSpectrumLayoutStyleRing;
+        _layoutOffset = CGPointZero;
+        _layoutScale = 1.0;
         
         [self setupMetal];
         [self setupGradientLayers];
@@ -342,6 +349,9 @@ typedef NS_ENUM(NSInteger, SpectrumColorMode) {
     u->colorSaturation = (float)_colorSaturation;
     u->colorBrightness = (float)_colorBrightness;
     u->hueShift = (float)_hueShift;
+    u->opacity = (float)_opacity;
+    u->layoutStyle = (int)_layoutStyle;
+    u->layoutOffset = (simd_float2){ (float)_layoutOffset.x, (float)_layoutOffset.y };
     
     // ── 拷贝频谱数据到 GPU 缓冲 ──
     memcpy(_amplitudeBuffer.contents, _amplitudes, sizeof(float) * kMaxBands);
@@ -408,12 +418,31 @@ typedef NS_ENUM(NSInteger, SpectrumColorMode) {
     if (brightness) {
         _colorBrightness = MAX(0.5, MIN(2.0, [brightness floatValue]));
     }
+
+    NSNumber *opacity = themeConfig[@"opacity"];
+    if (opacity) {
+        _opacity = MAX(0.0, MIN(1.0, [opacity floatValue]));
+    }
     
     // 解析色相偏移
     NSNumber *hueShiftValue = themeConfig[@"hueShift"];
     if (hueShiftValue) {
         _hueShift = fmod([hueShiftValue floatValue], 1.0);
         if (_hueShift < 0) _hueShift += 1.0;
+    }
+
+    NSNumber *layoutStyleValue = themeConfig[@"layoutStyle"];
+    if (layoutStyleValue) {
+        _layoutStyle = (ADSpectrumLayoutStyle)[layoutStyleValue integerValue];
+    }
+
+    NSNumber *layoutOffsetX = themeConfig[@"layoutOffsetX"];
+    NSNumber *layoutOffsetY = themeConfig[@"layoutOffsetY"];
+    if (layoutOffsetX || layoutOffsetY) {
+        CGFloat x = layoutOffsetX ? [layoutOffsetX doubleValue] : _layoutOffset.x;
+        CGFloat y = layoutOffsetY ? [layoutOffsetY doubleValue] : _layoutOffset.y;
+        _layoutOffset = CGPointMake(MAX(-0.4, MIN(0.4, x)),
+                                    MAX(-0.4, MIN(0.4, y)));
     }
     
     NSLog(@"🎨 频谱主题已应用: 模式=%ld, 饱和度=%.2f, 亮度=%.2f",
@@ -432,6 +461,20 @@ typedef NS_ENUM(NSInteger, SpectrumColorMode) {
     _primaryColor = fromColor ?: [UIColor cyanColor];
     _secondaryColor = toColor ?: [UIColor magentaColor];
     NSLog(@"🎨 频谱设为双色渐变模式");
+}
+
+- (void)resetLayoutOffset {
+    _layoutOffset = CGPointZero;
+}
+
+- (void)setLayoutScale:(CGFloat)layoutScale {
+    CGFloat clamped = MAX(0.4, MIN(2.5, layoutScale));
+    if (fabs(clamped - _layoutScale) < 0.001) {
+        return;
+    }
+    _layoutScale = clamped;
+    // 用 CALayer 仿射变换对整张 spectrum 视图进行缩放（围绕视图中心）
+    self.transform = CGAffineTransformMakeScale(clamped, clamped);
 }
 
 // 辅助方法：从多种格式解析颜色

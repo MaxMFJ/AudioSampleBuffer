@@ -15,6 +15,12 @@ typedef NS_ENUM(NSInteger, ADSpectrumColorMode) {
     ADSpectrumColorModeCustomTheme       // 自定义主题 - 主副色动态交替
 };
 
+typedef NS_ENUM(NSInteger, ADSpectrumLayoutStyle) {
+    ADSpectrumLayoutStyleRing = 0,               // 圆环
+    ADSpectrumLayoutStyleVerticalBars,           // 竖向音柱
+    ADSpectrumLayoutStyleMirroredVerticalBars    // 双向上下音柱
+};
+
 @interface SpectrumView : UIView
 
 @property (nonatomic, assign) CGFloat barWidth;
@@ -42,6 +48,18 @@ typedef NS_ENUM(NSInteger, ADSpectrumColorMode) {
 // 色相偏移 (0.0 - 1.0)，用于彩虹模式的初始色相位置
 @property (nonatomic, assign) CGFloat hueShift;
 
+// 频谱整体透明度（默认 1.0）
+@property (nonatomic, assign) CGFloat opacity;
+
+// 频谱布局样式
+@property (nonatomic, assign) ADSpectrumLayoutStyle layoutStyle;
+
+// 频谱锚点偏移（相对视图中心的归一化位移，范围建议 [-0.4, 0.4]）
+@property (nonatomic, assign) CGPoint layoutOffset;
+
+// 频谱整体缩放系数（默认 1.0，范围 [0.5, 2.0]）
+@property (nonatomic, assign) CGFloat layoutScale;
+
 // 便捷方法：应用预设主题
 - (void)applyTheme:(NSDictionary *)themeConfig;
 
@@ -50,6 +68,9 @@ typedef NS_ENUM(NSInteger, ADSpectrumColorMode) {
 
 // 便捷方法：设置双色渐变模式
 - (void)setGradientFromColor:(UIColor *)fromColor toColor:(UIColor *)toColor;
+
+// 重置频谱位置
+- (void)resetLayoutOffset;
 
 - (void)updateSpectra:(NSArray *)spectra withStype:(ADSpectraStyle)style;
 

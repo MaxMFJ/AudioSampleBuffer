@@ -7,6 +7,17 @@
 #import "ViewController+PlaybackProgress.h"
 
 #import <AVFoundation/AVFoundation.h>
+#import <CoreImage/CoreImage.h>
+
+static NSString * const kSpectrumLayoutStyleDefaultsKey = @"SpectrumLayoutStyle";
+static NSString * const kSpectrumColorModeDefaultsKey = @"SpectrumColorMode";
+static NSString * const kSpectrumAutoColorDefaultsKey = @"SpectrumAutoColorEnabled";
+static NSString * const kSpectrumHueDefaultsKey = @"SpectrumHueShift";
+static NSString * const kSpectrumBrightnessDefaultsKey = @"SpectrumBrightness";
+static NSString * const kSpectrumOpacityDefaultsKey = @"SpectrumOpacity";
+static NSString * const kSpectrumPositionXDefaultsKey = @"SpectrumLayoutOffsetX";
+static NSString * const kSpectrumPositionYDefaultsKey = @"SpectrumLayoutOffsetY";
+static NSString * const kSpectrumScaleDefaultsKey     = @"SpectrumLayoutScale";
 
 @implementation ViewController (Visuals)
 
@@ -16,12 +27,188 @@
     self.visualEffectManager = [[VisualEffectManager alloc] initWithContainerView:self.view];
     self.visualEffectManager.delegate = self;
     [self.visualEffectManager setCurrentEffect:VisualEffectTypeNeonGlow animated:NO];
+    [self updateBackgroundMediaEffectStateForEffect:VisualEffectTypeNeonGlow];
     [self refreshVisualLyricsOverlayVisibility];
 
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(handleEffectSettingsButtonTapped:)
                                                  name:@"EffectSettingsButtonTapped"
                                                object:nil];
+}
+
+- (void)setupBackgroundMediaPanel {
+    if (self.backgroundMediaPanelView) {
+        return;
+    }
+
+    CGFloat panelWidth = MIN(320.0, self.view.bounds.size.width - 96.0);
+    CGFloat safeTop = 0.0;
+    CGFloat safeBottom = 0.0;
+    if (@available(iOS 11.0, *)) {
+        safeTop = self.view.safeAreaInsets.top;
+        safeBottom = self.view.safeAreaInsets.bottom;
+    }
+    CGFloat topOffset = MAX(safeTop, 44.0) + 8.0;
+    CGFloat panelHeight = self.view.bounds.size.height - topOffset - safeBottom - 120.0;
+    CGFloat originX = self.view.bounds.size.width - panelWidth - 68.0;
+
+    UIView *panel = [[UIView alloc] initWithFrame:CGRectMake(originX, topOffset + 52.0, panelWidth, MAX(260.0, panelHeight))];
+    panel.backgroundColor = [UIColor colorWithWhite:0.08 alpha:0.96];
+    panel.layer.cornerRadius = 18.0;
+    panel.layer.borderWidth = 1.0;
+    panel.layer.borderColor = [UIColor colorWithWhite:1.0 alpha:0.12].CGColor;
+    panel.hidden = YES;
+    panel.alpha = 0.0;
+    self.backgroundMediaPanelView = panel;
+
+    UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(16, 14, panelWidth - 200, 24)];
+    titleLabel.text = @"背景媒体列表";
+    titleLabel.font = [UIFont boldSystemFontOfSize:18];
+    titleLabel.textColor = [UIColor whiteColor];
+    [panel addSubview:titleLabel];
+
+    UIButton *closeButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    closeButton.frame = CGRectMake(panelWidth - 40, 12, 28, 28);
+    closeButton.backgroundColor = [UIColor colorWithWhite:1.0 alpha:0.08];
+    closeButton.layer.cornerRadius = 14.0;
+    [closeButton setTitle:@"✕" forState:UIControlStateNormal];
+    [closeButton setTitleColor:[UIColor colorWithWhite:1.0 alpha:0.92] forState:UIControlStateNormal];
+    closeButton.titleLabel.font = [UIFont systemFontOfSize:16 weight:UIFontWeightBold];
+    [closeButton addTarget:self action:@selector(backgroundMediaCloseButtonTapped:) forControlEvents:UIControlEventTouchUpInside];
+    [panel addSubview:closeButton];
+
+    CGFloat headerBtnH = 30.0;
+    CGFloat headerBtnSpacing = 8.0;
+    CGFloat headerRightEdge = CGRectGetMinX(closeButton.frame) - headerBtnSpacing;
+
+    UIButton *enableButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    CGFloat enableW = 66.0;
+    enableButton.frame = CGRectMake(headerRightEdge - enableW, 12, enableW, headerBtnH);
+    enableButton.layer.cornerRadius = 15.0;
+    enableButton.titleLabel.font = [UIFont boldSystemFontOfSize:13];
+    [enableButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+    [enableButton addTarget:self action:@selector(backgroundMediaEnableButtonTapped:) forControlEvents:UIControlEventTouchUpInside];
+    [panel addSubview:enableButton];
+    self.backgroundMediaEnableButton = enableButton;
+
+    UIButton *rhythmButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    CGFloat rhythmW = 66.0;
+    CGFloat rhythmX = CGRectGetMinX(enableButton.frame) - headerBtnSpacing - rhythmW;
+    rhythmButton.frame = CGRectMake(MAX(16.0, rhythmX), 12, rhythmW, headerBtnH);
+    rhythmButton.layer.cornerRadius = 15.0;
+    rhythmButton.titleLabel.font = [UIFont boldSystemFontOfSize:13];
+    [rhythmButton setTitle:@"律动" forState:UIControlStateNormal];
+    [rhythmButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+    rhythmButton.backgroundColor = [UIColor colorWithWhite:1.0 alpha:0.10];
+    [rhythmButton addTarget:self action:@selector(backgroundMediaRhythmButtonTapped:) forControlEvents:UIControlEventTouchUpInside];
+    [panel addSubview:rhythmButton];
+    self.backgroundMediaRhythmButton = rhythmButton;
+
+    UIButton *importButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    CGFloat importW = 72.0;
+    CGFloat importX = CGRectGetMinX(rhythmButton.frame) - headerBtnSpacing - importW;
+    importButton.frame = CGRectMake(MAX(16.0, importX), 12, importW, headerBtnH);
+    importButton.backgroundColor = [UIColor colorWithRed:0.18 green:0.45 blue:0.82 alpha:1.0];
+    importButton.layer.cornerRadius = 15.0;
+    [importButton setTitle:@"导入" forState:UIControlStateNormal];
+    [importButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+    importButton.titleLabel.font = [UIFont boldSystemFontOfSize:13];
+    [importButton addTarget:self action:@selector(importBackgroundMediaButtonTapped:) forControlEvents:UIControlEventTouchUpInside];
+    [panel addSubview:importButton];
+    self.importBackgroundMediaButton = importButton;
+
+    CGFloat headerHeight = 52.0;
+    // 三行 slider：每行 32pt
+    CGFloat rowH = 32.0;
+    CGFloat controlsHeight = rowH * 3 + 12.0;
+
+    UIView *controlsView = [[UIView alloc] initWithFrame:CGRectMake(12, headerHeight, panelWidth - 24, controlsHeight)];
+    controlsView.backgroundColor = [UIColor colorWithWhite:1.0 alpha:0.06];
+    controlsView.layer.cornerRadius = 14.0;
+    controlsView.layer.borderWidth = 1.0;
+    controlsView.layer.borderColor = [UIColor colorWithWhite:1.0 alpha:0.10].CGColor;
+    [panel addSubview:controlsView];
+    self.backgroundMediaRhythmControlsView = controlsView;
+
+    CGFloat sliderX = 62.0;
+    CGFloat sliderW = controlsView.bounds.size.width - sliderX - 12.0;
+    CGFloat labelX = 12.0;
+    CGFloat labelW = 46.0;
+
+    // 第 1 行：震颤（rate slider，控制 scale 脉冲 + beat 上 seek-forward 跳跃量）
+    UILabel *rateLabel = [[UILabel alloc] initWithFrame:CGRectMake(labelX, 8, labelW, 18)];
+    rateLabel.text = @"震颤";
+    rateLabel.font = [UIFont systemFontOfSize:12 weight:UIFontWeightSemibold];
+    rateLabel.textColor = [UIColor colorWithWhite:1.0 alpha:0.82];
+    [controlsView addSubview:rateLabel];
+
+    UISlider *rateSlider = [[UISlider alloc] initWithFrame:CGRectMake(sliderX, 4, sliderW, 26)];
+    rateSlider.minimumValue = 0.0;
+    rateSlider.maximumValue = 1.0;
+    rateSlider.value = 0.55;
+    rateSlider.minimumTrackTintColor = [UIColor colorWithRed:0.20 green:0.75 blue:0.45 alpha:1.0];
+    rateSlider.maximumTrackTintColor = [UIColor colorWithWhite:1.0 alpha:0.15];
+    [rateSlider addTarget:self action:@selector(backgroundMediaRhythmRateSliderChanged:) forControlEvents:UIControlEventValueChanged];
+    [controlsView addSubview:rateSlider];
+    self.backgroundMediaRhythmRateSlider = rateSlider;
+
+    // 第 2 行：色散（RGB 分离 + 调色幅度）
+    UILabel *shakeLabel = [[UILabel alloc] initWithFrame:CGRectMake(labelX, 8 + rowH, labelW, 18)];
+    shakeLabel.text = @"色散";
+    shakeLabel.font = [UIFont systemFontOfSize:12 weight:UIFontWeightSemibold];
+    shakeLabel.textColor = [UIColor colorWithWhite:1.0 alpha:0.82];
+    [controlsView addSubview:shakeLabel];
+
+    UISlider *shakeSlider = [[UISlider alloc] initWithFrame:CGRectMake(sliderX, 4 + rowH, sliderW, 26)];
+    shakeSlider.minimumValue = 0.0;
+    shakeSlider.maximumValue = 1.0;
+    shakeSlider.value = 0.45;
+    shakeSlider.minimumTrackTintColor = [UIColor colorWithRed:0.95 green:0.65 blue:0.20 alpha:1.0];
+    shakeSlider.maximumTrackTintColor = [UIColor colorWithWhite:1.0 alpha:0.15];
+    [shakeSlider addTarget:self action:@selector(backgroundMediaRhythmShakeSliderChanged:) forControlEvents:UIControlEventValueChanged];
+    [controlsView addSubview:shakeSlider];
+    self.backgroundMediaRhythmShakeSlider = shakeSlider;
+
+    // 第 3 行：闪屏（beat 上的白闪叠加层 alpha 上限）
+    UILabel *flashLabel = [[UILabel alloc] initWithFrame:CGRectMake(labelX, 8 + 2*rowH, labelW, 18)];
+    flashLabel.text = @"闪屏";
+    flashLabel.font = [UIFont systemFontOfSize:12 weight:UIFontWeightSemibold];
+    flashLabel.textColor = [UIColor colorWithWhite:1.0 alpha:0.82];
+    [controlsView addSubview:flashLabel];
+
+    UISlider *flashSlider = [[UISlider alloc] initWithFrame:CGRectMake(sliderX, 4 + 2*rowH, sliderW, 26)];
+    flashSlider.minimumValue = 0.0;
+    flashSlider.maximumValue = 1.0;
+    flashSlider.value = 0.0;
+    flashSlider.minimumTrackTintColor = [UIColor colorWithRed:0.92 green:0.92 blue:0.40 alpha:1.0];
+    flashSlider.maximumTrackTintColor = [UIColor colorWithWhite:1.0 alpha:0.15];
+    [flashSlider addTarget:self action:@selector(backgroundMediaRhythmFlashSliderChanged:) forControlEvents:UIControlEventValueChanged];
+    [controlsView addSubview:flashSlider];
+    self.backgroundMediaRhythmFlashSlider = flashSlider;
+
+    CGFloat tableY = headerHeight + controlsHeight + 10.0;
+    UITableView *mediaTableView = [[UITableView alloc] initWithFrame:CGRectMake(0, tableY, panelWidth, panel.bounds.size.height - tableY) style:UITableViewStylePlain];
+    mediaTableView.delegate = self;
+    mediaTableView.dataSource = self;
+    mediaTableView.backgroundColor = [UIColor clearColor];
+    mediaTableView.separatorColor = [UIColor colorWithWhite:1.0 alpha:0.08];
+    mediaTableView.rowHeight = 62.0;
+    mediaTableView.tableFooterView = [UIView new];
+    [panel addSubview:mediaTableView];
+    self.backgroundMediaTableView = mediaTableView;
+
+    UILabel *emptyLabel = [[UILabel alloc] initWithFrame:CGRectMake(20, tableY + 48, panelWidth - 40, 120)];
+    emptyLabel.text = @"还没有背景媒体\n导入视频或 Live Photo 后，可在此选择循环背景。";
+    emptyLabel.textColor = [UIColor colorWithWhite:1.0 alpha:0.65];
+    emptyLabel.font = [UIFont systemFontOfSize:15 weight:UIFontWeightMedium];
+    emptyLabel.numberOfLines = 0;
+    emptyLabel.textAlignment = NSTextAlignmentCenter;
+    [panel addSubview:emptyLabel];
+    self.backgroundMediaEmptyLabel = emptyLabel;
+
+    [self.view addSubview:panel];
+    [self reloadBackgroundMediaLibrary];
+    [self refreshBackgroundMediaButtonState];
 }
 
 - (void)setupNavigationBar {
@@ -88,6 +275,25 @@
     [self.effectSelectorButton addTarget:self action:@selector(effectSelectorButtonTapped:) forControlEvents:UIControlEventTouchUpInside];
     [self.view addSubview:self.effectSelectorButton];
     [self.controlButtons addObject:self.effectSelectorButton];
+    rightY += btnSize + btnSpacing;
+
+    // 频谱样式按钮
+    self.spectrumStyleButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    UIImage *spectrumImage = nil;
+    if (@available(iOS 13.0, *)) {
+        spectrumImage = [UIImage systemImageNamed:@"waveform.path.ecg"];
+    }
+    [self.spectrumStyleButton setImage:spectrumImage forState:UIControlStateNormal];
+    [self.spectrumStyleButton setTitle:@"" forState:UIControlStateNormal];
+    self.spectrumStyleButton.tintColor = [UIColor whiteColor];
+    self.spectrumStyleButton.backgroundColor = [UIColor colorWithRed:0.16 green:0.24 blue:0.42 alpha:0.88];
+    self.spectrumStyleButton.layer.cornerRadius = btnSize / 2;
+    self.spectrumStyleButton.layer.borderWidth = 1.0;
+    self.spectrumStyleButton.layer.borderColor = [UIColor colorWithRed:0.45 green:0.72 blue:1.0 alpha:0.45].CGColor;
+    self.spectrumStyleButton.frame = CGRectMake(rightX, rightY, btnSize, btnSize);
+    [self.spectrumStyleButton addTarget:self action:@selector(spectrumStyleButtonTapped:) forControlEvents:UIControlEventTouchUpInside];
+    [self.view addSubview:self.spectrumStyleButton];
+    [self.controlButtons addObject:self.spectrumStyleButton];
     rightY += btnSize + btnSpacing;
 
     // AI模式按钮
@@ -157,8 +363,8 @@
     CGFloat btnSize = 44;
     CGFloat btnSpacing = 10;
     CGFloat rightX = self.view.bounds.size.width - btnSize - 12;
-    // 跳过前3个按钮(特效+AI+性能)的位置
-    CGFloat rightY = topOffset + (btnSize + btnSpacing) * 3;
+    // 跳过前4个按钮(特效+频谱+AI+性能)的位置
+    CGFloat rightY = topOffset + (btnSize + btnSpacing) * 4;
 
     self.karaokeButton = [UIButton buttonWithType:UIButtonTypeSystem];
     UIImage *micImage = nil;
@@ -190,8 +396,8 @@
     CGFloat btnSize = 44;
     CGFloat btnSpacing = 10;
     CGFloat rightX = self.view.bounds.size.width - btnSize - 12;
-    // 跳过前4个按钮(特效+AI+性能+卡拉OK)的位置
-    CGFloat rightY = topOffset + (btnSize + btnSpacing) * 4;
+    // 跳过前5个按钮(特效+频谱+AI+性能+卡拉OK)的位置
+    CGFloat rightY = topOffset + (btnSize + btnSpacing) * 5;
 
     // 歌词特效按钮
     self.lyricsEffectButton = [UIButton buttonWithType:UIButtonTypeSystem];
@@ -247,8 +453,8 @@
     CGFloat btnSize = 44;
     CGFloat btnSpacing = 10;
     CGFloat rightX = self.view.bounds.size.width - btnSize - 12;
-    // 跳过前6个按钮的位置(特效+AI+性能+卡拉OK+歌词+导入歌词)
-    CGFloat rightY = topOffset + (btnSize + btnSpacing) * 6;
+    // 跳过前7个按钮的位置(特效+频谱+AI+性能+卡拉OK+歌词+导入歌词)
+    CGFloat rightY = topOffset + (btnSize + btnSpacing) * 7;
 
     self.mixAudioControlView = [[UIView alloc] initWithFrame:CGRectMake(rightX, rightY, btnSize, btnSize)];
     self.mixAudioControlView.backgroundColor = [UIColor colorWithRed:0.1 green:0.25 blue:0.4 alpha:0.85];
@@ -363,6 +569,12 @@
     if (self.toggleUIButton) [self.view bringSubviewToFront:self.toggleUIButton];
     if (self.fpsLabel) [self.view bringSubviewToFront:self.fpsLabel];
     if (self.leftFunctionScrollView) [self.view bringSubviewToFront:self.leftFunctionScrollView];
+    if (self.backgroundMediaPanelView && self.backgroundMediaPanelView.superview) {
+        [self.view bringSubviewToFront:self.backgroundMediaPanelView];
+    }
+    if (self.spectrumStylePanelView && self.spectrumStylePanelView.superview) {
+        [self.view bringSubviewToFront:self.spectrumStylePanelView];
+    }
 
     for (UIView *controlView in self.controlButtons) {
         if (controlView && controlView.superview) {
@@ -446,14 +658,14 @@
 
     if (coverImage) {
         self.coverImageView.image = coverImage;
-        self.coverImageView.hidden = NO;
+        self.coverImageView.hidden = self.isBackgroundMediaEffectActive;
         self.vinylRecordView.hidden = YES;
         self.isShowingVinylRecord = NO;
         NSLog(@"🖼️ 显示音乐封面");
     } else {
         self.coverImageView.hidden = YES;
-        self.vinylRecordView.hidden = NO;
-        self.isShowingVinylRecord = YES;
+        self.vinylRecordView.hidden = self.isBackgroundMediaEffectActive;
+        self.isShowingVinylRecord = !self.isBackgroundMediaEffectActive;
 
         if (songName) {
             [self.vinylRecordView regenerateAppearanceWithSongName:songName];
@@ -605,6 +817,7 @@
         @{@"icon": @"arrow.up.arrow.down",    @"color": @[@0.2, @0.5, @0.25],  @"sel": @"sortButtonTapped:"},
         @{@"icon": @"arrow.clockwise",         @"color": @[@0.5, @0.28, @0.12], @"sel": @"reloadMusicLibraryButtonTapped:"},
         @{@"icon": @"tray.and.arrow.down",     @"color": @[@0.12, @0.42, @0.6], @"sel": @"importMusicButtonTapped:"},
+        @{@"icon": @"photo.on.rectangle.angled", @"color": @[@0.18, @0.32, @0.62], @"sel": @"backgroundMediaButtonTapped:"},
         @{@"icon": @"trash.fill",              @"color": @[@0.6, @0.18, @0.18], @"sel": @"clearAICacheButtonTapped:"},
         @{@"icon": @"cpu.fill",                @"color": @[@0.22, @0.32, @0.7], @"sel": @"aiSettingsButtonTapped:"},
         @{@"icon": @"repeat",                  @"color": @[@0.4, @0.28, @0.5],  @"sel": @"loopButtonTapped:"},
@@ -612,10 +825,10 @@
         @{@"icon": @"waveform",                @"color": @[@0.6, @0.33, @0.06], @"sel": @"lyricsTimingButtonTapped:"}
     ];
 
-    UIButton *sortBtn = nil, *reloadBtn = nil, *importBtn = nil, *clearAIBtn = nil;
+    UIButton *sortBtn = nil, *reloadBtn = nil, *importBtn = nil, *mediaBtn = nil, *clearAIBtn = nil;
     UIButton *aiSettingsBtn = nil, *loopBtn = nil, *cloudBtn = nil, *timingBtn = nil;
     NSArray *btnRefs = @[
-        [NSNull null], [NSNull null], [NSNull null], [NSNull null],
+        [NSNull null], [NSNull null], [NSNull null], [NSNull null], [NSNull null],
         [NSNull null], [NSNull null], [NSNull null], [NSNull null]
     ];
     (void)btnRefs;
@@ -645,16 +858,18 @@
         if (i == 0) sortBtn = btn;
         else if (i == 1) reloadBtn = btn;
         else if (i == 2) importBtn = btn;
-        else if (i == 3) clearAIBtn = btn;
-        else if (i == 4) aiSettingsBtn = btn;
-        else if (i == 5) loopBtn = btn;
-        else if (i == 6) cloudBtn = btn;
-        else if (i == 7) timingBtn = btn;
+        else if (i == 3) mediaBtn = btn;
+        else if (i == 4) clearAIBtn = btn;
+        else if (i == 5) aiSettingsBtn = btn;
+        else if (i == 6) loopBtn = btn;
+        else if (i == 7) cloudBtn = btn;
+        else if (i == 8) timingBtn = btn;
     }
 
     self.sortButton          = sortBtn;
     self.reloadButton        = reloadBtn;
     self.importButton        = importBtn;
+    self.backgroundMediaButton = mediaBtn;
     self.clearAICacheButton  = clearAIBtn;
     self.aiSettingsButton    = aiSettingsBtn;
     self.loopButton          = loopBtn;
@@ -696,6 +911,7 @@
     self.tableView.rowHeight = 56;
     self.tableView.keyboardDismissMode = UIScrollViewKeyboardDismissModeOnDrag;
     [self.view addSubview:self.tableView];
+    [self setupBackgroundMediaPanel];
 
     // ══════════════════════════════════════════
     // 底部播放控制区
@@ -769,7 +985,23 @@
 - (UIView *)buildTableHeadView {
     self.spectrumView = [[SpectrumView alloc] initWithFrame:CGRectMake(0, 0, self.view.frame.size.width, self.view.frame.size.height)];
     self.spectrumView.backgroundColor = [UIColor clearColor];
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    self.spectrumView.layoutStyle = (ADSpectrumLayoutStyle)[defaults integerForKey:kSpectrumLayoutStyleDefaultsKey];
+    self.spectrumView.colorMode = (ADSpectrumColorMode)[defaults integerForKey:kSpectrumColorModeDefaultsKey];
+    self.spectrumView.hueShift = [defaults objectForKey:kSpectrumHueDefaultsKey] ? [defaults floatForKey:kSpectrumHueDefaultsKey] : 0.0;
+    self.spectrumView.colorBrightness = [defaults objectForKey:kSpectrumBrightnessDefaultsKey] ? [defaults floatForKey:kSpectrumBrightnessDefaultsKey] : 1.0;
+    self.spectrumView.opacity = [defaults objectForKey:kSpectrumOpacityDefaultsKey] ? [defaults floatForKey:kSpectrumOpacityDefaultsKey] : 1.0;
+    self.spectrumView.layoutOffset = CGPointMake([defaults floatForKey:kSpectrumPositionXDefaultsKey],
+                                                 [defaults floatForKey:kSpectrumPositionYDefaultsKey]);
+    {
+        CGFloat scale = [defaults objectForKey:kSpectrumScaleDefaultsKey] ? [defaults floatForKey:kSpectrumScaleDefaultsKey] : 1.0;
+        self.spectrumView.layoutScale = scale;
+    }
     [self.visualEffectManager setOriginalSpectrumView:self.spectrumView];
+    if ([defaults objectForKey:kSpectrumAutoColorDefaultsKey] && ![defaults boolForKey:kSpectrumAutoColorDefaultsKey]) {
+        [self applyManualSpectrumPaletteIfNeeded];
+    }
+    [self refreshSpectrumStyleButtonState];
     return self.spectrumView;
 }
 
@@ -777,6 +1009,460 @@
 
 - (void)effectSelectorButtonTapped:(UIButton *)sender {
     [self.visualEffectManager showEffectSelector];
+}
+
+- (void)spectrumStyleButtonTapped:(UIButton *)sender {
+    [self.searchBar resignFirstResponder];
+    [self showSpectrumStylePanel];
+}
+
+- (void)showSpectrumStylePanel {
+    if (self.spectrumStylePanelView.superview) {
+        [self dismissSpectrumStylePanel];
+        return;
+    }
+
+    UIView *overlay = [[UIView alloc] initWithFrame:self.view.bounds];
+    overlay.backgroundColor = [UIColor colorWithWhite:0.0 alpha:0.38];
+    overlay.alpha = 0.0;
+
+    UIButton *dismissButton = [UIButton buttonWithType:UIButtonTypeCustom];
+    dismissButton.frame = overlay.bounds;
+    [dismissButton addTarget:self action:@selector(dismissSpectrumStylePanel) forControlEvents:UIControlEventTouchUpInside];
+    [overlay addSubview:dismissButton];
+
+    CGFloat cardWidth = MIN(360.0, self.view.bounds.size.width - 36.0);
+    CGFloat maxCardHeight = MIN(self.view.bounds.size.height - 72.0, 560.0);
+    UIView *card = [[UIView alloc] initWithFrame:CGRectMake((self.view.bounds.size.width - cardWidth) * 0.5,
+                                                            MAX(48.0, (self.view.bounds.size.height - maxCardHeight) * 0.5),
+                                                            cardWidth,
+                                                            maxCardHeight)];
+    card.backgroundColor = [UIColor colorWithRed:0.08 green:0.10 blue:0.15 alpha:0.98];
+    card.layer.cornerRadius = 18.0;
+    card.layer.borderWidth = 1.0;
+    card.layer.borderColor = [UIColor colorWithWhite:1.0 alpha:0.12].CGColor;
+    [overlay addSubview:card];
+
+    UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(18, 16, cardWidth - 80, 28)];
+    titleLabel.text = @"频谱样式";
+    titleLabel.font = [UIFont boldSystemFontOfSize:20];
+    titleLabel.textColor = [UIColor whiteColor];
+    [card addSubview:titleLabel];
+
+    UIButton *closeButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    closeButton.frame = CGRectMake(cardWidth - 46, 14, 30, 30);
+    [closeButton setTitle:@"✕" forState:UIControlStateNormal];
+    [closeButton setTitleColor:[UIColor colorWithWhite:1.0 alpha:0.92] forState:UIControlStateNormal];
+    closeButton.backgroundColor = [UIColor colorWithWhite:1.0 alpha:0.08];
+    closeButton.layer.cornerRadius = 15.0;
+    [closeButton addTarget:self action:@selector(dismissSpectrumStylePanel) forControlEvents:UIControlEventTouchUpInside];
+    [card addSubview:closeButton];
+
+    UIScrollView *scrollView = [[UIScrollView alloc] initWithFrame:CGRectMake(0, 52.0, cardWidth, maxCardHeight - 52.0)];
+    scrollView.showsVerticalScrollIndicator = YES;
+    scrollView.alwaysBounceVertical = YES;
+    [card addSubview:scrollView];
+    self.spectrumStyleScrollView = scrollView;
+
+    UIView *contentView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, cardWidth, 520.0)];
+    [scrollView addSubview:contentView];
+
+    CGFloat labelX = 18.0;
+    CGFloat controlX = 18.0;
+    CGFloat controlW = cardWidth - 36.0;
+    CGFloat y = 12.0;
+
+    UILabel *layoutLabel = [[UILabel alloc] initWithFrame:CGRectMake(labelX, y, controlW, 18)];
+    layoutLabel.text = @"形态";
+    layoutLabel.font = [UIFont systemFontOfSize:13 weight:UIFontWeightSemibold];
+    layoutLabel.textColor = [UIColor colorWithWhite:1.0 alpha:0.82];
+    [contentView addSubview:layoutLabel];
+    y += 22.0;
+
+    self.spectrumLayoutSegmentedControl = [[UISegmentedControl alloc] initWithItems:@[@"圆环", @"竖柱", @"双向"]];
+    self.spectrumLayoutSegmentedControl.frame = CGRectMake(controlX, y, controlW, 32);
+    self.spectrumLayoutSegmentedControl.selectedSegmentIndex = self.spectrumView ? self.spectrumView.layoutStyle : 0;
+    [self.spectrumLayoutSegmentedControl addTarget:self action:@selector(spectrumLayoutChanged:) forControlEvents:UIControlEventValueChanged];
+    [contentView addSubview:self.spectrumLayoutSegmentedControl];
+    y += 46.0;
+
+    UILabel *colorLabel = [[UILabel alloc] initWithFrame:CGRectMake(labelX, y, controlW, 18)];
+    colorLabel.text = @"颜色";
+    colorLabel.font = [UIFont systemFontOfSize:13 weight:UIFontWeightSemibold];
+    colorLabel.textColor = [UIColor colorWithWhite:1.0 alpha:0.82];
+    [contentView addSubview:colorLabel];
+    y += 22.0;
+
+    self.spectrumColorModeSegmentedControl = [[UISegmentedControl alloc] initWithItems:@[@"彩虹", @"单色", @"双色", @"主题"]];
+    self.spectrumColorModeSegmentedControl.frame = CGRectMake(controlX, y, controlW, 32);
+    self.spectrumColorModeSegmentedControl.selectedSegmentIndex = self.spectrumView ? self.spectrumView.colorMode : 0;
+    [self.spectrumColorModeSegmentedControl addTarget:self action:@selector(spectrumColorModeChanged:) forControlEvents:UIControlEventValueChanged];
+    [contentView addSubview:self.spectrumColorModeSegmentedControl];
+    y += 46.0;
+
+    UILabel *autoLabel = [[UILabel alloc] initWithFrame:CGRectMake(labelX, y + 4, 200, 18)];
+    autoLabel.text = @"自动适配 Live 背景";
+    autoLabel.font = [UIFont systemFontOfSize:13 weight:UIFontWeightSemibold];
+    autoLabel.textColor = [UIColor colorWithWhite:1.0 alpha:0.82];
+    [contentView addSubview:autoLabel];
+
+    self.spectrumAutoColorSwitch = [[UISwitch alloc] initWithFrame:CGRectZero];
+    self.spectrumAutoColorSwitch.onTintColor = [UIColor colorWithRed:0.28 green:0.76 blue:0.54 alpha:1.0];
+    self.spectrumAutoColorSwitch.on = [[NSUserDefaults standardUserDefaults] objectForKey:kSpectrumAutoColorDefaultsKey] ? [[NSUserDefaults standardUserDefaults] boolForKey:kSpectrumAutoColorDefaultsKey] : YES;
+    self.spectrumAutoColorSwitch.center = CGPointMake(cardWidth - 42.0, y + 14.0);
+    [self.spectrumAutoColorSwitch addTarget:self action:@selector(spectrumAutoColorSwitchChanged:) forControlEvents:UIControlEventValueChanged];
+    [contentView addSubview:self.spectrumAutoColorSwitch];
+    y += 40.0;
+
+    UILabel *hueLabel = [[UILabel alloc] initWithFrame:CGRectMake(labelX, y, controlW, 18)];
+    hueLabel.text = @"色相偏移";
+    hueLabel.font = [UIFont systemFontOfSize:13 weight:UIFontWeightSemibold];
+    hueLabel.textColor = [UIColor colorWithWhite:1.0 alpha:0.82];
+    [contentView addSubview:hueLabel];
+    y += 20.0;
+
+    self.spectrumHueSlider = [[UISlider alloc] initWithFrame:CGRectMake(controlX, y, controlW, 28)];
+    self.spectrumHueSlider.minimumValue = 0.0;
+    self.spectrumHueSlider.maximumValue = 1.0;
+    self.spectrumHueSlider.value = self.spectrumView ? self.spectrumView.hueShift : 0.0;
+    [self.spectrumHueSlider addTarget:self action:@selector(spectrumHueSliderChanged:) forControlEvents:UIControlEventValueChanged];
+    [contentView addSubview:self.spectrumHueSlider];
+    y += 36.0;
+
+    UILabel *brightnessLabel = [[UILabel alloc] initWithFrame:CGRectMake(labelX, y, controlW, 18)];
+    brightnessLabel.text = @"亮度";
+    brightnessLabel.font = [UIFont systemFontOfSize:13 weight:UIFontWeightSemibold];
+    brightnessLabel.textColor = [UIColor colorWithWhite:1.0 alpha:0.82];
+    [contentView addSubview:brightnessLabel];
+    y += 20.0;
+
+    self.spectrumBrightnessSlider = [[UISlider alloc] initWithFrame:CGRectMake(controlX, y, controlW, 28)];
+    self.spectrumBrightnessSlider.minimumValue = 0.55;
+    self.spectrumBrightnessSlider.maximumValue = 1.65;
+    self.spectrumBrightnessSlider.value = self.spectrumView ? self.spectrumView.colorBrightness : 1.0;
+    [self.spectrumBrightnessSlider addTarget:self action:@selector(spectrumBrightnessSliderChanged:) forControlEvents:UIControlEventValueChanged];
+    [contentView addSubview:self.spectrumBrightnessSlider];
+    y += 36.0;
+
+    UILabel *opacityLabel = [[UILabel alloc] initWithFrame:CGRectMake(labelX, y, controlW, 18)];
+    opacityLabel.text = @"透明度";
+    opacityLabel.font = [UIFont systemFontOfSize:13 weight:UIFontWeightSemibold];
+    opacityLabel.textColor = [UIColor colorWithWhite:1.0 alpha:0.82];
+    [contentView addSubview:opacityLabel];
+    y += 20.0;
+
+    self.spectrumOpacitySlider = [[UISlider alloc] initWithFrame:CGRectMake(controlX, y, controlW, 28)];
+    self.spectrumOpacitySlider.minimumValue = 0.1;
+    self.spectrumOpacitySlider.maximumValue = 1.0;
+    self.spectrumOpacitySlider.value = self.spectrumView ? self.spectrumView.opacity : 1.0;
+    self.spectrumOpacitySlider.minimumTrackTintColor = [UIColor colorWithRed:0.88 green:0.72 blue:0.96 alpha:1.0];
+    [self.spectrumOpacitySlider addTarget:self action:@selector(spectrumOpacitySliderChanged:) forControlEvents:UIControlEventValueChanged];
+    [contentView addSubview:self.spectrumOpacitySlider];
+    y += 36.0;
+
+    UILabel *positionLabel = [[UILabel alloc] initWithFrame:CGRectMake(labelX, y, controlW, 18)];
+    positionLabel.text = @"音柱位置";
+    positionLabel.font = [UIFont systemFontOfSize:13 weight:UIFontWeightSemibold];
+    positionLabel.textColor = [UIColor colorWithWhite:1.0 alpha:0.82];
+    [contentView addSubview:positionLabel];
+    y += 22.0;
+
+    self.spectrumPositionHintLabel = [[UILabel alloc] initWithFrame:CGRectMake(labelX, y, controlW, 16)];
+    self.spectrumPositionHintLabel.font = [UIFont systemFontOfSize:11 weight:UIFontWeightMedium];
+    self.spectrumPositionHintLabel.textColor = [UIColor colorWithWhite:1.0 alpha:0.56];
+    [contentView addSubview:self.spectrumPositionHintLabel];
+    y += 18.0;
+
+    self.spectrumPositionXSlider = [[UISlider alloc] initWithFrame:CGRectMake(controlX, y, controlW, 24)];
+    self.spectrumPositionXSlider.minimumValue = -0.32;
+    self.spectrumPositionXSlider.maximumValue = 0.32;
+    self.spectrumPositionXSlider.value = self.spectrumView ? self.spectrumView.layoutOffset.x : 0.0;
+    [self.spectrumPositionXSlider addTarget:self action:@selector(spectrumPositionSliderChanged:) forControlEvents:UIControlEventValueChanged];
+    [contentView addSubview:self.spectrumPositionXSlider];
+    y += 28.0;
+
+    self.spectrumPositionYSlider = [[UISlider alloc] initWithFrame:CGRectMake(controlX, y, controlW, 24)];
+    self.spectrumPositionYSlider.minimumValue = -0.28;
+    self.spectrumPositionYSlider.maximumValue = 0.28;
+    self.spectrumPositionYSlider.value = self.spectrumView ? self.spectrumView.layoutOffset.y : 0.0;
+    [self.spectrumPositionYSlider addTarget:self action:@selector(spectrumPositionSliderChanged:) forControlEvents:UIControlEventValueChanged];
+    [contentView addSubview:self.spectrumPositionYSlider];
+    y += 32.0;
+
+    UILabel *scaleLabel = [[UILabel alloc] initWithFrame:CGRectMake(labelX, y, controlW, 18)];
+    scaleLabel.text = @"频谱大小";
+    scaleLabel.font = [UIFont systemFontOfSize:13 weight:UIFontWeightSemibold];
+    scaleLabel.textColor = [UIColor colorWithWhite:1.0 alpha:0.82];
+    [contentView addSubview:scaleLabel];
+    y += 22.0;
+
+    self.spectrumScaleSlider = [[UISlider alloc] initWithFrame:CGRectMake(controlX, y, controlW, 24)];
+    self.spectrumScaleSlider.minimumValue = 0.5;
+    self.spectrumScaleSlider.maximumValue = 1.8;
+    self.spectrumScaleSlider.value = self.spectrumView ? self.spectrumView.layoutScale : 1.0;
+    self.spectrumScaleSlider.minimumTrackTintColor = [UIColor colorWithRed:0.35 green:0.78 blue:0.95 alpha:1.0];
+    [self.spectrumScaleSlider addTarget:self action:@selector(spectrumScaleSliderChanged:) forControlEvents:UIControlEventValueChanged];
+    [contentView addSubview:self.spectrumScaleSlider];
+    y += 38.0;
+
+    contentView.frame = CGRectMake(0, 0, cardWidth, y + 18.0);
+    scrollView.contentSize = CGSizeMake(cardWidth, CGRectGetMaxY(contentView.frame));
+
+    self.spectrumStylePanelView = overlay;
+    self.spectrumStyleCardView = card;
+    [self.view addSubview:overlay];
+    [self updateSpectrumLiveEditingAvailability];
+
+    [UIView animateWithDuration:0.22 animations:^{
+        overlay.alpha = 1.0;
+    }];
+}
+
+- (void)dismissSpectrumStylePanel {
+    if (!self.spectrumStylePanelView.superview) {
+        return;
+    }
+    UIView *overlay = self.spectrumStylePanelView;
+    [UIView animateWithDuration:0.18 animations:^{
+        overlay.alpha = 0.0;
+    } completion:^(BOOL finished) {
+        [overlay removeFromSuperview];
+        self.spectrumStylePanelView = nil;
+        self.spectrumStyleCardView = nil;
+        self.spectrumLayoutSegmentedControl = nil;
+        self.spectrumColorModeSegmentedControl = nil;
+        self.spectrumAutoColorSwitch = nil;
+        self.spectrumStyleScrollView = nil;
+        self.spectrumHueSlider = nil;
+        self.spectrumBrightnessSlider = nil;
+        self.spectrumOpacitySlider = nil;
+        self.spectrumPositionXSlider = nil;
+        self.spectrumPositionYSlider = nil;
+        self.spectrumScaleSlider = nil;
+        self.spectrumPositionHintLabel = nil;
+    }];
+}
+
+- (void)spectrumScaleSliderChanged:(UISlider *)sender {
+    if (!self.spectrumView) return;
+    CGFloat v = MAX(0.5, MIN(sender.value, 1.8));
+    self.spectrumView.layoutScale = v;
+    [[NSUserDefaults standardUserDefaults] setFloat:(float)v forKey:kSpectrumScaleDefaultsKey];
+    [[NSUserDefaults standardUserDefaults] synchronize];
+}
+
+- (void)spectrumOpacitySliderChanged:(UISlider *)sender {
+    if (!self.spectrumView) return;
+    CGFloat value = MAX(0.1, MIN(sender.value, 1.0));
+    self.spectrumView.opacity = value;
+    [[NSUserDefaults standardUserDefaults] setFloat:(float)value forKey:kSpectrumOpacityDefaultsKey];
+    [[NSUserDefaults standardUserDefaults] synchronize];
+}
+
+- (void)spectrumLayoutChanged:(UISegmentedControl *)sender {
+    self.spectrumView.layoutStyle = (ADSpectrumLayoutStyle)sender.selectedSegmentIndex;
+    if (self.spectrumView.layoutStyle == ADSpectrumLayoutStyleRing) {
+        [self.spectrumView resetLayoutOffset];
+        self.spectrumPositionXSlider.value = 0.0;
+        self.spectrumPositionYSlider.value = 0.0;
+    }
+    [self persistSpectrumSettings];
+    [self refreshSpectrumStyleButtonState];
+    [self updateSpectrumLiveEditingAvailability];
+}
+
+- (void)spectrumColorModeChanged:(UISegmentedControl *)sender {
+    self.spectrumView.colorMode = (ADSpectrumColorMode)sender.selectedSegmentIndex;
+    [self applyManualSpectrumPaletteIfNeeded];
+    [self persistSpectrumSettings];
+}
+
+- (void)spectrumAutoColorSwitchChanged:(UISwitch *)sender {
+    [[NSUserDefaults standardUserDefaults] setBool:sender.isOn forKey:kSpectrumAutoColorDefaultsKey];
+    [[NSUserDefaults standardUserDefaults] synchronize];
+    self.spectrumHueSlider.enabled = !sender.isOn;
+    self.spectrumBrightnessSlider.enabled = YES;
+    if (sender.isOn) {
+        [self refreshSpectrumAdaptiveThemeIfNeeded];
+    } else {
+        [self applyManualSpectrumPaletteIfNeeded];
+    }
+}
+
+- (void)spectrumHueSliderChanged:(UISlider *)sender {
+    self.spectrumView.hueShift = sender.value;
+    [self applyManualSpectrumPaletteIfNeeded];
+    [self persistSpectrumSettings];
+}
+
+- (void)spectrumBrightnessSliderChanged:(UISlider *)sender {
+    self.spectrumView.colorBrightness = sender.value;
+    if (self.spectrumAutoColorSwitch.isOn) {
+        [self refreshSpectrumAdaptiveThemeIfNeeded];
+    } else {
+        [self applyManualSpectrumPaletteIfNeeded];
+    }
+    [self persistSpectrumSettings];
+}
+
+- (void)spectrumPositionSliderChanged:(UISlider *)sender {
+    if (!self.spectrumView) return;
+    // Ring 样式不需要单独位置（圆环已居中），其它任何样式都允许调整，无需 live 模式
+    if (self.spectrumView.layoutStyle == ADSpectrumLayoutStyleRing) {
+        sender.value = 0.0;
+        return;
+    }
+    self.spectrumView.layoutOffset = CGPointMake(self.spectrumPositionXSlider.value,
+                                                 self.spectrumPositionYSlider.value);
+    [self persistSpectrumSettings];
+}
+
+- (void)persistSpectrumSettings {
+    if (!self.spectrumView) {
+        return;
+    }
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    [defaults setInteger:self.spectrumView.layoutStyle forKey:kSpectrumLayoutStyleDefaultsKey];
+    [defaults setInteger:self.spectrumView.colorMode forKey:kSpectrumColorModeDefaultsKey];
+    [defaults setFloat:self.spectrumView.hueShift forKey:kSpectrumHueDefaultsKey];
+    [defaults setFloat:self.spectrumView.colorBrightness forKey:kSpectrumBrightnessDefaultsKey];
+    [defaults setFloat:self.spectrumView.opacity forKey:kSpectrumOpacityDefaultsKey];
+    [defaults setFloat:self.spectrumView.layoutOffset.x forKey:kSpectrumPositionXDefaultsKey];
+    [defaults setFloat:self.spectrumView.layoutOffset.y forKey:kSpectrumPositionYDefaultsKey];
+    [defaults synchronize];
+}
+
+- (void)applyManualSpectrumPaletteIfNeeded {
+    if (!self.spectrumView || self.spectrumAutoColorSwitch.isOn) {
+        return;
+    }
+
+    CGFloat hue = self.spectrumHueSlider ? self.spectrumHueSlider.value : self.spectrumView.hueShift;
+    CGFloat brightness = self.spectrumBrightnessSlider ? self.spectrumBrightnessSlider.value : self.spectrumView.colorBrightness;
+    self.spectrumView.hueShift = hue;
+    self.spectrumView.colorBrightness = brightness;
+
+    UIColor *primary = [UIColor colorWithHue:hue saturation:0.86 brightness:MIN(1.0, 0.92 * brightness) alpha:1.0];
+    UIColor *secondary = [UIColor colorWithHue:fmod(hue + 0.18, 1.0) saturation:0.78 brightness:MIN(1.0, 0.98 * brightness) alpha:1.0];
+    self.spectrumView.primaryColor = primary;
+    self.spectrumView.secondaryColor = secondary;
+}
+
+- (void)refreshSpectrumStyleButtonState {
+    if (!self.spectrumStyleButton || !self.spectrumView) {
+        return;
+    }
+
+    UIColor *borderColor = [UIColor colorWithWhite:1.0 alpha:0.22];
+    UIColor *fillColor = [UIColor colorWithRed:0.16 green:0.24 blue:0.42 alpha:0.88];
+    if (self.spectrumView.layoutStyle == ADSpectrumLayoutStyleVerticalBars) {
+        fillColor = [UIColor colorWithRed:0.18 green:0.40 blue:0.58 alpha:0.9];
+        borderColor = [UIColor colorWithRed:0.45 green:0.82 blue:1.0 alpha:0.5];
+    } else if (self.spectrumView.layoutStyle == ADSpectrumLayoutStyleMirroredVerticalBars) {
+        fillColor = [UIColor colorWithRed:0.28 green:0.22 blue:0.56 alpha:0.9];
+        borderColor = [UIColor colorWithRed:0.72 green:0.55 blue:1.0 alpha:0.5];
+    }
+    self.spectrumStyleButton.backgroundColor = fillColor;
+    self.spectrumStyleButton.layer.borderColor = borderColor.CGColor;
+}
+
+- (void)updateSpectrumLiveEditingAvailability {
+    BOOL nonRingLayout = self.spectrumView.layoutStyle != ADSpectrumLayoutStyleRing;
+    self.spectrumPositionXSlider.enabled = nonRingLayout;
+    self.spectrumPositionYSlider.enabled = nonRingLayout;
+    if (!nonRingLayout) {
+        self.spectrumPositionHintLabel.text = @"圆环样式不需要单独调整音柱位置";
+    } else {
+        self.spectrumPositionHintLabel.text = @"拖动滑块调整音柱位置和大小";
+    }
+    self.spectrumHueSlider.enabled = !(self.spectrumAutoColorSwitch && self.spectrumAutoColorSwitch.isOn);
+}
+
+- (void)refreshSpectrumAdaptiveThemeIfNeeded {
+    BOOL autoEnabled = [[NSUserDefaults standardUserDefaults] objectForKey:kSpectrumAutoColorDefaultsKey] ? [[NSUserDefaults standardUserDefaults] boolForKey:kSpectrumAutoColorDefaultsKey] : YES;
+    if (!autoEnabled || !self.spectrumView) {
+        return;
+    }
+
+    UIColor *coverColor = self.coverImageView.image ? [self averageColorFromImage:self.coverImageView.image] : nil;
+    UIColor *baseColor = self.backgroundMediaPreviewColor ?: coverColor;
+    if (!baseColor) {
+        baseColor = [UIColor colorWithRed:0.10 green:0.14 blue:0.22 alpha:1.0];
+    }
+
+    CGFloat hue = 0.0, saturation = 0.0, brightness = 0.0, alpha = 0.0;
+    [baseColor getHue:&hue saturation:&saturation brightness:&brightness alpha:&alpha];
+
+    CGFloat accentHue = fmod(hue + 0.46, 1.0);
+    CGFloat altHue = fmod(accentHue + 0.12, 1.0);
+    CGFloat accentBrightness = brightness < 0.45 ? 0.98 : 0.72;
+    CGFloat accentSaturation = MAX(0.52, MIN(0.95, 0.88 - saturation * 0.18));
+    UIColor *primary = [UIColor colorWithHue:accentHue saturation:accentSaturation brightness:accentBrightness alpha:1.0];
+    UIColor *secondary = [UIColor colorWithHue:altHue saturation:MIN(1.0, accentSaturation + 0.08) brightness:MIN(1.0, accentBrightness + 0.08) alpha:1.0];
+
+    self.spectrumView.primaryColor = primary;
+    self.spectrumView.secondaryColor = secondary;
+    self.spectrumView.colorBrightness = self.spectrumBrightnessSlider ? self.spectrumBrightnessSlider.value : self.spectrumView.colorBrightness;
+    self.spectrumView.hueShift = accentHue;
+
+    if (self.spectrumHueSlider) {
+        self.spectrumHueSlider.value = accentHue;
+    }
+}
+
+- (UIColor *)averageColorFromImage:(UIImage *)image {
+    if (!image.CGImage) {
+        return [UIColor whiteColor];
+    }
+
+    CIImage *inputImage = [[CIImage alloc] initWithCGImage:image.CGImage];
+    CIVector *extent = [CIVector vectorWithX:CGRectGetMidX(inputImage.extent)
+                                           Y:CGRectGetMidY(inputImage.extent)
+                                           Z:CGRectGetWidth(inputImage.extent)
+                                           W:CGRectGetHeight(inputImage.extent)];
+    CIFilter *filter = [CIFilter filterWithName:@"CIAreaAverage"];
+    [filter setValue:inputImage forKey:kCIInputImageKey];
+    [filter setValue:extent forKey:kCIInputExtentKey];
+
+    CIContext *context = [CIContext contextWithOptions:@{kCIContextWorkingColorSpace: [NSNull null]}];
+    unsigned char bitmap[4] = {0};
+    CIImage *outputImage = filter.outputImage;
+    if (!outputImage) {
+        return [UIColor whiteColor];
+    }
+
+    [context render:outputImage
+           toBitmap:bitmap
+           rowBytes:4
+             bounds:CGRectMake(0, 0, 1, 1)
+             format:kCIFormatRGBA8
+         colorSpace:nil];
+
+    return [UIColor colorWithRed:bitmap[0] / 255.0
+                           green:bitmap[1] / 255.0
+                            blue:bitmap[2] / 255.0
+                           alpha:1.0];
+}
+
+- (nullable UIColor *)dominantColorForBackgroundMediaItem:(BackgroundMediaItem *)item {
+    if (!item.filePath.length || ![[NSFileManager defaultManager] fileExistsAtPath:item.filePath]) {
+        return nil;
+    }
+
+    AVURLAsset *asset = [AVURLAsset URLAssetWithURL:[NSURL fileURLWithPath:item.filePath] options:nil];
+    AVAssetImageGenerator *generator = [[AVAssetImageGenerator alloc] initWithAsset:asset];
+    generator.appliesPreferredTrackTransform = YES;
+    generator.maximumSize = CGSizeMake(240.0, 240.0);
+    NSError *error = nil;
+    CGImageRef imageRef = [generator copyCGImageAtTime:CMTimeMakeWithSeconds(0.15, 600) actualTime:nil error:&error];
+    if (!imageRef) {
+        NSLog(@"⚠️ 背景媒体取色失败: %@", error.localizedDescription ?: @"未知错误");
+        return nil;
+    }
+
+    UIImage *image = [UIImage imageWithCGImage:imageRef];
+    CGImageRelease(imageRef);
+    return [self averageColorFromImage:image];
 }
 
 - (void)galaxyControlButtonTapped:(UIButton *)sender {
@@ -880,6 +1566,7 @@
 - (void)visualEffectManager:(VisualEffectManager *)manager didChangeEffect:(VisualEffectType)effectType {
     [manager startRendering];
     [self updateEffectButtonStates:effectType];
+    [self updateBackgroundMediaEffectStateForEffect:effectType];
     [self refreshVisualLyricsOverlayVisibility];
 }
 

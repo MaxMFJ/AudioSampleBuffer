@@ -46,6 +46,7 @@ typedef NS_ENUM(NSUInteger, VisualEffectType) {
     VisualEffectTypeWormholeDrive,          // 虫洞穿梭 - 星尘柱状脉冲向屏幕袭来
     VisualEffectTypePrismResonance,         // 棱镜共振 - 清晰几何频段分层
     VisualEffectTypeVisualLyricsTunnel,     // 视觉歌词隧道 - 45° 斜向歌词流持续入场与离场
+    VisualEffectTypeUserMediaBackground,    // 视频/Live Photo 循环背景 - 用户导入媒体作为播放器背景
 
     // 数量
     VisualEffectTypeCount

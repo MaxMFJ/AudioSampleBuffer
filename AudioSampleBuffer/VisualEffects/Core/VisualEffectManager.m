@@ -340,6 +340,11 @@ static const CGFloat kDefaultEffectRenderScale = 0.85f;
             settings[@"audioSensitivity"] = @(1.05);
             settings[@"trailSoftness"] = @(0.85);
             break;
+
+        case VisualEffectTypeUserMediaBackground:
+            settings[@"backgroundDim"] = @(0.18);
+            settings[@"contentMode"] = @"aspectFill";
+            break;
             
         default:
             settings[@"intensity"] = @(1.0);
@@ -783,6 +788,9 @@ static const CGFloat kDefaultEffectRenderScale = 0.85f;
         case VisualEffectTypePrismResonance:
         case VisualEffectTypeVisualLyricsTunnel:
             return YES;
+
+        case VisualEffectTypeUserMediaBackground:
+            return NO;
             
         case VisualEffectTypeClassicSpectrum:
         default:
