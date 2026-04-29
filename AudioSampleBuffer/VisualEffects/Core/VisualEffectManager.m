@@ -125,7 +125,10 @@ static const CGFloat kDefaultEffectRenderScale = 0.85f;
     // 创建正方形Metal视图
     _metalView = [[MTKView alloc] initWithFrame:CGRectMake(x, y, squareSize, squareSize)];
     _metalView.device = MTLCreateSystemDefaultDevice();
+    _metalView.opaque = NO;
+    _metalView.layer.opaque = NO;
     _metalView.backgroundColor = [UIColor clearColor];
+    _metalView.clearColor = MTLClearColorMake(0.0, 0.0, 0.0, 0.0);
     
     // 提高渲染清晰度
     _metalView.contentScaleFactor = [UIScreen mainScreen].scale;

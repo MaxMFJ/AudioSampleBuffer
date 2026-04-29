@@ -13,6 +13,7 @@
 #import "LRCParser.h"
 #import "MusicLibraryManager.h"
 #import "PerformanceControlPanel.h"
+#import "RhythmColorMaskEffect.h"
 #import "SpectrumView.h"
 #import "VinylRecordView.h"
 #import "VisualEffectManager.h"
@@ -60,6 +61,8 @@ typedef NS_ENUM(NSInteger, BackgroundMediaKind) {
 @property (nonatomic, strong) UISlider *backgroundMediaRhythmRateSlider;
 @property (nonatomic, strong) UISlider *backgroundMediaRhythmShakeSlider;
 @property (nonatomic, strong) UISlider *backgroundMediaRhythmFlashSlider;
+@property (nonatomic, strong) UISlider *backgroundMediaRhythmBoostSlider;     // 加速强度
+@property (nonatomic, strong) UISlider *backgroundMediaRhythmBlurSlider;      // 运动模糊强度
 @property (nonatomic, strong) NSMutableArray<BackgroundMediaItem *> *backgroundMediaItems;
 @property (nonatomic, strong, nullable) BackgroundMediaItem *selectedBackgroundMediaItem;
 @property (nonatomic, copy, nullable) NSString *playingBackgroundMediaIdentifier;
@@ -86,6 +89,9 @@ typedef NS_ENUM(NSInteger, BackgroundMediaKind) {
 @property (nonatomic, strong, nullable) NSMutableArray<NSNumber *> *backgroundRhythmFluxHistory;
 @property (nonatomic, assign) NSUInteger backgroundRhythmFluxHistoryIndex;
 @property (nonatomic, assign) CFTimeInterval backgroundRhythmBeatPeriod;
+// 高潮密集 beat 检测：只有当近 2s 内 beat 数 ≥ 阈值时才注入 motion blur，降 CPU 开销
+@property (nonatomic, strong, nullable) NSMutableArray<NSNumber *> *backgroundRhythmRecentBeatTimes;
+@property (nonatomic, assign) CFTimeInterval backgroundRhythmHighEnergyEndsAt;
 @property (nonatomic, assign) NSInteger backgroundRhythmBeatCounter;
 @property (nonatomic, assign) Float64 backgroundRhythmLoopAnchorSeconds;
 
@@ -97,13 +103,9 @@ typedef NS_ENUM(NSInteger, BackgroundMediaKind) {
 @property (nonatomic, assign) CGFloat backgroundRhythmFlashMaxAlpha;    // 闪屏 alpha 上限（由"闪屏" slider 控制，默认 0）
 @property (nonatomic, strong, nullable) UIView *backgroundRhythmFlashView;
 
-// Color-mask 蒙版（"色散" slider 控制）：beat 触发后切色 + x/y 微位移；不动视频本身
-@property (nonatomic, strong, nullable) UIView *backgroundRhythmColorMaskView;
-@property (nonatomic, assign) CGFloat backgroundRhythmColorMaskIntensity;   // 0..1 beat 后衰减
-@property (nonatomic, assign) CGFloat backgroundRhythmColorMaskMaxAlpha;    // 由色散 slider 控制
-@property (nonatomic, assign) CGFloat backgroundRhythmColorMaskShiftMax;    // px，色散 slider 控制
-@property (nonatomic, assign) CGPoint backgroundRhythmColorMaskOffset;      // 当前蒙版位移
-@property (nonatomic, assign) NSInteger backgroundRhythmColorMaskHueIndex;  // beat 切色循环索引
+// 色散特效模块（"色散" slider 控制）：封装 alpha/位移衰减、beat 切色等内部状态。
+// ViewController 只持有 view 引用、把它加进层级、转发 trigger / tick / reset。
+@property (nonatomic, strong, nullable) RhythmColorMaskEffect *backgroundRhythmColorMaskView;
 
 // Motionleap-style filter state (driven by display link, read by CIFilter compositor on bg queue)
 @property (atomic, assign) float backgroundRhythmFilterIntensity;       // 0..1，beat 上为 1，每帧指数衰减
@@ -206,6 +208,12 @@ typedef NS_ENUM(NSInteger, BackgroundMediaKind) {
 @property (nonatomic, strong) UISlider *spectrumPositionYSlider;
 @property (nonatomic, strong) UISlider *spectrumScaleSlider;
 @property (nonatomic, strong) UILabel *spectrumPositionHintLabel;
+
+// 频谱位置长按拖拽（3s 长按 → 拖动）
+@property (nonatomic, assign) CGPoint spectrumDragStartTouchPoint;
+@property (nonatomic, assign) CGPoint spectrumDragStartLayoutOffset;
+@property (nonatomic, strong, nullable) UILabel *spectrumDragHintLabel;
+
 @property (nonatomic, strong, nullable) UIColor *backgroundMediaPreviewColor;
 
 @property (nonatomic, assign) NSTimeInterval lastNowPlayingUpdateTime;
@@ -267,6 +275,8 @@ typedef NS_ENUM(NSInteger, BackgroundMediaKind) {
 - (void)backgroundMediaRhythmRateSliderChanged:(UISlider *)sender;
 - (void)backgroundMediaRhythmShakeSliderChanged:(UISlider *)sender;
 - (void)backgroundMediaRhythmFlashSliderChanged:(UISlider *)sender;
+- (void)backgroundMediaRhythmBoostSliderChanged:(UISlider *)sender;
+- (void)backgroundMediaRhythmBlurSliderChanged:(UISlider *)sender;
 - (void)toggleBackgroundMediaPanel:(BOOL)visible animated:(BOOL)animated;
 - (void)reloadBackgroundMediaLibrary;
 - (BOOL)isBackgroundMediaEnabled;

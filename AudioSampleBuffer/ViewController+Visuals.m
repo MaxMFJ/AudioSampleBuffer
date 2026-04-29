@@ -118,9 +118,9 @@ static NSString * const kSpectrumScaleDefaultsKey     = @"SpectrumLayoutScale";
     self.importBackgroundMediaButton = importButton;
 
     CGFloat headerHeight = 52.0;
-    // 三行 slider：每行 32pt
+    // 五行 slider：加速 / 模糊 / 震颤 / 色散 / 闪屏
     CGFloat rowH = 32.0;
-    CGFloat controlsHeight = rowH * 3 + 12.0;
+    CGFloat controlsHeight = rowH * 5 + 12.0;
 
     UIView *controlsView = [[UIView alloc] initWithFrame:CGRectMake(12, headerHeight, panelWidth - 24, controlsHeight)];
     controlsView.backgroundColor = [UIColor colorWithWhite:1.0 alpha:0.06];
@@ -179,12 +179,46 @@ static NSString * const kSpectrumScaleDefaultsKey     = @"SpectrumLayoutScale";
     UISlider *flashSlider = [[UISlider alloc] initWithFrame:CGRectMake(sliderX, 4 + 2*rowH, sliderW, 26)];
     flashSlider.minimumValue = 0.0;
     flashSlider.maximumValue = 1.0;
-    flashSlider.value = 0.0;
+    flashSlider.value = 0.30;
     flashSlider.minimumTrackTintColor = [UIColor colorWithRed:0.92 green:0.92 blue:0.40 alpha:1.0];
     flashSlider.maximumTrackTintColor = [UIColor colorWithWhite:1.0 alpha:0.15];
     [flashSlider addTarget:self action:@selector(backgroundMediaRhythmFlashSliderChanged:) forControlEvents:UIControlEventValueChanged];
     [controlsView addSubview:flashSlider];
     self.backgroundMediaRhythmFlashSlider = flashSlider;
+
+    // 第 4 行：加速（rate-burst 强度，0 = 不加速；100 = 当前的 5×）
+    UILabel *boostLabel = [[UILabel alloc] initWithFrame:CGRectMake(labelX, 8 + 3*rowH, labelW, 18)];
+    boostLabel.text = @"加速";
+    boostLabel.font = [UIFont systemFontOfSize:12 weight:UIFontWeightSemibold];
+    boostLabel.textColor = [UIColor colorWithWhite:1.0 alpha:0.82];
+    [controlsView addSubview:boostLabel];
+
+    UISlider *boostSlider = [[UISlider alloc] initWithFrame:CGRectMake(sliderX, 4 + 3*rowH, sliderW, 26)];
+    boostSlider.minimumValue = 0.0;
+    boostSlider.maximumValue = 1.0;
+    boostSlider.value = 0.70;
+    boostSlider.minimumTrackTintColor = [UIColor colorWithRed:0.30 green:0.85 blue:0.95 alpha:1.0];
+    boostSlider.maximumTrackTintColor = [UIColor colorWithWhite:1.0 alpha:0.15];
+    [boostSlider addTarget:self action:@selector(backgroundMediaRhythmBoostSliderChanged:) forControlEvents:UIControlEventValueChanged];
+    [controlsView addSubview:boostSlider];
+    self.backgroundMediaRhythmBoostSlider = boostSlider;
+
+    // 第 5 行：模糊（加速期 motion blur 强度，0 = 不模糊）
+    UILabel *blurLabel = [[UILabel alloc] initWithFrame:CGRectMake(labelX, 8 + 4*rowH, labelW, 18)];
+    blurLabel.text = @"模糊";
+    blurLabel.font = [UIFont systemFontOfSize:12 weight:UIFontWeightSemibold];
+    blurLabel.textColor = [UIColor colorWithWhite:1.0 alpha:0.82];
+    [controlsView addSubview:blurLabel];
+
+    UISlider *blurSlider = [[UISlider alloc] initWithFrame:CGRectMake(sliderX, 4 + 4*rowH, sliderW, 26)];
+    blurSlider.minimumValue = 0.0;
+    blurSlider.maximumValue = 1.0;
+    blurSlider.value = 0.55;
+    blurSlider.minimumTrackTintColor = [UIColor colorWithRed:0.65 green:0.55 blue:0.95 alpha:1.0];
+    blurSlider.maximumTrackTintColor = [UIColor colorWithWhite:1.0 alpha:0.15];
+    [blurSlider addTarget:self action:@selector(backgroundMediaRhythmBlurSliderChanged:) forControlEvents:UIControlEventValueChanged];
+    [controlsView addSubview:blurSlider];
+    self.backgroundMediaRhythmBlurSlider = blurSlider;
 
     CGFloat tableY = headerHeight + controlsHeight + 10.0;
     UITableView *mediaTableView = [[UITableView alloc] initWithFrame:CGRectMake(0, tableY, panelWidth, panel.bounds.size.height - tableY) style:UITableViewStylePlain];
@@ -1002,7 +1036,90 @@ static NSString * const kSpectrumScaleDefaultsKey     = @"SpectrumLayoutScale";
         [self applyManualSpectrumPaletteIfNeeded];
     }
     [self refreshSpectrumStyleButtonState];
+
+    // 频谱长按 3s 后可以拖动改 layoutOffset
+    self.spectrumView.userInteractionEnabled = YES;
+    UILongPressGestureRecognizer *lpgr = [[UILongPressGestureRecognizer alloc]
+        initWithTarget:self action:@selector(spectrumLongPressDragged:)];
+    lpgr.minimumPressDuration = 3.0;
+    lpgr.allowableMovement = 60.0;
+    [self.spectrumView addGestureRecognizer:lpgr];
+
     return self.spectrumView;
+}
+
+#pragma mark - Spectrum long-press drag (移动频谱位置)
+
+- (void)spectrumLongPressDragged:(UILongPressGestureRecognizer *)g {
+    if (!self.spectrumView) return;
+    if (self.spectrumView.layoutStyle == ADSpectrumLayoutStyleRing) return;
+
+    CGPoint loc = [g locationInView:self.spectrumView];
+    CGSize sz = self.spectrumView.bounds.size;
+    if (sz.width < 1 || sz.height < 1) return;
+
+    switch (g.state) {
+        case UIGestureRecognizerStateBegan: {
+            self.spectrumDragStartTouchPoint = loc;
+            self.spectrumDragStartLayoutOffset = self.spectrumView.layoutOffset;
+
+            // 触觉反馈 + 视觉提示
+            UIImpactFeedbackGenerator *gen = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleMedium];
+            [gen impactOccurred];
+
+            if (!self.spectrumDragHintLabel) {
+                UILabel *hint = [[UILabel alloc] initWithFrame:CGRectMake(0, 0, 220, 36)];
+                hint.text = @"拖动以调整频谱位置";
+                hint.textAlignment = NSTextAlignmentCenter;
+                hint.textColor = [UIColor whiteColor];
+                hint.font = [UIFont systemFontOfSize:13 weight:UIFontWeightSemibold];
+                hint.backgroundColor = [UIColor colorWithRed:0.10 green:0.55 blue:0.95 alpha:0.92];
+                hint.layer.cornerRadius = 18.0;
+                hint.layer.masksToBounds = YES;
+                hint.userInteractionEnabled = NO;
+                self.spectrumDragHintLabel = hint;
+            }
+            self.spectrumDragHintLabel.center = CGPointMake(self.view.bounds.size.width / 2.0, 88.0);
+            self.spectrumDragHintLabel.alpha = 0.0;
+            [self.view addSubview:self.spectrumDragHintLabel];
+            [self.view bringSubviewToFront:self.spectrumDragHintLabel];
+            [UIView animateWithDuration:0.18 animations:^{
+                self.spectrumDragHintLabel.alpha = 1.0;
+            }];
+            break;
+        }
+        case UIGestureRecognizerStateChanged: {
+            CGFloat dx = (loc.x - self.spectrumDragStartTouchPoint.x) / sz.width;
+            CGFloat dy = (loc.y - self.spectrumDragStartTouchPoint.y) / sz.height;
+            CGFloat newX = self.spectrumDragStartLayoutOffset.x + dx;
+            CGFloat newY = self.spectrumDragStartLayoutOffset.y + dy;
+            newX = MAX(-0.32, MIN(0.32, newX));
+            newY = MAX(-0.28, MIN(0.28, newY));
+            self.spectrumView.layoutOffset = CGPointMake(newX, newY);
+            // 同步 slider（如果面板正打开）
+            if (self.spectrumPositionXSlider) self.spectrumPositionXSlider.value = newX;
+            if (self.spectrumPositionYSlider) self.spectrumPositionYSlider.value = newY;
+            break;
+        }
+        case UIGestureRecognizerStateEnded:
+        case UIGestureRecognizerStateCancelled:
+        case UIGestureRecognizerStateFailed: {
+            [self persistSpectrumSettings];
+            UISelectionFeedbackGenerator *gen = [[UISelectionFeedbackGenerator alloc] init];
+            [gen selectionChanged];
+            if (self.spectrumDragHintLabel) {
+                UILabel *hint = self.spectrumDragHintLabel;
+                [UIView animateWithDuration:0.20 animations:^{
+                    hint.alpha = 0.0;
+                } completion:^(BOOL finished) {
+                    [hint removeFromSuperview];
+                }];
+            }
+            break;
+        }
+        default:
+            break;
+    }
 }
 
 #pragma mark - Effect Controls
@@ -1373,7 +1490,7 @@ static NSString * const kSpectrumScaleDefaultsKey     = @"SpectrumLayoutScale";
     if (!nonRingLayout) {
         self.spectrumPositionHintLabel.text = @"圆环样式不需要单独调整音柱位置";
     } else {
-        self.spectrumPositionHintLabel.text = @"拖动滑块调整音柱位置和大小";
+        self.spectrumPositionHintLabel.text = @"拖滑块调整位置和大小，或在频谱上长按 3 秒后拖动";
     }
     self.spectrumHueSlider.enabled = !(self.spectrumAutoColorSwitch && self.spectrumAutoColorSwitch.isOn);
 }

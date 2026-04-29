@@ -382,11 +382,9 @@ static NSString * const kBackgroundMediaManifestFileName = @"background_media_it
         [self persistBackgroundMediaItems];
         [self.backgroundMediaTableView reloadData];
 
-        if (!self.isBackgroundMediaEffectActive) {
-            self.isBackgroundMediaEffectActive = YES;
-            [self stopBackgroundMediaPlayback];
+        if ([self isBackgroundMediaEnabled]) {
+            [self playSelectedBackgroundMediaIfNeeded];
         }
-        [self playSelectedBackgroundMediaIfNeeded];
         [self updateAudioSelection];
         [self bringControlButtonsToFront];
         [self refreshSpectrumAdaptiveThemeIfNeeded];
@@ -1066,20 +1064,12 @@ static NSString * const kBackgroundMediaManifestFileName = @"background_media_it
     [[NSUserDefaults standardUserDefaults] synchronize];
 
     if (resolvedEnabled) {
-        // Ensure the visual effect state flips into background-media mode.
-        if (self.visualEffectManager.currentEffectType != VisualEffectTypeUserMediaBackground) {
-            [self.visualEffectManager setCurrentEffect:VisualEffectTypeUserMediaBackground animated:YES];
-        }
         self.backgroundMediaPreviewColor = [self dominantColorForBackgroundMediaItem:self.selectedBackgroundMediaItem];
-        [self updateBackgroundMediaEffectStateForEffect:VisualEffectTypeUserMediaBackground];
+        [self updateBackgroundMediaEffectStateForEffect:self.visualEffectManager.currentEffectType];
         [self refreshSpectrumAdaptiveThemeIfNeeded];
     } else {
         // 关闭背景媒体时，强制关闭律动效果（避免残留rate/震动）
         [self setBackgroundRhythmEnabled:NO];
-        // If we are currently on the background-media effect, switch back to a safe default.
-        if (self.visualEffectManager.currentEffectType == VisualEffectTypeUserMediaBackground) {
-            [self.visualEffectManager setCurrentEffect:VisualEffectTypeNeonGlow animated:YES];
-        }
         [self updateBackgroundMediaEffectStateForEffect:self.visualEffectManager.currentEffectType];
     }
 
@@ -1123,37 +1113,83 @@ static NSString * const kBackgroundMediaManifestFileName = @"background_media_it
     // 注意：实际效果是有色蒙版叠加 + 蒙版位移，不是 RGB 通道分离（避免白闪刺眼）
     CGFloat t = MAX(0.0, MIN(sender.value, 1.0));
     self.backgroundRhythmShakeIntensity = t;
-    self.backgroundRhythmColorMaskMaxAlpha = (CGFloat)(0.22 * t);   // 0..0.22
-    self.backgroundRhythmColorMaskShiftMax = (CGFloat)(8.0 * t);    // 0..8 px
-
     [self syncRhythmColorMaskInHierarchy];
     [self refreshBackgroundMediaButtonState];
 }
 
-// 把蒙版 view 安装/移除到视图层级。slider=0 → 完全移除（不残留）
+// beat 叠层需要压过 Metal/spectrum 等全屏视觉层，但仍低于控制 UI。
+- (void)refreshBackgroundRhythmOverlayZOrder {
+    if (self.backgroundRhythmColorMaskView.superview == self.view) {
+        [self.view bringSubviewToFront:self.backgroundRhythmColorMaskView];
+    }
+    if (self.backgroundRhythmFlashView.superview == self.view) {
+        [self.view bringSubviewToFront:self.backgroundRhythmFlashView];
+    }
+    [self bringControlButtonsToFront];
+}
+
+// 同步色散模块到视图层级 + 更新 alpha/位移上限。slider=0 → 完全移除（不残留）
 - (void)syncRhythmColorMaskInHierarchy {
-    if (!self.isBackgroundRhythmEnabled || self.backgroundRhythmColorMaskMaxAlpha < 0.005) {
+    CGFloat t = self.backgroundMediaRhythmShakeSlider ?
+        MAX(0.0, MIN(self.backgroundMediaRhythmShakeSlider.value, 1.0)) :
+        MAX(0.0, MIN(self.backgroundRhythmShakeIntensity, 1.0));
+    self.backgroundRhythmShakeIntensity = t;
+
+    CGFloat maxAlpha = 0.55 * t;   // 0..0.55，beat 上能明显看到色脉
+    CGFloat shiftMax = 10.0 * t;   // 0..10 px
+
+    if (!self.isBackgroundRhythmEnabled || maxAlpha < 0.005) {
         if (self.backgroundRhythmColorMaskView.superview) {
             [self.backgroundRhythmColorMaskView removeFromSuperview];
         }
-        self.backgroundRhythmColorMaskIntensity = 0.0;
-        self.backgroundRhythmColorMaskOffset = CGPointZero;
+        [self.backgroundRhythmColorMaskView reset];
         return;
     }
     if (!self.backgroundRhythmColorMaskView) {
-        UIView *mask = [[UIView alloc] initWithFrame:self.view.bounds];
-        mask.backgroundColor = [UIColor colorWithRed:0.95 green:0.20 blue:0.30 alpha:1.0];
-        mask.alpha = 0.0;
-        mask.userInteractionEnabled = NO;
-        mask.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+        RhythmColorMaskEffect *mask = [[RhythmColorMaskEffect alloc] initWithFrame:self.view.bounds];
         self.backgroundRhythmColorMaskView = mask;
     }
+    self.backgroundRhythmColorMaskView.maxAlpha = maxAlpha;
+    self.backgroundRhythmColorMaskView.shiftMax = shiftMax;
     if (self.backgroundRhythmColorMaskView.superview != self.view) {
         // 蒙版在视频之上、闪屏/UI 之下；用 index 0 与 flashView 一起在最底层
         [self.view insertSubview:self.backgroundRhythmColorMaskView atIndex:0];
     }
     self.backgroundRhythmColorMaskView.frame = self.view.bounds;
     self.backgroundRhythmColorMaskView.hidden = NO;
+    [self refreshBackgroundRhythmOverlayZOrder];
+}
+
+// 同步闪屏 view 到视图层级。slider=0 → 移除；slider>0 → lazy-create 并插入
+- (void)syncRhythmFlashInHierarchy {
+    CGFloat v = self.backgroundMediaRhythmFlashSlider ?
+        MAX(0.0, MIN(self.backgroundMediaRhythmFlashSlider.value, 1.0)) : 0.0;
+    self.backgroundRhythmFlashMaxAlpha = (CGFloat)(0.55 * v);
+
+    if (!self.isBackgroundRhythmEnabled || self.backgroundRhythmFlashMaxAlpha < 0.005) {
+        if (self.backgroundRhythmFlashView.superview) {
+            [self.backgroundRhythmFlashView removeFromSuperview];
+        }
+        if (self.backgroundRhythmFlashView) {
+            self.backgroundRhythmFlashView.alpha = 0.0;
+            self.backgroundRhythmFlashView.hidden = YES;
+        }
+        return;
+    }
+    if (!self.backgroundRhythmFlashView) {
+        UIView *flash = [[UIView alloc] initWithFrame:self.view.bounds];
+        flash.backgroundColor = [UIColor whiteColor];
+        flash.alpha = 0.0;
+        flash.userInteractionEnabled = NO;
+        flash.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+        self.backgroundRhythmFlashView = flash;
+    }
+    if (self.backgroundRhythmFlashView.superview != self.view) {
+        [self.view insertSubview:self.backgroundRhythmFlashView atIndex:0];
+    }
+    self.backgroundRhythmFlashView.frame = self.view.bounds;
+    self.backgroundRhythmFlashView.hidden = NO;
+    [self refreshBackgroundRhythmOverlayZOrder];
 }
 
 - (void)setBackgroundRhythmEnabled:(BOOL)enabled {
@@ -1186,14 +1222,15 @@ static NSString * const kBackgroundMediaManifestFileName = @"background_media_it
         [self.backgroundRhythmLastSpectrum removeAllObjects];
         [self.backgroundRhythmFluxHistory removeAllObjects];
         self.backgroundRhythmFluxHistoryIndex = 0;
+        [self.backgroundRhythmRecentBeatTimes removeAllObjects];
+        self.backgroundRhythmHighEnergyEndsAt = 0.0;
 
         self.backgroundRhythmFilterIntensity = 0.0f;
         self.backgroundRhythmFilterShiftMax = 0.0f;
         self.backgroundRhythmFilterStrongMix = 0.0f;
         self.backgroundRhythmFilterMotionBlur = 0.0f;
 
-        self.backgroundRhythmColorMaskIntensity = 0.0;
-        self.backgroundRhythmColorMaskOffset = CGPointZero;
+        [self.backgroundRhythmColorMaskView reset];
         if (self.backgroundRhythmColorMaskView.superview) {
             [self.backgroundRhythmColorMaskView removeFromSuperview];
         }
@@ -1220,44 +1257,9 @@ static NSString * const kBackgroundMediaManifestFileName = @"background_media_it
         self.backgroundRhythmFilterStrongMix = 0.0f;
         self.backgroundRhythmFilterShiftMax = 0.0f;
 
-        // 色散 slider → 蒙版 alpha 上限 / 位移上限
-        CGFloat shakeT = MAX(0.0, MIN(self.backgroundRhythmShakeIntensity, 1.0));
-        if (self.backgroundMediaRhythmShakeSlider) {
-            shakeT = MAX(0.0, MIN(self.backgroundMediaRhythmShakeSlider.value, 1.0));
-            self.backgroundRhythmShakeIntensity = shakeT;
-        }
-        self.backgroundRhythmColorMaskMaxAlpha = (CGFloat)(0.22 * shakeT);
-        self.backgroundRhythmColorMaskShiftMax = (CGFloat)(8.0 * shakeT);
-        self.backgroundRhythmColorMaskIntensity = 0.0;
-        self.backgroundRhythmColorMaskOffset = CGPointZero;
+        // 色散与闪屏：均按 slider 当前值同步层级（slider=0 → 不创建 view）
         [self syncRhythmColorMaskInHierarchy];
-
-        // 同步当前闪屏 slider 值到 maxAlpha；slider 为 0 时不创建/插入闪屏层
-        self.backgroundRhythmFlashMaxAlpha = 0.0;
-        if (self.backgroundMediaRhythmFlashSlider) {
-            CGFloat v = MAX(0.0, MIN(self.backgroundMediaRhythmFlashSlider.value, 1.0));
-            self.backgroundRhythmFlashMaxAlpha = (CGFloat)(0.55 * v);
-        }
-        if (self.backgroundRhythmFlashMaxAlpha >= 0.005) {
-            if (!self.backgroundRhythmFlashView) {
-                UIView *flash = [[UIView alloc] initWithFrame:self.view.bounds];
-                flash.backgroundColor = [UIColor whiteColor];
-                flash.alpha = 0.0;
-                flash.userInteractionEnabled = NO;
-                flash.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-                self.backgroundRhythmFlashView = flash;
-            }
-            if (self.backgroundRhythmFlashView.superview != self.view) {
-                // 视频是 CALayer 在 view.layer 的 sublayer 0；
-                // 把 flash view 插到 subview index 0（在 video layer 之上、其它 UI 之下）
-                [self.view insertSubview:self.backgroundRhythmFlashView atIndex:0];
-            }
-            self.backgroundRhythmFlashView.frame = self.view.bounds;
-            self.backgroundRhythmFlashView.hidden = NO;
-            self.backgroundRhythmFlashView.alpha = 0.0;
-        } else if (self.backgroundRhythmFlashView.superview) {
-            [self.backgroundRhythmFlashView removeFromSuperview];
-        }
+        [self syncRhythmFlashInHierarchy];
 
         if (!self.backgroundRhythmDisplayLink) {
             self.backgroundRhythmDisplayLink = [CADisplayLink displayLinkWithTarget:self selector:@selector(backgroundRhythmTick:)];
@@ -1459,39 +1461,9 @@ static NSString * const kBackgroundMediaManifestFileName = @"background_media_it
     }
     rateT = MAX(0.0, MIN(rateT, 1.0));
 
-    // 读取色散 / 闪屏 slider 当前值（用于严格门控）
-    float shakeT = (float)MAX(0.0, MIN(self.backgroundRhythmShakeIntensity, 1.0));
     float flashT = self.backgroundMediaRhythmFlashSlider ?
         (float)MAX(0.0, MIN(self.backgroundMediaRhythmFlashSlider.value, 1.0)) : 0.0f;
 
-    // **关键**：每个视觉通道严格乘以对应 slider，slider=0 → 通道完全关闭
-    // 色散 slider 控制：彩色蒙版 alpha 脉冲 + 蒙版位移目标
-    if (shakeT >= 0.02f && self.backgroundRhythmColorMaskMaxAlpha >= 0.005) {
-        // beat 切色：在一组冷暖循环色中递进（不要白色，避免视觉刺激）
-        self.backgroundRhythmColorMaskHueIndex = (self.backgroundRhythmColorMaskHueIndex + 1) % 6;
-        UIColor *c = nil;
-        switch (self.backgroundRhythmColorMaskHueIndex) {
-            case 0: c = [UIColor colorWithRed:0.95 green:0.20 blue:0.30 alpha:1.0]; break; // 红
-            case 1: c = [UIColor colorWithRed:0.20 green:0.55 blue:0.95 alpha:1.0]; break; // 蓝
-            case 2: c = [UIColor colorWithRed:0.95 green:0.50 blue:0.10 alpha:1.0]; break; // 橙
-            case 3: c = [UIColor colorWithRed:0.30 green:0.85 blue:0.55 alpha:1.0]; break; // 青绿
-            case 4: c = [UIColor colorWithRed:0.75 green:0.25 blue:0.85 alpha:1.0]; break; // 紫
-            default:c = [UIColor colorWithRed:0.95 green:0.80 blue:0.20 alpha:1.0]; break; // 黄
-        }
-        if (self.backgroundRhythmColorMaskView) self.backgroundRhythmColorMaskView.backgroundColor = c;
-
-        // alpha 脉冲：beat 上为 1，tick 中按帧衰减
-        self.backgroundRhythmColorMaskIntensity = (CGFloat)(0.65 + 0.35 * (CGFloat)strongMix);
-
-        // 位移目标：单轴方向，长度 = colorMaskShiftMax * (0.5..1) * intensity
-        CGFloat dir = (self.backgroundRhythmColorMaskHueIndex % 2 == 0) ? 1.0 : -1.0;
-        CGFloat amp = self.backgroundRhythmColorMaskShiftMax * (0.55 + 0.45 * (CGFloat)strongMix);
-        if (self.backgroundRhythmShakeAxis == 0) {
-            self.backgroundRhythmColorMaskOffset = CGPointMake(dir * amp, 0);
-        } else {
-            self.backgroundRhythmColorMaskOffset = CGPointMake(0, dir * amp);
-        }
-    }
     self.backgroundRhythmFilterIntensity = 0.0f;     // CIFilter 不再做色散
     self.backgroundRhythmFilterShiftMax  = 0.0f;
     self.backgroundRhythmFilterStrongMix = strongMix;
@@ -1510,8 +1482,32 @@ static NSString * const kBackgroundMediaManifestFileName = @"background_media_it
         self.backgroundRhythmShakeAxis = 1 - self.backgroundRhythmShakeAxis;
     }
 
-    // 运动模糊（独立于震颤 slider）：律动开 = 加速期一定有运动模糊
-    self.backgroundRhythmFilterMotionBlur = MIN(1.0f, 0.55f + 0.20f * strongMix);
+    // 色散：触发蒙版模块（slider=0 时模块内部直接 noop）
+    [self.backgroundRhythmColorMaskView triggerOnBeatWithStrongMix:strongMix axis:self.backgroundRhythmShakeAxis];
+
+    // 高潮密集 beat 检测（只有这种状态才允许 motion blur，降 CPU/GPU 开销）：
+    // 维护近 2s 内 beat 时间戳，密度 ≥ 4 次（≈120 BPM）+ 当前是中强拍 → 进入"高潮模式"
+    if (!self.backgroundRhythmRecentBeatTimes) {
+        self.backgroundRhythmRecentBeatTimes = [NSMutableArray array];
+    }
+    NSMutableArray<NSNumber *> *recents = self.backgroundRhythmRecentBeatTimes;
+    [recents addObject:@(now)];
+    while (recents.count > 0 && (now - recents.firstObject.doubleValue) > 2.0) {
+        [recents removeObjectAtIndex:0];
+    }
+    BOOL highEnergy = (recents.count >= 4 && strongMix > 0.55f);
+    if (highEnergy) {
+        // 高潮模式持续到 1.2s 后；下一个高潮 beat 会续命
+        self.backgroundRhythmHighEnergyEndsAt = now + 1.2;
+    }
+
+    // 运动模糊：仅在高潮模式 + 强拍 + slider>0 时才注入；其他时刻直接置 0，免去 CIFilter 开销
+    float blurT = self.backgroundMediaRhythmBlurSlider ?
+        (float)MAX(0.0, MIN(self.backgroundMediaRhythmBlurSlider.value, 1.0)) : 0.0f;
+    BOOL inHighEnergy = (now < self.backgroundRhythmHighEnergyEndsAt);
+    if (blurT >= 0.02f && inHighEnergy && strongMix > 0.55f) {
+        self.backgroundRhythmFilterMotionBlur = MIN(1.0f, blurT * (0.55f + 0.45f * strongMix));
+    }
 
     // 闪屏 slider 控制：白屏 alpha 强度
     self.backgroundRhythmFlashIntensity = flashT * (0.60f + 0.40f * strongMix);
@@ -1531,9 +1527,17 @@ static NSString * const kBackgroundMediaManifestFileName = @"background_media_it
     if (!item) return;
     if (item.status != AVPlayerItemStatusReadyToPlay) return;
 
-    // 单段 burst 倍速：弱拍 ≈ 3.5×；强拍 ≈ 5.0×（baseline 不依赖任何 slider）
-    float baseRate = 3.50f + 1.50f * strongMix;
-    if (baseRate < 2.50f) baseRate = 2.50f;
+    // 加速 slider：0=不加速；1=最强（5×）；可避免晕眩
+    float boostT = self.backgroundMediaRhythmBoostSlider ?
+        (float)MAX(0.0, MIN(self.backgroundMediaRhythmBoostSlider.value, 1.0)) : 1.0f;
+    if (boostT < 0.02f) {
+        if (player.rate > 1.001f || player.rate < 0.999f) [player setRate:1.0];
+        return;
+    }
+
+    // 单段 burst 倍速：boostT=1 → 3.5×~5×；boostT=0.02 → ≈ 1.05×（几乎看不见）
+    float baseRate = 1.0f + boostT * (2.50f + 1.50f * strongMix);
+    if (baseRate < 1.05f) baseRate = 1.05f;
     if (baseRate > 6.00f) baseRate = 6.00f;
 
     // 单段 burst 时长 / 段间停顿：固定值
@@ -1603,14 +1607,25 @@ static NSString * const kBackgroundMediaManifestFileName = @"background_media_it
 #pragma mark - Rhythm: Flash slider + handler
 
 - (void)backgroundMediaRhythmFlashSliderChanged:(UISlider *)sender {
-    // 0..1，存在已有的 backgroundRhythmFlashIntensity（峰值用），用单独属性更清晰
-    // 这里直接驱动 flash overlay 的最大 alpha 上限
-    CGFloat v = MAX(0.0, MIN(sender.value, 1.0));
-    // 闪屏过强会刺眼：上限 0.55
-    self.backgroundRhythmFlashMaxAlpha = (CGFloat)(0.0 + 0.55 * v);
-    // 没开启律动时，提前清掉 flash view 的残余
-    if (!self.isBackgroundRhythmEnabled && self.backgroundRhythmFlashView) {
-        self.backgroundRhythmFlashView.alpha = 0.0;
+    (void)sender;
+    // sync 内部读 slider value 并 lazy create / 移除 flashView。slider=0 → 移除
+    [self syncRhythmFlashInHierarchy];
+}
+
+- (void)backgroundMediaRhythmBoostSliderChanged:(UISlider *)sender {
+    // 拖到 0 时立刻把当前可能在加速的播放器拉回 1.0×
+    if (sender.value < 0.02f && self.backgroundVideoPlayer) {
+        if (self.backgroundVideoPlayer.rate > 1.001f || self.backgroundVideoPlayer.rate < 0.999f) {
+            [self.backgroundVideoPlayer setRate:1.0];
+        }
+        self.backgroundRhythmLastBoostEndsAt = 0.0;
+    }
+}
+
+- (void)backgroundMediaRhythmBlurSliderChanged:(UISlider *)sender {
+    // 拖到 0 时立刻清掉当前残留的运动模糊
+    if (sender.value < 0.02f) {
+        self.backgroundRhythmFilterMotionBlur = 0.0f;
     }
 }
 
@@ -1649,28 +1664,15 @@ static NSString * const kBackgroundMediaManifestFileName = @"background_media_it
     self.backgroundRhythmRotationPulse *= expf(-9.0f  * (float)dt);
     self.backgroundRhythmPulse         *= expf(-12.0f * (float)dt);
 
-    // 闪屏衰减（快衰减，~46ms 半衰期）。每帧实时从 slider 同步上限。
+    // 闪屏衰减（快衰减，~46ms 半衰期）+ 实时同步 slider 状态到层级
     self.backgroundRhythmFlashIntensity *= expf(-15.0f * (float)dt);
-    CGFloat flashSliderV = self.backgroundMediaRhythmFlashSlider ?
-        MAX(0.0, MIN(self.backgroundMediaRhythmFlashSlider.value, 1.0)) : 0.0;
-    self.backgroundRhythmFlashMaxAlpha = (CGFloat)(0.55 * flashSliderV);
-
-    if (self.backgroundRhythmFlashMaxAlpha < 0.005) {
-        // slider 在 0：直接 remove from superview，避免任何残留可能
-        if (self.backgroundRhythmFlashView && self.backgroundRhythmFlashView.superview) {
-            [self.backgroundRhythmFlashView removeFromSuperview];
-        }
-    } else if (self.backgroundRhythmFlashView) {
-        if (!self.backgroundRhythmFlashView.superview) {
-            [self.view insertSubview:self.backgroundRhythmFlashView atIndex:0];
-            self.backgroundRhythmFlashView.frame = self.view.bounds;
-        }
+    [self syncRhythmFlashInHierarchy];
+    if (self.backgroundRhythmFlashView && self.backgroundRhythmFlashView.superview) {
         CGFloat a = (CGFloat)self.backgroundRhythmFlashIntensity * self.backgroundRhythmFlashMaxAlpha;
         if (a < 0.001) a = 0.0;
         if (a > self.backgroundRhythmFlashMaxAlpha) a = self.backgroundRhythmFlashMaxAlpha;
         [CATransaction begin];
         [CATransaction setDisableActions:YES];
-        if (self.backgroundRhythmFlashView.hidden) self.backgroundRhythmFlashView.hidden = NO;
         self.backgroundRhythmFlashView.alpha = a;
         [CATransaction commit];
     }
@@ -1739,43 +1741,9 @@ static NSString * const kBackgroundMediaManifestFileName = @"background_media_it
         self.backgroundRhythmShakeVelocity = CGPointZero;
     }
 
-    // 色彩蒙版：实时同步 slider，衰减 alpha 与位移
-    CGFloat shakeSliderV = self.backgroundMediaRhythmShakeSlider ?
-        MAX(0.0, MIN(self.backgroundMediaRhythmShakeSlider.value, 1.0)) : 0.0;
-    self.backgroundRhythmShakeIntensity = shakeSliderV;
-    self.backgroundRhythmColorMaskMaxAlpha = 0.22 * shakeSliderV;
-    self.backgroundRhythmColorMaskShiftMax = 8.0 * shakeSliderV;
-
-    if (self.backgroundRhythmColorMaskMaxAlpha < 0.005) {
-        if (self.backgroundRhythmColorMaskView.superview) {
-            [self.backgroundRhythmColorMaskView removeFromSuperview];
-        }
-        self.backgroundRhythmColorMaskIntensity = 0.0;
-        self.backgroundRhythmColorMaskOffset = CGPointZero;
-    } else if (self.backgroundRhythmColorMaskView) {
-        if (!self.backgroundRhythmColorMaskView.superview) {
-            [self.view insertSubview:self.backgroundRhythmColorMaskView atIndex:0];
-            self.backgroundRhythmColorMaskView.frame = self.view.bounds;
-        }
-        // alpha 衰减（~120ms 半衰期）+ 位移衰减（~110ms 半衰期）
-        self.backgroundRhythmColorMaskIntensity *= exp(-6.0 * dt);
-        if (self.backgroundRhythmColorMaskIntensity < 0.005) self.backgroundRhythmColorMaskIntensity = 0.0;
-        CGPoint mp = self.backgroundRhythmColorMaskOffset;
-        CGFloat decay = exp(-6.5 * dt);
-        mp.x *= decay; mp.y *= decay;
-        if (fabs(mp.x) < 0.05) mp.x = 0; if (fabs(mp.y) < 0.05) mp.y = 0;
-        self.backgroundRhythmColorMaskOffset = mp;
-
-        CGFloat alpha = self.backgroundRhythmColorMaskIntensity * self.backgroundRhythmColorMaskMaxAlpha;
-        if (alpha < 0.001) alpha = 0.0;
-        if (alpha > self.backgroundRhythmColorMaskMaxAlpha) alpha = self.backgroundRhythmColorMaskMaxAlpha;
-
-        [CATransaction begin];
-        [CATransaction setDisableActions:YES];
-        self.backgroundRhythmColorMaskView.alpha = alpha;
-        self.backgroundRhythmColorMaskView.transform = CGAffineTransformMakeTranslation(mp.x, mp.y);
-        [CATransaction commit];
-    }
+    // 色散模块：实时同步 slider 与层级，再让模块自衰减一帧
+    [self syncRhythmColorMaskInHierarchy];
+    [self.backgroundRhythmColorMaskView tickWithDelta:dt];
 }
 
 - (void)backgroundMediaEnableButtonTapped:(UIButton *)sender {
@@ -1897,7 +1865,10 @@ static NSString * const kBackgroundMediaManifestFileName = @"background_media_it
     dispatch_async(dispatch_get_main_queue(), ^{
         [self.backgroundMediaTableView reloadData];
         self.backgroundMediaEmptyLabel.hidden = YES;
-        [self updateBackgroundMediaEffectStateForEffect:VisualEffectTypeUserMediaBackground];
+        [self refreshBackgroundMediaButtonState];
+        if ([self isBackgroundMediaEnabled]) {
+            [self updateBackgroundMediaEffectStateForEffect:self.visualEffectManager.currentEffectType];
+        }
         if (completion) completion(YES);
     });
 }
@@ -2086,7 +2057,8 @@ static NSString * const kBackgroundMediaManifestFileName = @"background_media_it
 }
 
 - (void)updateBackgroundMediaEffectStateForEffect:(VisualEffectType)effectType {
-    BOOL shouldActivate = (effectType == VisualEffectTypeUserMediaBackground);
+    (void)effectType;
+    BOOL shouldActivate = [self isBackgroundMediaEnabled] && (self.backgroundMediaItems.count > 0);
     self.isBackgroundMediaEffectActive = shouldActivate;
 
     if (shouldActivate) {
@@ -2116,10 +2088,6 @@ static NSString * const kBackgroundMediaManifestFileName = @"background_media_it
     [self.searchBar resignFirstResponder];
 
     [self reloadBackgroundMediaLibrary];
-
-    if (self.backgroundMediaItems.count > 0) {
-        [self updateBackgroundMediaEffectStateForEffect:VisualEffectTypeUserMediaBackground];
-    }
 
     [self toggleBackgroundMediaPanel:!self.isBackgroundMediaPanelVisible animated:YES];
 }

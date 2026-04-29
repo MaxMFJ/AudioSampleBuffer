@@ -150,7 +150,10 @@ typedef struct {
     self.metalView.enableSetNeedsDisplay = NO;
     
     self.metalView.colorPixelFormat = MTLPixelFormatBGRA8Unorm;
-    self.metalView.clearColor = MTLClearColorMake(0.0, 0.0, 0.0, 1.0);
+    self.metalView.opaque = NO;
+    self.metalView.layer.opaque = NO;
+    self.metalView.backgroundColor = [UIColor clearColor];
+    self.metalView.clearColor = MTLClearColorMake(0.0, 0.0, 0.0, 0.0);
     
     // 创建统一缓冲区
     self.uniformBuffer = [self.device newBufferWithLength:sizeof(Uniforms) 

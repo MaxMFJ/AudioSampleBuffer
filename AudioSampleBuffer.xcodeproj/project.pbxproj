@@ -113,6 +113,7 @@
 		4C7D33972EFEEC8D0027CBC8 /* ViewController+PlaybackProgress.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C7D33962EFEEC8D0027CBC8 /* ViewController+PlaybackProgress.m */; };
 		4C7D339A2EFEEC950027CBC8 /* AudioProgressView.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C7D33992EFEEC950027CBC8 /* AudioProgressView.m */; };
 		4C7D33A02F00000000000001 /* VinylRecordView.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C7D33A22F00000000000002 /* VinylRecordView.m */; };
+		4CCD33A02F30000000000001 /* RhythmColorMaskEffect.m in Sources */ = {isa = PBXBuildFile; fileRef = 4CCD33A02F30000000000003 /* RhythmColorMaskEffect.m */; };
 		4C7D33C02F11200000000001 /* LRCGenerator.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C7D33B02F11100000000002 /* LRCGenerator.m */; };
 		4C7D33C02F11200000000002 /* LyricsEditorViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C7D33B02F11100000000004 /* LyricsEditorViewController.m */; };
 		4C7D33C02F11200000000003 /* LyricsLineCell.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C7D33B02F11100000000006 /* LyricsLineCell.m */; };
@@ -344,6 +345,8 @@
 		4C7D33992EFEEC950027CBC8 /* AudioProgressView.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AudioProgressView.m; sourceTree = "<group>"; };
 		4C7D33A12F00000000000001 /* VinylRecordView.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = VinylRecordView.h; sourceTree = "<group>"; };
 		4C7D33A22F00000000000002 /* VinylRecordView.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = VinylRecordView.m; sourceTree = "<group>"; };
+		4CCD33A02F30000000000002 /* RhythmColorMaskEffect.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = RhythmColorMaskEffect.h; sourceTree = "<group>"; };
+		4CCD33A02F30000000000003 /* RhythmColorMaskEffect.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = RhythmColorMaskEffect.m; sourceTree = "<group>"; };
 		4C7D33B02F11100000000001 /* LRCGenerator.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = LRCGenerator.h; sourceTree = "<group>"; };
 		4C7D33B02F11100000000002 /* LRCGenerator.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = LRCGenerator.m; sourceTree = "<group>"; };
 		4C7D33B02F11100000000003 /* LyricsEditorViewController.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = LyricsEditorViewController.h; sourceTree = "<group>"; };
@@ -824,6 +827,8 @@
 				64C5447E28C8395200C23393 /* AudioPlayCell.m */,
 				4C7D33A12F00000000000001 /* VinylRecordView.h */,
 				4C7D33A22F00000000000002 /* VinylRecordView.m */,
+				4CCD33A02F30000000000002 /* RhythmColorMaskEffect.h */,
+				4CCD33A02F30000000000003 /* RhythmColorMaskEffect.m */,
 				4C7D33952EFEEC8D0027CBC8 /* ViewController+PlaybackProgress.h */,
 				4C7D33962EFEEC8D0027CBC8 /* ViewController+PlaybackProgress.m */,
 				64C5448028C83A0700C23393 /* TTi.h */,
@@ -1051,6 +1056,7 @@
 				4C5168842E9E5FD500853960 /* LRCParser.m in Sources */,
 				64C5447F28C8395200C23393 /* AudioPlayCell.m in Sources */,
 				4C7D33A02F00000000000001 /* VinylRecordView.m in Sources */,
+				4CCD33A02F30000000000001 /* RhythmColorMaskEffect.m in Sources */,
 				4C110D482EA9CD5100D59E12 /* AudioReactive3DShader.metal in Sources */,
 				4C110D492EA9CD5100D59E12 /* GeometricMorphShader.metal in Sources */,
 				4C110D4A2EA9CD5100D59E12 /* CircularWaveShader.metal in Sources */,
