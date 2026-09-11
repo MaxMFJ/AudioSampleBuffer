@@ -282,20 +282,16 @@
 - (void)drawGlassResonancePreview:(CGContextRef)context size:(CGSize)size {
     CGContextSetRGBFillColor(context, 0.006, 0.008, 0.012, 1);
     CGContextFillRect(context, (CGRect){CGPointZero, size});
-    UIBezierPath *knot = [UIBezierPath bezierPath];
-    for (int i=0; i<=160; i++) {
-        CGFloat t=i*2*M_PI/160.0, r=16+5*cos(3*t);
-        CGPoint p=CGPointMake(size.width/2+r*cos(2*t), size.height/2+r*sin(2*t));
-        if (i==0) [knot moveToPoint:p]; else [knot addLineToPoint:p];
+    for (NSInteger ring=0; ring<2; ring++) {
+        CGFloat radius = ring==0 ? 15 : 23;
+        CGRect bounds = CGRectMake(size.width/2-radius, size.height/2-radius, radius*2, radius*2);
+        CGContextSetRGBStrokeColor(context, 0.22, 0.37, 0.47, 1);
+        CGContextSetLineWidth(context, 3.8);
+        CGContextStrokeEllipseInRect(context, bounds);
+        CGContextSetRGBStrokeColor(context, 0.82, 0.88, 0.91, 1);
+        CGContextSetLineWidth(context, 0.9);
+        CGContextStrokeEllipseInRect(context, CGRectInset(bounds, 1, 1));
     }
-    CGContextAddPath(context, knot.CGPath);
-    CGContextSetRGBStrokeColor(context, 0.28, 0.40, 0.49, 1);
-    CGContextSetLineWidth(context, 5.5);
-    CGContextStrokePath(context);
-    CGContextAddPath(context, knot.CGPath);
-    CGContextSetRGBStrokeColor(context, 0.82, 0.88, 0.91, 1);
-    CGContextSetLineWidth(context, 1.1);
-    CGContextStrokePath(context);
 }
 
 - (void)drawCellularWormholePreview:(CGContextRef)context size:(CGSize)size {

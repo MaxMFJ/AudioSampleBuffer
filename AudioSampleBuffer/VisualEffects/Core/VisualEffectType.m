@@ -239,7 +239,7 @@
 
     VisualEffectInfo *glass = [VisualEffectInfo effectWithType:VisualEffectTypeGlassResonance
                                                          name:@"玻璃回旋"
-                                                  description:@"悬浮玻璃扭结随低频呼吸、鼓点弹震，旋律塑形，高频点亮色散与微尘"
+                                                  description:@"双层玻璃 O 环绕黑胶正反旋转，低频呼吸、旋律波线与全屏微尘随音乐流动"
                                                      category:EffectCategoryExperimental
                                              performanceLevel:PerformanceLevelMedium];
     glass.requiresMetal = YES;

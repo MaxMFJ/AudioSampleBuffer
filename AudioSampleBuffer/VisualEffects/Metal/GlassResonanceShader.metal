@@ -1,38 +1,34 @@
 #include "ShaderCommon.metal"
 
-// A closed (2,3) torus knot, not a logo. 160 x 28 indexed quads, no ray marching.
+// Two instanced glass O rings. 160 x 28 quads per ring; no ray marching.
 // galaxyParams1 = low, mid, high, impact; galaxyParams2 = phase, strain, impactAge, energy.
-static float3 glassRotate(float3 p, float phase, constant Uniforms &u) {
-    float c=cos(phase), s=sin(phase);
-    p=float3(c*p.x+s*p.z,p.y,-s*p.x+c*p.z);
-    float a=-0.32+0.12*sin(phase*0.7)+u.cyberpunkControls.y;
+static float3 glassRingRotate(float3 p, uint ring, constant Uniforms &u) {
+    float phase=u.galaxyParams2.x*(ring==0 ? 0.80f : -0.64f);
+    p.xy=float2(cos(phase)*p.x-sin(phase)*p.y,sin(phase)*p.x+cos(phase)*p.y);
+    // Keep the aperture facing the record. Full Y orbits made the old shape
+    // collapse into an edge-on strip and caused large reflected-light flashes.
+    float a=(ring==0 ? 0.075f : -0.085f)+0.025*sin(phase)+u.cyberpunkControls.y;
     p=float3(p.x,cos(a)*p.y-sin(a)*p.z,sin(a)*p.y+cos(a)*p.z);
     float yaw=u.cyberpunkControls.x;
     return float3(cos(yaw)*p.x+sin(yaw)*p.z,p.y,-sin(yaw)*p.x+cos(yaw)*p.z);
 }
-static float3 glassCenter(float t, constant Uniforms &u) {
+static float3 glassCenter(float t, uint ring, constant Uniforms &u) {
     float low=u.galaxyParams1.x, mid=u.galaxyParams1.y;
-    float phase=u.galaxyParams2.x, strain=u.galaxyParams2.y;
-    float r=0.80+0.27*cos(3*t);
-    float3 p=float3(r*cos(2*t), r*sin(2*t), 0.32*sin(3*t));
-    p.xy*=1.0+0.28*low;
-    p.z+=mid*0.34*sin(5*t+phase*2)+strain*0.24*sin(9*t-phase);
-    float wave=sin(4*t-u.galaxyParams2.z*15)*u.galaxyParams1.w;
-    p+=normalize(float3(p.xy,0.3))*wave*0.22;
-    float twist=mid*0.68*sin(3*t+phase)+strain*0.30*sin(7*t);
-    p.xy=float2(cos(twist)*p.x-sin(twist)*p.y,sin(twist)*p.x+cos(twist)*p.y);
-    return p;
+    float phase=u.galaxyParams2.x;
+    float r=(ring==0 ? 1.045f : 1.34f)+low*0.035;
+    r+=0.009*mid*sin(3*t+phase)+0.008*u.galaxyParams1.w*sin(4*t-phase*3);
+    return float3(r*cos(t),r*sin(t),0.018*mid*sin(3*t+phase));
 }
-static float3 glassSurface(float t, float v, constant Uniforms &u) {
-    float3 center=glassCenter(t,u);
-    float3 tangent=normalize(glassCenter(t+0.002,u)-glassCenter(t-0.002,u));
+static float3 glassSurface(float t, float v, uint ring, constant Uniforms &u) {
+    float3 center=glassCenter(t,ring,u);
+    float3 tangent=normalize(glassCenter(t+0.002,ring,u)-glassCenter(t-0.002,ring,u));
     float3 b=normalize(cross(tangent,float3(0,0,1)));
     float3 n=cross(b,tangent);
-    float radius=0.135*(1+u.galaxyParams1.x*0.72);
-    // Tension pinches the tube into alternating liquid seams without topology breaks.
-    radius*=1+0.12*sin(3*t+u.galaxyParams2.x)+u.galaxyParams2.y*0.42*sin(11*t+u.galaxyParams2.x*3)
-              +u.galaxyParams1.z*0.075*sin(19*t+5*v+u.galaxyParams2.x*5);
-    float oval=1+u.galaxyParams1.y*0.48;
+    float radius=(ring==0 ? 0.072f : 0.085f)*(1+u.galaxyParams1.x*0.16);
+    // Broad polished flutes make opposite rotation visible while preserving O.
+    radius*=1+0.075*cos(4*t)+0.035*u.galaxyParams1.z*sin(8*t+u.galaxyParams2.x);
+    v+=0.35*sin(3*t);
+    float oval=1.22+u.galaxyParams1.y*0.12;
     return center+radius*(cos(v)*n*oval+sin(v)*b/oval);
 }
 struct GlassVertex {
@@ -41,20 +37,19 @@ struct GlassVertex {
     float3 normal;
     float3 center;
 };
-vertex GlassVertex glassResonanceVertex(uint id [[vertex_id]],constant Uniforms &u [[buffer(0)]]) {
+vertex GlassVertex glassResonanceVertex(uint id [[vertex_id]],uint ring [[instance_id]],constant Uniforms &u [[buffer(0)]]) {
     float t=float(id/29)*(2*M_PI_F/160), v=float(id%29)*(2*M_PI_F/28);
-    float3 p=glassSurface(t,v,u);
-    float3 du=glassSurface(t+0.002,v,u)-glassSurface(t-0.002,v,u);
-    float3 dv=glassSurface(t,v+0.002,u)-glassSurface(t,v-0.002,u);
+    float3 p=glassSurface(t,v,ring,u);
+    float3 du=glassSurface(t+0.002,v,ring,u)-glassSurface(t-0.002,v,ring,u);
+    float3 dv=glassSurface(t,v+0.002,ring,u)-glassSurface(t,v-0.002,ring,u);
     float3 n=normalize(cross(du,dv));
-    float3 center=glassCenter(t,u);
+    float3 center=glassCenter(t,ring,u);
     if(dot(n,p-center)<0) n=-n;
-    float phase=u.galaxyParams2.x;
-    p=glassRotate(p,phase,u); n=glassRotate(n,phase,u); center=glassRotate(center,phase,u);
+    p=glassRingRotate(p,ring,u); n=glassRingRotate(n,ring,u); center=glassRingRotate(center,ring,u);
     float z=4.4-p.z;
     float squareScale=min(u.resolution.z,1.0f);
     GlassVertex o;
-    float cameraZoom=max(u.cyberpunkFrequencyControls.x,0.2f);
+    float cameraZoom=clamp(u.cyberpunkFrequencyControls.x,0.99f,1.025f);
     o.position=float4(p.xy*2.80*squareScale*cameraZoom, (z-0.1)*10/(10-0.1), z);
     o.world=p; o.normal=n; o.center=center; return o;
 }
@@ -157,63 +152,98 @@ vertex GlassParticle glassParticleVertex(uint id [[vertex_id]], constant Uniform
     float seed=glassHash(float(id)+3.1f), seed2=glassHash(float(id)+91.7f);
     float phase=u.galaxyParams2.x;
     float low=u.galaxyParams1.x, mid=u.galaxyParams1.y, high=u.galaxyParams1.z;
-    float impact=u.galaxyParams1.w, age=u.galaxyParams2.z, energy=u.galaxyParams2.w;
-    float life=fract(seed2+phase*(0.08+energy*0.18));
-    float angle=seed*2*M_PI_F+phase*(0.7+seed2*1.8)+mid*sin(phase*2+seed*9);
-    float radius=mix(0.46f,1.72f,seed2)+(life-0.5f)*0.20f*low;
-    float3 p=float3(cos(angle)*radius,
-                    sin(angle)*(0.55+0.25*seed),
-                    (seed-0.5f)*2.5f+sin(angle*2+phase)*0.24f);
-    // Drum hits launch a shell through the whole depth field. High frequency
-    // breaks it into fine glitter; sustained energy keeps it circulating.
-    float shell=impact*exp(-age*2.4f)*smoothstep(0.0f,0.18f,life)*(1-smoothstep(0.55f,1.0f,life));
-    p+=normalize(p+float3(0.01))*shell*(0.42+seed*1.2);
-    p.xy+=float2(sin(seed*83+phase*9),cos(seed2*71-phase*8))*high*0.11;
-    p=glassRotate(p,phase*0.42,u);
-    float cameraZoom=max(u.cyberpunkFrequencyControls.x,0.2f);
-    float aspect=min(u.resolution.z,1.0f);
-    // Fill the entire visible portrait canvas. Only X follows the square-view
-    // crop; Y deliberately spans the full height instead of collapsing into
-    // the central sculpture / vinyl region.
-    float2 clip=float2(p.x*aspect*1.55f,p.y*1.24f)*cameraZoom;
+    float impact=u.galaxyParams1.w, energy=u.galaxyParams2.w;
+    float aspect=clamp(u.resolution.z,0.15f,1.0f);
+    // Stratified screen positions, not world coordinates divided by depth a
+    // second time. Each cell covers a different part of the full phone screen.
+    float2 cell=float2(id%32,id/32)+float2(seed,seed2);
+    float2 screen=(cell/float2(32,36)*2-1)*1.06;
+    screen+=float2(sin(phase*0.35+seed*21),cos(phase*0.28+seed2*17))*float2(0.08,0.055);
+    screen+=float2(sin(phase*1.3+screen.y*7),cos(phase+screen.x*5))*0.024*(low+mid);
+    float2 clip=float2(screen.x*aspect,screen.y);
+    float radius=length(float2(clip.x,clip.y)/aspect);
+    float outsideRecord=smoothstep(0.73f,1.05f,radius);
 
-    // Taps send a bright ripple away from the finger. Dragging continuously
-    // pulls nearby particles into a small vortex around the touch position.
+    // All touch forces use post-projection square NDC, the same coordinates
+    // recorded by UIKit. A finger at the top must affect particles at the top.
     float2 touch=u.galaxyParams3.zw;
     float touchPower=u.cyberpunkControls.z;
     float2 fromTouch=clip-touch;
     float touchDistance=max(length(fromTouch),0.03f);
     float touchFalloff=exp(-touchDistance*2.8f)*touchPower;
-    clip+=normalize(fromTouch)*touchFalloff*(0.18+0.42*life);
+    clip+=fromTouch/touchDistance*touchFalloff*0.14;
     clip+=float2(-fromTouch.y,fromTouch.x)*touchFalloff*0.18;
     // The recent swipe history forms a force field. This makes ambient
     // particles visibly peel away from and curl around the whole gesture.
     float trailEnergy=0;
+    float2 trailForce=0;
     for (uint i=0; i<GlassTrailPointCount; i++) {
         float4 trailPoint=trail.points[i];
         float2 delta=clip-trailPoint.xy;
         float distance=max(length(delta),0.025f);
         float force=trailPoint.w*exp(-distance*4.0f)*(1-smoothstep(0.0f,1.6f,trailPoint.z));
-        clip+=normalize(delta)*force*0.10f+float2(-delta.y,delta.x)/distance*force*0.045f;
+        trailForce+=delta/distance*force*0.045f+float2(-delta.y,delta.x)/distance*force*0.025f;
         trailEnergy=max(trailEnergy,force);
     }
 
-    float z=4.8-p.z;
+    clip+=trailForce/max(1.0f,length(trailForce)/0.22f);
+    float depth=2.5+seed2*4.0;
     GlassParticle o;
-    o.position=float4(clip,(z-0.1)*10/(10-0.1),z);
-    o.pointSize=(2.4+6.5*high+9.0*shell+8.0*touchFalloff+5.0*trailEnergy)*(0.58+seed);
-    float hue=seed<0.64 ? 0.0f : 1.0f;
-    float3 cool=mix(float3(0.28,0.54,0.82),float3(0.88,0.58,0.25),hue);
-    float alpha=(0.13+energy*0.40+high*0.62+shell*1.15+touchFalloff+trailEnergy)*smoothstep(0,0.12,life)*(1-smoothstep(0.78,1,life));
-    o.color=float4(cool*(0.6+high*1.8+shell*2.2),alpha);
+    o.position=float4(clip*depth,0.90*depth,depth);
+    float pixelScale=clamp(u.resolution.x/1200,0.55f,1.4f);
+    o.pointSize=(1.8+seed*2.4+high*2.0+impact*2.0+trailEnergy*5.0)*pixelScale;
+    float3 tint=mix(float3(0.46,0.68,0.84),float3(0.83,0.71,0.49),smoothstep(0.65,0.95,seed));
+    float shimmer=0.55+0.45*pow(0.5+0.5*sin(phase*1.7+seed*40),2.0f);
+    float edgeFade=1-smoothstep(0.94f,1.10f,max(abs(screen.x),abs(screen.y)));
+    float alpha=(0.13+energy*0.22+high*0.20+impact*0.15)*shimmer*outsideRecord*edgeFade;
+    o.color=float4(tint*(0.65+high*0.65),alpha+trailEnergy*0.35);
     return o;
 }
 
 fragment float4 glassParticleFragment(GlassParticle in [[stage_in]], float2 coord [[point_coord]]) {
     float r=length(coord-0.5f)*2;
     float core=exp(-r*r*7.5f);
-    float alpha=in.color.a*core*smoothstep(1.0f,0.72f,r);
+    float alpha=in.color.a*core*(1-smoothstep(0.72f,1.0f,r));
     return float4(in.color.rgb,alpha);
+}
+
+struct GlassWaveVertex {
+    float4 position [[position]];
+    float4 color;
+    float across;
+};
+
+// Six thin moving wave ribbons above / below the record. Spectrum shapes the
+// peaks, while continuous phase transports them; there are no spectrum bars.
+vertex GlassWaveVertex glassWaveVertex(uint id [[vertex_id]],uint lane [[instance_id]],
+                                       constant Uniforms &u [[buffer(0)]]) {
+    float x=float(id/2)/160*2-1;
+    float side=(id%2)==0 ? -1.0f : 1.0f;
+    float tier=float(lane/2), sign=(lane%2)==0 ? 1.0f : -1.0f;
+    float phase=u.galaxyParams2.x;
+    float bandPosition=(x*0.5+0.5)*77;
+    uint band=uint(bandPosition);
+    float a=(u.audioData[band].y+u.audioData[band+1].y)*0.5;
+    float b=(u.audioData[band+1].y+u.audioData[band+2].y)*0.5;
+    float peak=mix(a,b,smoothstep(0.0f,1.0f,fract(bandPosition)));
+    float low=u.galaxyParams1.x, mid=u.galaxyParams1.y, high=u.galaxyParams1.z;
+    float music=u.galaxyParams2.w;
+    float carrier=sin(x*(5.0+tier)+phase*(2.0+tier*0.25)+tier*1.3);
+    float detail=sin(x*13-phase*2.4+tier)*high*0.22;
+    float envelope=pow(max(1-x*x,0.0f),0.65f);
+    float amplitude=0.006+0.07*low+0.08*mid+0.045*u.galaxyParams1.w+peak*0.12;
+    float y=sign*(0.56+tier*0.13+envelope*amplitude*(carrier+detail));
+    float width=(1.2+high*0.6+peak*0.6)*2/max(u.resolution.y,1.0f);
+    GlassWaveVertex o;
+    o.position=float4(x*min(u.resolution.z,1.0f),y+side*width,0.85,1);
+    float3 tint=mix(float3(0.27,0.53,0.69),float3(0.82,0.67,0.43),tier*0.38);
+    float flow=0.65+0.35*sin(x*3-phase*3+tier);
+    o.color=float4(tint*(0.55+music*0.7+peak*0.3),envelope*(0.10+0.65*music)*flow);
+    o.across=side;
+    return o;
+}
+fragment float4 glassWaveFragment(GlassWaveVertex in [[stage_in]]) {
+    return float4(in.color.rgb,in.color.a*(1-smoothstep(0.20f,1.0f,abs(in.across))));
 }
 fragment float4 glassBloomHorizontal(RasterizerData in [[stage_in]],texture2d<float> scene [[texture(0)]]) {
     float2 step=float2(2.0/scene.get_width(),0);

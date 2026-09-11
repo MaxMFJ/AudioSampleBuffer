@@ -2979,11 +2979,14 @@ typedef struct {
 @interface GlassResonanceRenderer () {
     GlassAudioState _glassAudio;
     GlassTouchTrailUniforms _glassTrail;
+    float _glassLineBands[80];
+    float _glassImpactMotion;
 }
 @property (nonatomic, strong) id<MTLRenderPipelineState> glassScenePipeline;
 @property (nonatomic, strong) id<MTLRenderPipelineState> glassBackPipeline;
 @property (nonatomic, strong) id<MTLRenderPipelineState> glassBackdropPipeline;
 @property (nonatomic, strong) id<MTLRenderPipelineState> glassParticlePipeline;
+@property (nonatomic, strong) id<MTLRenderPipelineState> glassWavePipeline;
 @property (nonatomic, strong) id<MTLRenderPipelineState> glassBloomPipeline;
 @property (nonatomic, strong) id<MTLRenderPipelineState> glassCompositePipeline;
 @property (nonatomic, strong) id<MTLDepthStencilState> glassDepthState;
@@ -3003,13 +3006,6 @@ typedef struct {
 @property (nonatomic, assign) float glassCameraYaw;
 @property (nonatomic, assign) float glassCameraPitch;
 @property (nonatomic, assign) float glassCameraZoom;
-@property (nonatomic, assign) float glassCameraTargetYaw;
-@property (nonatomic, assign) float glassCameraTargetPitch;
-@property (nonatomic, assign) float glassCameraTargetZoom;
-@property (nonatomic, assign) float glassCameraKick;
-@property (nonatomic, assign) float glassPreviousImpact;
-@property (nonatomic, assign) float glassShotElapsed;
-@property (nonatomic, assign) NSUInteger glassShotIndex;
 @property (nonatomic, assign) NSUInteger glassTrailWriteIndex;
 @property (nonatomic, assign) CGPoint glassPreviousPanPoint;
 @property (nonatomic, assign) BOOL glassHasPreviousPanPoint;
@@ -3020,10 +3016,10 @@ typedef struct {
 - (instancetype)initWithMetalView:(MTKView *)metalView {
     self = [super initWithMetalView:metalView];
     if (self && (!self.glassScenePipeline || !self.glassBackPipeline || !self.glassBackdropPipeline ||
-                 !self.glassParticlePipeline || !self.glassBloomPipeline ||
+                 !self.glassParticlePipeline || !self.glassWavePipeline || !self.glassBloomPipeline ||
                  !self.glassCompositePipeline || !self.glassIndices)) return nil;
     if (self) {
-        self.glassCameraZoom = self.glassCameraTargetZoom = 1.0f;
+        self.glassCameraZoom = 1.0f;
         self.glassTouchX = self.glassTouchY = 10.0f;
         self.metalView.userInteractionEnabled = YES;
         self.glassTapGesture = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(glassTapped:)];
@@ -3097,11 +3093,11 @@ typedef struct {
     return pipeline;
 }
 
-- (id<MTLRenderPipelineState>)glassParticlePipelineState {
+- (id<MTLRenderPipelineState>)glassAdditivePipelineWithVertex:(NSString *)vertex fragment:(NSString *)fragment {
     MTLRenderPipelineDescriptor *d = [MTLRenderPipelineDescriptor new];
-    d.label = @"Glass audio particles";
-    d.vertexFunction = [self.defaultLibrary newFunctionWithName:@"glassParticleVertex"];
-    d.fragmentFunction = [self.defaultLibrary newFunctionWithName:@"glassParticleFragment"];
+    d.label = fragment;
+    d.vertexFunction = [self.defaultLibrary newFunctionWithName:vertex];
+    d.fragmentFunction = [self.defaultLibrary newFunctionWithName:fragment];
     d.colorAttachments[0].pixelFormat = MTLPixelFormatRGBA16Float;
     d.depthAttachmentPixelFormat = MTLPixelFormatDepth32Float;
     d.colorAttachments[0].blendingEnabled = YES;
@@ -3111,7 +3107,7 @@ typedef struct {
     d.colorAttachments[0].destinationAlphaBlendFactor = MTLBlendFactorOne;
     NSError *error = nil;
     id<MTLRenderPipelineState> pipeline = [self.device newRenderPipelineStateWithDescriptor:d error:&error];
-    if (!pipeline) NSLog(@"Glass particle pipeline failed: %@", error);
+    if (!pipeline) NSLog(@"Glass additive pipeline %@ failed: %@", fragment, error);
     return pipeline;
 }
 
@@ -3119,7 +3115,8 @@ typedef struct {
     self.glassScenePipeline = [self glassPipelineWithVertex:@"glassResonanceVertex" fragment:@"glassResonanceFragment" format:MTLPixelFormatRGBA16Float depth:YES];
     self.glassBackPipeline = [self glassPipelineWithVertex:@"glassResonanceVertex" fragment:@"glassBackFragment" format:MTLPixelFormatRGBA16Float depth:YES];
     self.glassBackdropPipeline = [self glassPipelineWithVertex:@"glassFullscreenVertex" fragment:@"glassBackdropFragment" format:MTLPixelFormatRGBA16Float depth:YES];
-    self.glassParticlePipeline = [self glassParticlePipelineState];
+    self.glassParticlePipeline = [self glassAdditivePipelineWithVertex:@"glassParticleVertex" fragment:@"glassParticleFragment"];
+    self.glassWavePipeline = [self glassAdditivePipelineWithVertex:@"glassWaveVertex" fragment:@"glassWaveFragment"];
     self.glassBloomPipeline = [self glassPipelineWithVertex:@"glassFullscreenVertex" fragment:@"glassBloomHorizontal" format:MTLPixelFormatRGBA16Float depth:NO];
     self.glassCompositePipeline = [self glassPipelineWithVertex:@"glassFullscreenVertex" fragment:@"glassCompositeFragment" format:self.metalView.colorPixelFormat depth:NO];
     MTLDepthStencilDescriptor *depth = [MTLDepthStencilDescriptor new];
@@ -3146,10 +3143,10 @@ typedef struct {
 - (void)startRendering {
     memset(&_glassAudio, 0, sizeof(_glassAudio));
     memset(&_glassTrail, 0, sizeof(_glassTrail));
+    memset(_glassLineBands, 0, sizeof(_glassLineBands));
+    _glassImpactMotion = 0;
     self.glassLastFrame = 0;
     self.glassLastAudio = 0;
-    self.glassShotElapsed = 0;
-    self.glassPreviousImpact = 0;
     self.glassTrailWriteIndex = 0;
     self.glassHasPreviousPanPoint = NO;
     [super startRendering];
@@ -3158,7 +3155,9 @@ typedef struct {
 - (void)resumeRendering {
     self.glassLastFrame = 0;
     self.glassLastAudio = 0;
+    float phase = _glassAudio.phase;
     memset(&_glassAudio, 0, sizeof(_glassAudio));
+    _glassAudio.phase = phase;
     memset(&_glassTrail, 0, sizeof(_glassTrail));
     self.glassTrailWriteIndex = 0;
     self.glassHasPreviousPanPoint = NO;
@@ -3181,31 +3180,18 @@ typedef struct {
                    [params[@"beatTrigger"] floatValue], sensitivity, dt);
     self.renderParameters[@"beatTrigger"] = @0;
 
-    // A small set of deliberate camera compositions. Transitions happen on a
-    // musical impact or after a long hold, so the camera feels edited rather
-    // than continuously orbiting at a fixed speed.
-    self.glassShotElapsed += dt;
-    BOOL newImpact = _glassAudio.impact > 0.16f && self.glassPreviousImpact <= 0.16f;
-    float climax = fresh ? u->activityMeter5.z : 0.0f;
-    if ((newImpact && (climax > 0.38f || self.glassShotElapsed > 3.2f)) || self.glassShotElapsed > 9.0f) {
-        static const float yaw[]   = {0.0f, 0.72f, -0.58f, 1.14f, -0.94f};
-        static const float pitch[] = {-0.20f, 0.16f, 0.34f, -0.38f, 0.05f};
-        static const float zoom[]  = {1.00f, 1.14f, 0.90f, 1.22f, 1.04f};
-        self.glassShotIndex = (self.glassShotIndex + 1) % 5;
-        self.glassCameraTargetYaw = yaw[self.glassShotIndex];
-        self.glassCameraTargetPitch = pitch[self.glassShotIndex];
-        self.glassCameraTargetZoom = zoom[self.glassShotIndex];
-        self.glassShotElapsed = 0;
+    // Continuous, low-angle camera drift preserves the circular opening. Beat
+    // events animate ribbons and ring breathing; they never jump camera zoom.
+    float phase = _glassAudio.phase;
+    self.glassCameraYaw = glassFollow(self.glassCameraYaw, 0.045f*sinf(phase*0.31f), dt, 1.2f, 1.2f);
+    self.glassCameraPitch = glassFollow(self.glassCameraPitch, 0.035f*sinf(phase*0.23f), dt, 1.2f, 1.2f);
+    self.glassCameraZoom = glassFollow(self.glassCameraZoom, 1.0f+0.008f*sinf(phase*0.27f), dt, 0.8f, 0.8f);
+    _glassImpactMotion = glassFollow(_glassImpactMotion, _glassAudio.impact, dt, 8.0f, 3.5f);
+    for (NSUInteger i=0; i<80; i++) {
+        float target = 1.0f-expf(-5.0f*glassUnit(bands[i])*sensitivity);
+        _glassLineBands[i] = glassFollow(_glassLineBands[i], target, dt, 12.0f, 3.5f);
+        u->audioData[i].y = _glassLineBands[i];
     }
-    if (newImpact) {
-        self.glassCameraKick = fmaxf(self.glassCameraKick, 0.13f + _glassAudio.impact * 0.16f);
-    }
-    self.glassPreviousImpact = _glassAudio.impact;
-    float cameraBlend = 1.0f - expf(-dt * (self.glassShotElapsed < 1.0f ? 3.8f : 1.8f));
-    self.glassCameraYaw += (self.glassCameraTargetYaw - self.glassCameraYaw) * cameraBlend;
-    self.glassCameraPitch += (self.glassCameraTargetPitch - self.glassCameraPitch) * cameraBlend;
-    self.glassCameraZoom += (self.glassCameraTargetZoom - self.glassCameraZoom) * cameraBlend;
-    self.glassCameraKick *= expf(-dt * 7.5f);
     self.glassTouchImpulse *= expf(-dt * 2.8f);
     for (NSUInteger i = 0; i < GlassTrailPointCount; i++) {
         if (_glassTrail.points[i].w > 0.001f) {
@@ -3213,14 +3199,14 @@ typedef struct {
             _glassTrail.points[i].w *= expf(-dt * 1.55f);
         }
     }
-    u->galaxyParams1 = (vector_float4){_glassAudio.low,_glassAudio.mid,_glassAudio.high,_glassAudio.impact};
+    u->galaxyParams1 = (vector_float4){_glassAudio.low,_glassAudio.mid,_glassAudio.high,_glassImpactMotion};
     u->galaxyParams2 = (vector_float4){_glassAudio.phase,_glassAudio.strain,_glassAudio.impactAge,_glassAudio.energy};
     float bloom = params[@"glassBloom"] ? glassUnit([params[@"glassBloom"] floatValue]) : 0.32f;
     u->galaxyParams3 = (vector_float4){bloom,1.05f,self.glassTouchX,self.glassTouchY};
     u->cyberpunkControls = (vector_float4){self.glassCameraYaw,self.glassCameraPitch,
-                                           self.glassTouchImpulse,self.glassShotElapsed};
-    u->cyberpunkFrequencyControls = (vector_float4){self.glassCameraZoom + self.glassCameraKick,
-                                                    climax, fresh ? 1.0f : 0.0f, 0.0f};
+                                           self.glassTouchImpulse,0.0f};
+    u->cyberpunkFrequencyControls = (vector_float4){self.glassCameraZoom,
+                                                    _glassAudio.strain, fresh ? 1.0f : 0.0f, 0.0f};
 }
 
 - (id<MTLTexture>)glassTexture:(MTLPixelFormat)format width:(NSUInteger)w height:(NSUInteger)h {
@@ -3265,11 +3251,13 @@ typedef struct {
     [encoder setRenderPipelineState:self.glassParticlePipeline];
     [encoder drawPrimitives:MTLPrimitiveTypePoint vertexStart:0 vertexCount:1152];
     [encoder drawPrimitives:MTLPrimitiveTypePoint vertexStart:1152 vertexCount:GlassTrailPointCount * 10];
+    [encoder setRenderPipelineState:self.glassWavePipeline];
+    [encoder drawPrimitives:MTLPrimitiveTypeTriangleStrip vertexStart:0 vertexCount:322 instanceCount:6];
     [encoder setDepthStencilState:self.glassDepthState];
     [encoder setFrontFacingWinding:MTLWindingCounterClockwise];
     [encoder setCullMode:MTLCullModeFront];
     [encoder setRenderPipelineState:self.glassBackPipeline];
-    [encoder drawIndexedPrimitives:MTLPrimitiveTypeTriangle indexCount:160*28*6 indexType:MTLIndexTypeUInt16 indexBuffer:self.glassIndices indexBufferOffset:0];
+    [encoder drawIndexedPrimitives:MTLPrimitiveTypeTriangle indexCount:160*28*6 indexType:MTLIndexTypeUInt16 indexBuffer:self.glassIndices indexBufferOffset:0 instanceCount:2];
     [encoder endEncoding];
     // Rear surfaces are a separate immutable refraction source for this frame.
     scene.colorAttachments[0].texture = self.glassScene;
@@ -3282,12 +3270,14 @@ typedef struct {
     [encoder setRenderPipelineState:self.glassParticlePipeline];
     [encoder drawPrimitives:MTLPrimitiveTypePoint vertexStart:0 vertexCount:1152];
     [encoder drawPrimitives:MTLPrimitiveTypePoint vertexStart:1152 vertexCount:GlassTrailPointCount * 10];
+    [encoder setRenderPipelineState:self.glassWavePipeline];
+    [encoder drawPrimitives:MTLPrimitiveTypeTriangleStrip vertexStart:0 vertexCount:322 instanceCount:6];
     [encoder setDepthStencilState:self.glassDepthState];
     [encoder setFrontFacingWinding:MTLWindingCounterClockwise];
     [encoder setCullMode:MTLCullModeBack];
     [encoder setRenderPipelineState:self.glassScenePipeline];
     [encoder setFragmentTexture:self.glassRear atIndex:0];
-    [encoder drawIndexedPrimitives:MTLPrimitiveTypeTriangle indexCount:160*28*6 indexType:MTLIndexTypeUInt16 indexBuffer:self.glassIndices indexBufferOffset:0];
+    [encoder drawIndexedPrimitives:MTLPrimitiveTypeTriangle indexCount:160*28*6 indexType:MTLIndexTypeUInt16 indexBuffer:self.glassIndices indexBufferOffset:0 instanceCount:2];
     [encoder endEncoding];
     MTLRenderPassDescriptor *blur = [MTLRenderPassDescriptor renderPassDescriptor];
     blur.colorAttachments[0].texture = self.glassBloom;
