@@ -695,6 +695,14 @@ static UIEdgeInsets RhythmEffectiveSafeAreaInsets(UIView *view) {
 - (void)toggleUIButtonTapped:(UIButton *)sender {
     self.isUIHidden = !self.isUIHidden;
 
+    // The song list covers most of the canvas even when fully transparent.
+    // Remove it from hit testing so the active Metal renderer can receive
+    // taps and drags while the chrome is hidden.
+    if (self.tableView) {
+        self.tableView.hidden = self.isUIHidden;
+        self.tableView.userInteractionEnabled = !self.isUIHidden;
+    }
+
     NSLog(@"👁️ UI切换: %@", self.isUIHidden ? @"隐藏" : @"显示");
     UIImage *eyeImage = nil;
     if (@available(iOS 13.0, *)) {

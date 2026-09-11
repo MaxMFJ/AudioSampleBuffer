@@ -50,6 +50,10 @@ typedef NS_ENUM(NSUInteger, VisualEffectType) {
     VisualEffectTypeAudioActivityMeter,     // 声音活动表 - 文字标签与强度条显示当前活跃声音特征
     VisualEffectTypeMusicFeatureScope,      // 音乐特征镜 - Beat/Kick/Drop 等音乐标签触发对应 Metal 视觉
 
+    VisualEffectTypeCellularWormhole,       // 深空蜂巢 - 音谱驱动有机孔洞
+
+    VisualEffectTypeGlassResonance,         // 玻璃回旋 - 音乐驱动原生 3D 玻璃艺术体
+
     // 数量
     VisualEffectTypeCount
 };

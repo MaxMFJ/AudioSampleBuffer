@@ -1,0 +1,18 @@
+quiet: 12.94 ms GPU
+bass: 2.79 ms GPU
+bass changed 1035174 channels
+mid: 0.64 ms GPU
+mid changed 797628 channels
+high: 2.02 ms GPU
+high changed 669052 channels
+music: 8.20 ms GPU
+impact: 3.68 ms GPU
+climax: 2.06 ms GPU
+portrait: 2.26 ms GPU
+reduced: 13.23 ms GPU
+rotation: 1.33 ms GPU
+PASS: independent bands, impact, silent stale features, sustain rejection, silence release, 24/60 fps, finite values.
+GPU timings on Apple M4; host results are not iPhone thermal measurements: [12.936958333739312, 2.793125000607688, 0.6404999985534232, 2.0152916658844333, 8.202833334507886, 3.6833749982179143, 2.0552500027406495, 2.259000000776723, 13.230250002379762, 1.3291666655277368]
+pcm-0: 8.83 ms GPU
+pcm-1: 4.07 ms GPU
+pcm-2: 9.24 ms GPU

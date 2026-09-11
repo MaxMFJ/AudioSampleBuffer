@@ -1,0 +1,4 @@
+100 Hz PCM -> actual legacy FFT -> low 0.1007 mid 0.0002 high 0.0000
+900 Hz PCM -> actual legacy FFT -> low 0.0000 mid 0.2686 high 0.0001
+6000 Hz PCM -> actual legacy FFT -> low 0.0000 mid 0.0002 high 0.2068
+PASS: PCM frequency isolation and silence through production FFT + glass envelopes.

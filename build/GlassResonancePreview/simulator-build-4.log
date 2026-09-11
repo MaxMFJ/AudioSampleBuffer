@@ -1,0 +1,51 @@
+Command line invocation:
+    /Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild -project AudioSampleBuffer.xcodeproj -scheme AudioSampleBuffer -configuration Debug -sdk iphonesimulator -destination "generic/platform=iOS Simulator" -derivedDataPath build/GlassDerivedData CODE_SIGNING_ALLOWED=NO build
+
+Build settings from command line:
+    CODE_SIGNING_ALLOWED = NO
+    SDKROOT = iphonesimulator26.0
+
+ComputePackagePrebuildTargetDependencyGraph
+
+Prepare packages
+
+CreateBuildRequest
+
+SendProjectDescription
+
+CreateBuildOperation
+
+ComputeTargetDependencyGraph
+note: Building targets in dependency order
+note: Target dependency graph (1 target)
+    Target 'AudioSampleBuffer' in project 'AudioSampleBuffer' (no dependencies)
+
+GatherProvisioningInputs
+
+CreateBuildDescription
+
+ClangStatCache /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang-stat-cache /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.0.sdk /Users/lzz/Documents/GitHub/AudioSampleBuffer/build/GlassDerivedData/SDKStatCaches.noindex/iphonesimulator26.0-23A339-3885c01c3e6b6a337905948deab2002e26257891a6c027eb51374368541b8346.sdkstatcache
+    cd /Users/lzz/Documents/GitHub/AudioSampleBuffer/AudioSampleBuffer.xcodeproj
+    /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang-stat-cache /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.0.sdk -o /Users/lzz/Documents/GitHub/AudioSampleBuffer/build/GlassDerivedData/SDKStatCaches.noindex/iphonesimulator26.0-23A339-3885c01c3e6b6a337905948deab2002e26257891a6c027eb51374368541b8346.sdkstatcache
+
+CompileMetalFile /Users/lzz/Documents/GitHub/AudioSampleBuffer/AudioSampleBuffer/VisualEffects/Metal/GlassResonanceShader.metal (in target 'AudioSampleBuffer' from project 'AudioSampleBuffer')
+    cd /Users/lzz/Documents/GitHub/AudioSampleBuffer
+    /var/run/com.apple.security.cryptexd/mnt/com.apple.MobileAsset.MetalToolchain-v17.1.324.0.Z1DKNo/Metal.xctoolchain/usr/bin/metal -c -target air64-apple-ios15.6-simulator -gline-tables-only -frecord-sources -I/Users/lzz/Documents/GitHub/AudioSampleBuffer/build/GlassDerivedData/Build/Products/Debug-iphonesimulator/include -F/Users/lzz/Documents/GitHub/AudioSampleBuffer/build/GlassDerivedData/Build/Products/Debug-iphonesimulator -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.0.sdk -fmetal-math-mode\=fast -fmetal-math-fp32-functions\=fast -serialize-diagnostics /Users/lzz/Documents/GitHub/AudioSampleBuffer/build/GlassDerivedData/Build/Intermediates.noindex/AudioSampleBuffer.build/Debug-iphonesimulator/AudioSampleBuffer.build/Metal/GlassResonanceShader.dia -o /Users/lzz/Documents/GitHub/AudioSampleBuffer/build/GlassDerivedData/Build/Intermediates.noindex/AudioSampleBuffer.build/Debug-iphonesimulator/AudioSampleBuffer.build/Metal/GlassResonanceShader.air -index-store-path /Users/lzz/Documents/GitHub/AudioSampleBuffer/build/GlassDerivedData/Index.noindex/DataStore -MMD -MT dependencies -MF /Users/lzz/Documents/GitHub/AudioSampleBuffer/build/GlassDerivedData/Build/Intermediates.noindex/AudioSampleBuffer.build/Debug-iphonesimulator/AudioSampleBuffer.build/Metal/GlassResonanceShader.dat /Users/lzz/Documents/GitHub/AudioSampleBuffer/AudioSampleBuffer/VisualEffects/Metal/GlassResonanceShader.metal
+/Users/lzz/Documents/GitHub/AudioSampleBuffer/AudioSampleBuffer/VisualEffects/Metal/GlassResonanceShader.metal:141:25: error: call to 'min' is ambiguous
+        uint trailIndex=min(localID/10,GlassTrailPointCount-1);
+                        ^~~
+/private/var/run/com.apple.security.cryptexd/mnt/com.apple.MobileAsset.MetalToolchain-v17.1.324.0.Z1DKNo/Metal.xctoolchain/usr/metal/32023/lib/clang/32023.830/include/metal/metal_integer:2493:16: note: candidate function
+METAL_FUNC int min(int x, int y)
+               ^
+/private/var/run/com.apple.security.cryptexd/mnt/com.apple.MobileAsset.MetalToolchain-v17.1.324.0.Z1DKNo/Metal.xctoolchain/usr/metal/32023/lib/clang/32023.830/include/metal/metal_integer:3097:17: note: candidate function
+METAL_FUNC uint min(uint x, uint y)
+                ^
+1 error generated.
+
+** BUILD FAILED **
+
+
+The following build commands failed:
+	CompileMetalFile /Users/lzz/Documents/GitHub/AudioSampleBuffer/AudioSampleBuffer/VisualEffects/Metal/GlassResonanceShader.metal (in target 'AudioSampleBuffer' from project 'AudioSampleBuffer')
+	Building project AudioSampleBuffer with scheme AudioSampleBuffer and configuration Debug
+(2 failures)

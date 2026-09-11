@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		C31109012EAD600000D59E12 /* GlassResonanceShader.metal in Sources */ = {isa = PBXBuildFile; fileRef = C31109022EAD600000D59E12 /* GlassResonanceShader.metal */; };
+		C31100012EAD600000D59E12 /* CellularWormholeShader.metal in Sources */ = {isa = PBXBuildFile; fileRef = C31100022EAD600000D59E12 /* CellularWormholeShader.metal */; };
 		4C09454D2F7A4F8000D48B3B /* SKILL.md in Resources */ = {isa = PBXBuildFile; fileRef = 4C09454C2F7A4F8000D48B3B /* SKILL.md */; };
 		4C110D482EA9CD5100D59E12 /* AudioReactive3DShader.metal in Sources */ = {isa = PBXBuildFile; fileRef = 4C110D412EA9CD5100D59E12 /* AudioReactive3DShader.metal */; };
 		4C110D492EA9CD5100D59E12 /* GeometricMorphShader.metal in Sources */ = {isa = PBXBuildFile; fileRef = 4C110D452EA9CD5100D59E12 /* GeometricMorphShader.metal */; };
@@ -174,6 +176,9 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		C31109022EAD600000D59E12 /* GlassResonanceShader.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = GlassResonanceShader.metal; sourceTree = "<group>"; };
+		C31109032EAD600000D59E12 /* GlassResonanceAudio.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = GlassResonanceAudio.h; sourceTree = "<group>"; };
+		C31100022EAD600000D59E12 /* CellularWormholeShader.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = CellularWormholeShader.metal; sourceTree = "<group>"; };
 		4C09454C2F7A4F8000D48B3B /* SKILL.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = SKILL.md; sourceTree = "<group>"; };
 		4C110D412EA9CD5100D59E12 /* AudioReactive3DShader.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = AudioReactive3DShader.metal; sourceTree = "<group>"; };
 		4C110D422EA9CD5100D59E12 /* CircularWaveShader.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = CircularWaveShader.metal; sourceTree = "<group>"; };
@@ -800,6 +805,9 @@
 				4C110D592EAD300000D59E12 /* CherryBlossomShader.metal */,
 				4C110D5B2EAD400000D59E12 /* TyndallBeamShader.metal */,
 				4C110D5D2EAD500000D59E12 /* NeuralResonanceShader.metal */,
+				C31109022EAD600000D59E12 /* GlassResonanceShader.metal */,
+				C31109032EAD600000D59E12 /* GlassResonanceAudio.h */,
+				C31100022EAD600000D59E12 /* CellularWormholeShader.metal */,
 				4C110D5F2EAD600000D59E12 /* WormholeDriveShader.metal */,
 				4C8A100230BA500000ACCA11 /* PrismResonanceShader.metal */,
 				4C8B200230BA600000ACCA11 /* VisualLyricsTunnelShader.metal */,
@@ -1120,6 +1128,8 @@
 				4C110D582EAD300000D59E12 /* CherryBlossomShader.metal in Sources */,
 				4C110D5A2EAD400000D59E12 /* TyndallBeamShader.metal in Sources */,
 				4C110D5C2EAD500000D59E12 /* NeuralResonanceShader.metal in Sources */,
+				C31109012EAD600000D59E12 /* GlassResonanceShader.metal in Sources */,
+				C31100012EAD600000D59E12 /* CellularWormholeShader.metal in Sources */,
 				4C110D5E2EAD600000D59E12 /* WormholeDriveShader.metal in Sources */,
 				4C8A100130BA500000ACCA11 /* PrismResonanceShader.metal in Sources */,
 				4C8B200130BA600000ACCA11 /* VisualLyricsTunnelShader.metal in Sources */,
@@ -1377,7 +1387,7 @@
 				CODE_SIGN_ENTITLEMENTS = AudioSampleBuffer/AudioSampleBuffer.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 2;
-				DEVELOPMENT_TEAM = Y7N46V3M6U;
+				DEVELOPMENT_TEAM = JRCXQ955WY;
 				ENABLE_APP_SANDBOX = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = AudioSampleBuffer/Info.plist;
@@ -1412,7 +1422,7 @@
 				CODE_SIGN_ENTITLEMENTS = AudioSampleBuffer/AudioSampleBuffer.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 2;
-				DEVELOPMENT_TEAM = Y7N46V3M6U;
+				DEVELOPMENT_TEAM = JRCXQ955WY;
 				ENABLE_APP_SANDBOX = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = AudioSampleBuffer/Info.plist;

@@ -250,6 +250,12 @@
     
     // 根据效果类型生成不同的预览图
     switch (effectType) {
+        case VisualEffectTypeGlassResonance:
+            [self drawGlassResonancePreview:context size:size];
+            break;
+        case VisualEffectTypeCellularWormhole:
+            [self drawCellularWormholePreview:context size:size];
+            break;
         case VisualEffectTypeNeonGlow:
             [self drawNeonGlowPreview:context size:size];
             break;
@@ -271,6 +277,48 @@
     UIGraphicsEndImageContext();
     
     return image;
+}
+
+- (void)drawGlassResonancePreview:(CGContextRef)context size:(CGSize)size {
+    CGContextSetRGBFillColor(context, 0.006, 0.008, 0.012, 1);
+    CGContextFillRect(context, (CGRect){CGPointZero, size});
+    UIBezierPath *knot = [UIBezierPath bezierPath];
+    for (int i=0; i<=160; i++) {
+        CGFloat t=i*2*M_PI/160.0, r=16+5*cos(3*t);
+        CGPoint p=CGPointMake(size.width/2+r*cos(2*t), size.height/2+r*sin(2*t));
+        if (i==0) [knot moveToPoint:p]; else [knot addLineToPoint:p];
+    }
+    CGContextAddPath(context, knot.CGPath);
+    CGContextSetRGBStrokeColor(context, 0.28, 0.40, 0.49, 1);
+    CGContextSetLineWidth(context, 5.5);
+    CGContextStrokePath(context);
+    CGContextAddPath(context, knot.CGPath);
+    CGContextSetRGBStrokeColor(context, 0.82, 0.88, 0.91, 1);
+    CGContextSetLineWidth(context, 1.1);
+    CGContextStrokePath(context);
+}
+
+- (void)drawCellularWormholePreview:(CGContextRef)context size:(CGSize)size {
+    CGContextSetRGBFillColor(context, 0.005, 0.018, 0.05, 1.0);
+    CGContextFillRect(context, CGRectMake(0, 0, size.width, size.height));
+    CGContextSaveGState(context);
+    CGContextTranslateCTM(context, size.width * 0.5, size.height * 0.5);
+    CGFloat scale = MIN(size.width, size.height);
+    for (NSInteger ring = 0; ring < 5; ring++) {
+        CGFloat radius = scale * (0.19 + ring * 0.074);
+        CGContextSetRGBStrokeColor(context, 0.04, 0.58 - ring * 0.065, 0.72, 0.95);
+        CGContextSetLineWidth(context, 0.65 + ring * 0.25);
+        for (NSInteger pore = 0; pore < 22; pore++) {
+            CGFloat angle = pore * M_PI * 2.0 / 22.0 + ring * 0.18;
+            CGContextSaveGState(context);
+            CGContextRotateCTM(context, angle);
+            CGContextStrokeEllipseInRect(context, CGRectMake(radius, -scale * 0.026,
+                                                             scale * (0.025 + ring * 0.009),
+                                                             scale * (0.035 + ring * 0.007)));
+            CGContextRestoreGState(context);
+        }
+    }
+    CGContextRestoreGState(context);
 }
 
 - (void)drawNeonGlowPreview:(CGContextRef)context size:(CGSize)size {

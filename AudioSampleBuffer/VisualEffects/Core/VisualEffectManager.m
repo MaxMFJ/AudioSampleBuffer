@@ -324,6 +324,23 @@ static const CGFloat kDefaultEffectRenderScale = 0.85f;
             settings[@"shockwaveIntensity"] = @(0.6);
             break;
 
+        case VisualEffectTypeGlassResonance:
+            settings[@"audioSensitivity"] = @(1.35);
+            settings[@"glassBloom"] = @(0.48);
+            break;
+
+        case VisualEffectTypeCellularWormhole:
+            settings[@"coreRadius"] = @(0.32);
+            settings[@"poreCount"] = @(18);
+            settings[@"travelSpeed"] = @(0.88);
+            settings[@"flashIntensity"] = @(1.18);
+            settings[@"tunnelRadius"] = @(0.34);
+            settings[@"swirlAmount"] = @(1.05);
+            settings[@"paletteBoost"] = @(1.08);
+            settings[@"audioSensitivity"] = @(1.18);
+            settings[@"beatDecay"] = @(5.4);
+            break;
+
         case VisualEffectTypeWormholeDrive:
             settings[@"barCount"] = @(10);
             settings[@"starLaneCount"] = @(16);
@@ -383,7 +400,22 @@ static const CGFloat kDefaultEffectRenderScale = 0.85f;
     CGFloat screenScale = [UIScreen mainScreen].scale;
     CGFloat squareSize = MAX(containerSize.width, containerSize.height);
 
-    if (effectType == VisualEffectTypeWormholeDrive) {
+    // This effect owns its reduced drawable resolution. MTKView's automatic
+    // layout resize must not briefly replace it with a full-resolution surface.
+    _metalView.autoResizeDrawable = (effectType != VisualEffectTypeCellularWormhole && effectType != VisualEffectTypeGlassResonance);
+    if (effectType == VisualEffectTypeGlassResonance) {
+        if (squareSize <= 0.0 || !isfinite(squareSize)) return;
+        // Square logical camera; cap HDR allocation and fill cost on large devices.
+        CGFloat side = MAX(1.0, round(MIN(1440.0, squareSize * screenScale * 0.55)));
+        _metalView.drawableSize = CGSizeMake(side, side);
+    } else if (effectType == VisualEffectTypeCellularWormhole) {
+        if (squareSize <= 0.0 || !isfinite(squareSize)) return;
+        CGFloat drawableSize = MAX(1.0, round(squareSize * screenScale * 0.55));
+        CGSize targetSize = CGSizeMake(drawableSize, drawableSize);
+        if (!CGSizeEqualToSize(_metalView.drawableSize, targetSize)) {
+            _metalView.drawableSize = targetSize;
+        }
+    } else if (effectType == VisualEffectTypeWormholeDrive) {
         // 虫洞特效本身已针对宽屏做过专门调优，保留原有低功耗缩放。
         CGFloat renderScale = 0.58;
         _metalView.drawableSize = CGSizeMake(containerSize.width * screenScale * renderScale,
@@ -523,6 +555,11 @@ static const CGFloat kDefaultEffectRenderScale = 0.85f;
                         _metalView.preferredFramesPerSecond = targetFPS;
                         NSLog(@"🧠 神经共振启用低负载帧率: %ldfps", (long)targetFPS);
                     }
+                } else if (effectType == VisualEffectTypeGlassResonance) {
+                    NSInteger fps = [_savedPerformanceSettings[@"fps"] integerValue];
+                    _metalView.preferredFramesPerSecond = fps > 0 ? MIN(fps, 30) : 30;
+                } else if (effectType == VisualEffectTypeCellularWormhole) {
+                    _metalView.preferredFramesPerSecond = 30;
                 } else if (effectType == VisualEffectTypeWormholeDrive) {
                     NSInteger targetFPS = 18;
                     if (_metalView.preferredFramesPerSecond != targetFPS) {
@@ -824,6 +861,8 @@ static const CGFloat kDefaultEffectRenderScale = 0.85f;
         case VisualEffectTypeTyndallBeam:
         case VisualEffectTypeNeuralResonance:
         case VisualEffectTypeWormholeDrive:
+        case VisualEffectTypeGlassResonance:
+        case VisualEffectTypeCellularWormhole:
         case VisualEffectTypePrismResonance:
         case VisualEffectTypeVisualLyricsTunnel:
         case VisualEffectTypeAudioActivityMeter:
@@ -948,7 +987,9 @@ static const CGFloat kDefaultEffectRenderScale = 0.85f;
 }
 
 - (void)aiController:(id)controller didDetectBeatWithIntensity:(float)intensity {
-    if (_currentEffectType == VisualEffectTypeWormholeDrive && _currentRenderer) {
+    if ((_currentEffectType == VisualEffectTypeWormholeDrive ||
+         _currentEffectType == VisualEffectTypeCellularWormhole ||
+         _currentEffectType == VisualEffectTypeGlassResonance) && _currentRenderer) {
         float clamped = fmaxf(0.0f, fminf(intensity, 0.9f));
         [_currentRenderer setRenderParameters:@{@"beatTrigger": @(clamped)}];
     }
@@ -988,7 +1029,7 @@ static const CGFloat kDefaultEffectRenderScale = 0.85f;
     
     // 更新帧率
     if (_metalView && fps > 0) {
-        _metalView.preferredFramesPerSecond = fps;
+        _metalView.preferredFramesPerSecond = _currentEffectType == VisualEffectTypeGlassResonance ? MIN(fps, 30) : fps;
         NSLog(@"✅ 帧率已立即更新为 %ldfps", (long)fps);
     } else {
         NSLog(@"⚠️ 帧率无效或Metal视图未初始化");

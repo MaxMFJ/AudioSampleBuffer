@@ -42,6 +42,8 @@ static NSDictionary<NSString *, NSNumber *> *ASBActivityMeterParameters(AudioFea
     CGFloat distortedGuitar = ASBClamp01(features.distortionConfidence * 0.46 + high * 0.22 + flatness * 0.18 + harmonic * 0.16 + noise * 0.12);
     CGFloat pluckGrain = ASBClamp01(transient * 0.48 + high * 0.18 + features.harmonicPeakRatio * 0.22 + features.spectralFlux * 0.12);
     CGFloat soundWall = ASBClamp01(harmonic * 0.36 + noise * 0.24 + energy * 0.24 + features.distortionConfidence * 0.18 - transient * 0.10);
+    CGFloat climax = features.currentSegment == MusicSegmentChorus ?
+                      ASBClamp01(0.58 + energy * 0.42) : 0.0;
     return @{
         @"activityLow": @(low),
         @"activityTransient": @(transient),
@@ -60,7 +62,8 @@ static NSDictionary<NSString *, NSNumber *> *ASBActivityMeterParameters(AudioFea
         @"activityElectricGuitarTexture": @(electricGuitarTexture),
         @"activityDistortedGuitar": @(distortedGuitar),
         @"activityPluckGrain": @(pluckGrain),
-        @"activitySoundWall": @(soundWall)
+        @"activitySoundWall": @(soundWall),
+        @"activityClimax": @(climax)
     };
 }
 

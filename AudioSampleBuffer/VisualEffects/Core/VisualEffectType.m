@@ -229,6 +229,22 @@
     musicFeatureScope.requiresMetal = YES;
     [effects addObject:musicFeatureScope];
     
+    VisualEffectInfo *cellularWormhole = [VisualEffectInfo effectWithType:VisualEffectTypeCellularWormhole
+                                                                   name:@"深空蜂巢"
+                                                            description:@"流动粒子聚合成深空蜂窝虫洞，小孔随各频段呼吸，孔内星空与大模型主题色同步变化"
+                                                               category:EffectCategoryExperimental
+                                                       performanceLevel:PerformanceLevelMedium];
+    cellularWormhole.requiresMetal = YES;
+    [effects addObject:cellularWormhole];
+
+    VisualEffectInfo *glass = [VisualEffectInfo effectWithType:VisualEffectTypeGlassResonance
+                                                         name:@"玻璃回旋"
+                                                  description:@"悬浮玻璃扭结随低频呼吸、鼓点弹震，旋律塑形，高频点亮色散与微尘"
+                                                     category:EffectCategoryExperimental
+                                             performanceLevel:PerformanceLevelMedium];
+    glass.requiresMetal = YES;
+    [effects addObject:glass];
+
     self.effects = [effects copy];
 }
 

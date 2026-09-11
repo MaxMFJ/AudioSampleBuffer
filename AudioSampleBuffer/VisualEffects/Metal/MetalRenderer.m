@@ -11,6 +11,7 @@
 #import "../../AudioSampleBuffer/AudioSpectrumPlayer.h"
 #import "../../Lyrics/LyricsView.h"
 #import <simd/simd.h>
+#import "GlassResonanceAudio.h"
 
 // 顶点结构体
 typedef struct {
@@ -39,6 +40,12 @@ typedef struct {
     vector_float4 activityMeter4; // (flatness, electricBassLine, electricGuitarTexture, distortedGuitar)
     vector_float4 activityMeter5; // (pluckGrain, soundWall, reserved, reserved)
 } Uniforms;
+
+#define GlassTrailPointCount 28
+typedef struct {
+    // xy = position in the square Metal view's clip space, z = age, w = strength.
+    vector_float4 points[GlassTrailPointCount];
+} GlassTouchTrailUniforms;
 
 // AI 增强的统一缓冲区（用于丁达尔效应等需要动态颜色的效果）
 typedef struct {
@@ -396,7 +403,7 @@ typedef struct {
     uniforms->activityMeter5 = (vector_float4){
         [params[@"activityPluckGrain"] floatValue],
         [params[@"activitySoundWall"] floatValue],
-        0.0f,
+        [params[@"activityClimax"] floatValue],
         0.0f
     };
 
@@ -2383,6 +2390,93 @@ typedef struct {
 @property (nonatomic, strong) AIColorConfiguration *currentAIConfig;
 @end
 
+// Reuse the existing integrated travel clock and beat envelope, with an independent
+// renderer instance so switching effects cannot share temporal audio state.
+@interface CellularWormholeRenderer () {
+    float _cellularFeatureState[20];
+}
+@property (nonatomic, assign) float impactAge;
+@property (nonatomic, assign) float impactStrength;
+@property (nonatomic, assign) float previousImpact;
+@property (nonatomic, assign) float climaxEnvelope;
+@end
+
+@implementation CellularWormholeRenderer
+
+- (void)encodeRenderCommands:(id<MTLRenderCommandEncoder>)encoder {
+    if (!self.pipelineState) return;
+    // Scrolling can leave multiple frames in flight. setBytes copies the small
+    // uniform block into command-owned storage; the next CPU update must never
+    // overwrite parameters that an earlier GPU frame is still reading.
+    _Static_assert(sizeof(Uniforms) < 4096, "Inline Metal uniforms must fit within 4 KB");
+    Uniforms frameUniforms = *(Uniforms *)self.uniformBuffer.contents;
+    [encoder setRenderPipelineState:self.pipelineState];
+    [encoder setVertexBytes:&frameUniforms length:sizeof(frameUniforms) atIndex:0];
+    [encoder setFragmentBytes:&frameUniforms length:sizeof(frameUniforms) atIndex:0];
+    [encoder drawPrimitives:MTLPrimitiveTypeTriangleStrip vertexStart:0 vertexCount:4];
+}
+
+- (void)updateUniforms:(NSTimeInterval)time {
+    [super updateUniforms:time];
+    Uniforms *u = (Uniforms *)self.uniformBuffer.contents;
+    float dt = fmaxf(0.0f, fminf(u->time.y, 0.12f));
+    float input = fmaxf(u->categoryFeatures.y, u->activityMeter1.y);
+    input = fmaxf(input, u->galaxyParams3.w);
+    input = isfinite(input) ? fmaxf(0.0f, fminf(input, 1.0f)) : 0.0f;
+    self.impactAge += dt;
+    // Trigger from a fresh attack, with a refractory interval. A held note
+    // cannot repeatedly restart the outward-travelling shockwave.
+    if (input > 0.12f && input - self.previousImpact > 0.06f &&
+        (self.impactStrength == 0.0f || self.impactAge > 0.16f)) {
+        self.impactAge = 0.0f;
+        self.impactStrength = input;
+    }
+    self.previousImpact = input;
+    vector_float4 groups[5] = {u->activityMeter1, u->activityMeter2,
+                              u->activityMeter3, u->activityMeter4, u->activityMeter5};
+    for (int group = 0; group < 5; ++group) {
+        for (int lane = 0; lane < 4; ++lane) {
+            int index = group * 4 + lane;
+            float target = groups[group][lane];
+            target = isfinite(target) ? fmaxf(0.0f, fminf(target, 1.0f)) : 0.0f;
+            float rate = target > _cellularFeatureState[index] ? 22.0f : 5.0f;
+            _cellularFeatureState[index] += (target - _cellularFeatureState[index]) *
+                                            (1.0f - expf(-rate * dt));
+            groups[group][lane] = _cellularFeatureState[index];
+        }
+    }
+    u->activityMeter1 = groups[0]; u->activityMeter2 = groups[1];
+    u->activityMeter3 = groups[2]; u->activityMeter4 = groups[3];
+    u->activityMeter5 = groups[4];
+    float bass = fmaxf(u->cyberpunkControls.z, groups[0].x);
+    float mid = fmaxf(u->cyberpunkControls.w, groups[0].z * 0.72f);
+    float high = fmaxf(u->cyberpunkFrequencyControls.x, groups[1].x);
+    float featureEnergy = fmaxf(u->cyberpunkFrequencyControls.y, groups[2].w);
+    float breadth = bass * 0.36f + mid * 0.31f + high * 0.33f;
+    float dropEvidence = featureEnergy * 0.44f + bass * 0.20f + groups[0].y * 0.14f +
+                         groups[1].w * 0.10f + groups[0].w * 0.06f + groups[4].y * 0.12f;
+    float audioClimax = fmaxf((breadth - 0.16f) / 0.38f, (dropEvidence - 0.24f) / 0.48f);
+    float brightness = self.renderParameters[@"brightness"] ?
+                       [self.renderParameters[@"brightness"] floatValue] : 1.0f;
+    float glow = self.renderParameters[@"glowIntensity"] ?
+                 [self.renderParameters[@"glowIntensity"] floatValue] : 1.0f;
+    float sectionClimax = fmaxf((brightness - 1.02f) / 0.30f, (glow - 1.08f) / 0.42f);
+    float climaxTarget = fmaxf(groups[4].z, fmaxf(audioClimax, sectionClimax));
+    climaxTarget = u->cyberpunkControls.x > 0.5f ? fmaxf(0.0f, fminf(climaxTarget, 1.0f)) : 0.0f;
+    float climaxRate = climaxTarget > self.climaxEnvelope ? 5.8f : 0.72f;
+    self.climaxEnvelope += (climaxTarget - self.climaxEnvelope) *
+                           (1.0f - expf(-climaxRate * dt));
+    u->galaxyParams2.z = self.climaxEnvelope;
+    float coreRadius = [self.renderParameters[@"coreRadius"] floatValue];
+    if (!isfinite(coreRadius) || coreRadius <= 0.0f) coreRadius = 0.32f;
+    float poreCount = [self.renderParameters[@"poreCount"] floatValue];
+    if (!isfinite(poreCount) || poreCount <= 0.0f) poreCount = 18.0f;
+    u->galaxyParams1 = (vector_float4){fmaxf(0.26f, fminf(coreRadius, 0.38f)),
+                                     fminf(self.impactAge, 10.0f), self.impactStrength,
+                                     fmaxf(16.0f, fminf(poreCount, 26.0f))};
+}
+@end
+
 @implementation WormholeDriveRenderer
 
 - (instancetype)initWithMetalView:(MTKView *)metalView {
@@ -2405,15 +2499,17 @@ typedef struct {
     AIColorConfiguration *config = notification.userInfo[kAIConfigurationKey];
     if (config) {
         self.currentAIConfig = config;
-        NSLog(@"🌀 虫洞穿梭: 已应用 AI 主题色 %@ - %@", config.songName, config.artist ?: @"");
+        NSLog(@"🌀 虫洞特效: 已应用 AI 分析 %@ - %@ | BPM=%ld | 动画速度=%.2f",
+              config.songName, config.artist ?: @"", (long)config.bpm, config.animationSpeed);
     }
 }
 
 - (void)setupPipeline {
     MTLRenderPipelineDescriptor *pipelineDescriptor = [[MTLRenderPipelineDescriptor alloc] init];
-    pipelineDescriptor.label = @"WormholeDrive";
+    BOOL cellular = [self isKindOfClass:[CellularWormholeRenderer class]];
+    pipelineDescriptor.label = cellular ? @"CellularWormhole" : @"WormholeDrive";
     pipelineDescriptor.vertexFunction = [self.defaultLibrary newFunctionWithName:@"neon_vertex"];
-    pipelineDescriptor.fragmentFunction = [self.defaultLibrary newFunctionWithName:@"wormholeDriveFragment"];
+    pipelineDescriptor.fragmentFunction = [self.defaultLibrary newFunctionWithName:cellular ? @"cellularWormholeFragment" : @"wormholeDriveFragment"];
     pipelineDescriptor.colorAttachments[0].pixelFormat = self.metalView.colorPixelFormat;
 
     pipelineDescriptor.sampleCount = self.metalView.sampleCount;
@@ -2529,9 +2625,17 @@ typedef struct {
 
     if (dt > 0.0) {
         float travelSpeed = params[@"travelSpeed"] ? [params[@"travelSpeed"] floatValue] : 1.12f;
+        float aiTempoMultiplier = 1.0f;
+        if ([self isKindOfClass:[CellularWormholeRenderer class]] && self.currentAIConfig) {
+            float animationSpeed = fmaxf(0.50f, fminf(self.currentAIConfig.animationSpeed, 2.0f));
+            float bpmScale = sqrtf(fmaxf(60.0f, fminf((float)self.currentAIConfig.bpm, 200.0f)) / 120.0f);
+            // animationSpeed is the LLM's main artistic decision. BPM adds a
+            // smaller physical tempo correction without double-amplifying it.
+            aiTempoMultiplier = fmaxf(0.45f, fminf(animationSpeed * (0.82f + bpmScale * 0.18f), 2.20f));
+        }
         float idleDrift = 0.08f + travelSpeed * 0.08f;
         float musicBoost = musicActive ? (travelSpeed * 0.78f + energy * 0.95f + bass * 0.45f) : 0.0f;
-        self.motionTime += (float)(dt * (idleDrift + musicBoost));
+        self.motionTime += (float)(dt * (idleDrift + musicBoost) * aiTempoMultiplier);
     }
 
     uniforms->time = (vector_float4){time, (float)dt, self.motionTime, time * 0.31f};
@@ -2870,6 +2974,350 @@ typedef struct {
 
 #pragma mark - 渲染器工厂
 
+#pragma mark - 玻璃回旋 · Native indexed glass sculpture
+
+@interface GlassResonanceRenderer () {
+    GlassAudioState _glassAudio;
+    GlassTouchTrailUniforms _glassTrail;
+}
+@property (nonatomic, strong) id<MTLRenderPipelineState> glassScenePipeline;
+@property (nonatomic, strong) id<MTLRenderPipelineState> glassBackPipeline;
+@property (nonatomic, strong) id<MTLRenderPipelineState> glassBackdropPipeline;
+@property (nonatomic, strong) id<MTLRenderPipelineState> glassParticlePipeline;
+@property (nonatomic, strong) id<MTLRenderPipelineState> glassBloomPipeline;
+@property (nonatomic, strong) id<MTLRenderPipelineState> glassCompositePipeline;
+@property (nonatomic, strong) id<MTLDepthStencilState> glassDepthState;
+@property (nonatomic, strong) id<MTLBuffer> glassIndices;
+@property (nonatomic, strong) id<MTLTexture> glassScene;
+@property (nonatomic, strong) id<MTLTexture> glassRear;
+@property (nonatomic, strong) id<MTLTexture> glassDepth;
+@property (nonatomic, strong) id<MTLTexture> glassBloom;
+@property (nonatomic, strong) dispatch_semaphore_t glassFrames;
+@property (nonatomic, assign) NSTimeInterval glassLastFrame;
+@property (atomic, assign) NSTimeInterval glassLastAudio;
+@property (nonatomic, strong) UITapGestureRecognizer *glassTapGesture;
+@property (nonatomic, strong) UIPanGestureRecognizer *glassPanGesture;
+@property (nonatomic, assign) float glassTouchX;
+@property (nonatomic, assign) float glassTouchY;
+@property (nonatomic, assign) float glassTouchImpulse;
+@property (nonatomic, assign) float glassCameraYaw;
+@property (nonatomic, assign) float glassCameraPitch;
+@property (nonatomic, assign) float glassCameraZoom;
+@property (nonatomic, assign) float glassCameraTargetYaw;
+@property (nonatomic, assign) float glassCameraTargetPitch;
+@property (nonatomic, assign) float glassCameraTargetZoom;
+@property (nonatomic, assign) float glassCameraKick;
+@property (nonatomic, assign) float glassPreviousImpact;
+@property (nonatomic, assign) float glassShotElapsed;
+@property (nonatomic, assign) NSUInteger glassShotIndex;
+@property (nonatomic, assign) NSUInteger glassTrailWriteIndex;
+@property (nonatomic, assign) CGPoint glassPreviousPanPoint;
+@property (nonatomic, assign) BOOL glassHasPreviousPanPoint;
+@end
+
+@implementation GlassResonanceRenderer
+
+- (instancetype)initWithMetalView:(MTKView *)metalView {
+    self = [super initWithMetalView:metalView];
+    if (self && (!self.glassScenePipeline || !self.glassBackPipeline || !self.glassBackdropPipeline ||
+                 !self.glassParticlePipeline || !self.glassBloomPipeline ||
+                 !self.glassCompositePipeline || !self.glassIndices)) return nil;
+    if (self) {
+        self.glassCameraZoom = self.glassCameraTargetZoom = 1.0f;
+        self.glassTouchX = self.glassTouchY = 10.0f;
+        self.metalView.userInteractionEnabled = YES;
+        self.glassTapGesture = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(glassTapped:)];
+        self.glassPanGesture = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(glassPanned:)];
+        [self.metalView addGestureRecognizer:self.glassTapGesture];
+        [self.metalView addGestureRecognizer:self.glassPanGesture];
+    }
+    return self;
+}
+
+- (void)dealloc {
+    if (_glassTapGesture) [self.metalView removeGestureRecognizer:_glassTapGesture];
+    if (_glassPanGesture) [self.metalView removeGestureRecognizer:_glassPanGesture];
+}
+
+- (void)glassStoreTouch:(CGPoint)point {
+    CGSize size = self.metalView.bounds.size;
+    if (size.width <= 0 || size.height <= 0) return;
+    self.glassTouchX = (float)(point.x / size.width * 2.0 - 1.0);
+    self.glassTouchY = (float)(1.0 - point.y / size.height * 2.0);
+}
+
+- (void)glassAddTrailPoint:(CGPoint)point strength:(float)strength {
+    [self glassStoreTouch:point];
+    NSUInteger index = self.glassTrailWriteIndex % GlassTrailPointCount;
+    _glassTrail.points[index] = (vector_float4){self.glassTouchX, self.glassTouchY, 0.0f, strength};
+    self.glassTrailWriteIndex = (index + 1) % GlassTrailPointCount;
+}
+
+- (void)glassTapped:(UITapGestureRecognizer *)gesture {
+    CGPoint point = [gesture locationInView:self.metalView];
+    [self glassAddTrailPoint:point strength:1.65f];
+    // Touch drives particles only. The sculpture keeps its authored camera.
+    self.glassTouchImpulse = 1.65f;
+}
+
+- (void)glassPanned:(UIPanGestureRecognizer *)gesture {
+    CGPoint point = [gesture locationInView:self.metalView];
+    if (gesture.state == UIGestureRecognizerStateBegan || !self.glassHasPreviousPanPoint) {
+        self.glassPreviousPanPoint = point;
+        self.glassHasPreviousPanPoint = YES;
+        [self glassAddTrailPoint:point strength:1.25f];
+    } else {
+        CGFloat distance = hypot(point.x - self.glassPreviousPanPoint.x,
+                                 point.y - self.glassPreviousPanPoint.y);
+        NSUInteger samples = MIN((NSUInteger)8, MAX((NSUInteger)1, (NSUInteger)ceil(distance / 14.0)));
+        for (NSUInteger i = 1; i <= samples; i++) {
+            CGFloat t = (CGFloat)i / (CGFloat)samples;
+            CGPoint sample = CGPointMake(self.glassPreviousPanPoint.x + (point.x - self.glassPreviousPanPoint.x) * t,
+                                         self.glassPreviousPanPoint.y + (point.y - self.glassPreviousPanPoint.y) * t);
+            [self glassAddTrailPoint:sample strength:1.15f];
+        }
+        self.glassPreviousPanPoint = point;
+    }
+    self.glassTouchImpulse = fmaxf(self.glassTouchImpulse, 1.15f);
+    if (gesture.state == UIGestureRecognizerStateEnded || gesture.state == UIGestureRecognizerStateCancelled)
+        self.glassHasPreviousPanPoint = NO;
+}
+
+- (id<MTLRenderPipelineState>)glassPipelineWithVertex:(NSString *)vertex fragment:(NSString *)fragment
+                                             format:(MTLPixelFormat)format depth:(BOOL)depth {
+    MTLRenderPipelineDescriptor *d = [MTLRenderPipelineDescriptor new];
+    d.label = fragment;
+    d.vertexFunction = [self.defaultLibrary newFunctionWithName:vertex];
+    d.fragmentFunction = [self.defaultLibrary newFunctionWithName:fragment];
+    d.colorAttachments[0].pixelFormat = format;
+    if (depth) d.depthAttachmentPixelFormat = MTLPixelFormatDepth32Float;
+    NSError *error = nil;
+    id<MTLRenderPipelineState> pipeline = [self.device newRenderPipelineStateWithDescriptor:d error:&error];
+    if (!pipeline) NSLog(@"Glass pipeline %@ failed: %@", fragment, error);
+    return pipeline;
+}
+
+- (id<MTLRenderPipelineState>)glassParticlePipelineState {
+    MTLRenderPipelineDescriptor *d = [MTLRenderPipelineDescriptor new];
+    d.label = @"Glass audio particles";
+    d.vertexFunction = [self.defaultLibrary newFunctionWithName:@"glassParticleVertex"];
+    d.fragmentFunction = [self.defaultLibrary newFunctionWithName:@"glassParticleFragment"];
+    d.colorAttachments[0].pixelFormat = MTLPixelFormatRGBA16Float;
+    d.depthAttachmentPixelFormat = MTLPixelFormatDepth32Float;
+    d.colorAttachments[0].blendingEnabled = YES;
+    d.colorAttachments[0].sourceRGBBlendFactor = MTLBlendFactorSourceAlpha;
+    d.colorAttachments[0].destinationRGBBlendFactor = MTLBlendFactorOne;
+    d.colorAttachments[0].sourceAlphaBlendFactor = MTLBlendFactorOne;
+    d.colorAttachments[0].destinationAlphaBlendFactor = MTLBlendFactorOne;
+    NSError *error = nil;
+    id<MTLRenderPipelineState> pipeline = [self.device newRenderPipelineStateWithDescriptor:d error:&error];
+    if (!pipeline) NSLog(@"Glass particle pipeline failed: %@", error);
+    return pipeline;
+}
+
+- (void)setupPipeline {
+    self.glassScenePipeline = [self glassPipelineWithVertex:@"glassResonanceVertex" fragment:@"glassResonanceFragment" format:MTLPixelFormatRGBA16Float depth:YES];
+    self.glassBackPipeline = [self glassPipelineWithVertex:@"glassResonanceVertex" fragment:@"glassBackFragment" format:MTLPixelFormatRGBA16Float depth:YES];
+    self.glassBackdropPipeline = [self glassPipelineWithVertex:@"glassFullscreenVertex" fragment:@"glassBackdropFragment" format:MTLPixelFormatRGBA16Float depth:YES];
+    self.glassParticlePipeline = [self glassParticlePipelineState];
+    self.glassBloomPipeline = [self glassPipelineWithVertex:@"glassFullscreenVertex" fragment:@"glassBloomHorizontal" format:MTLPixelFormatRGBA16Float depth:NO];
+    self.glassCompositePipeline = [self glassPipelineWithVertex:@"glassFullscreenVertex" fragment:@"glassCompositeFragment" format:self.metalView.colorPixelFormat depth:NO];
+    MTLDepthStencilDescriptor *depth = [MTLDepthStencilDescriptor new];
+    depth.depthCompareFunction = MTLCompareFunctionLess;
+    depth.depthWriteEnabled = YES;
+    self.glassDepthState = [self.device newDepthStencilStateWithDescriptor:depth];
+    // Shared seam vertices make a closed tube; indexed drawing reuses vertex work.
+    uint16_t indices[160*28*6];
+    NSUInteger k = 0;
+    for (int i=0;i<160;i++) for (int j=0;j<28;j++) {
+        uint16_t a=i*29+j, b=(i+1)*29+j;
+        indices[k++]=a; indices[k++]=a+1; indices[k++]=b;
+        indices[k++]=a+1; indices[k++]=b+1; indices[k++]=b;
+    }
+    self.glassIndices = [self createBufferWithData:indices length:sizeof(indices)];
+    self.glassFrames = dispatch_semaphore_create(2);
+}
+
+- (void)updateSpectrumData:(NSArray<NSNumber *> *)data {
+    [super updateSpectrumData:data];
+    self.glassLastAudio = CACurrentMediaTime();
+}
+
+- (void)startRendering {
+    memset(&_glassAudio, 0, sizeof(_glassAudio));
+    memset(&_glassTrail, 0, sizeof(_glassTrail));
+    self.glassLastFrame = 0;
+    self.glassLastAudio = 0;
+    self.glassShotElapsed = 0;
+    self.glassPreviousImpact = 0;
+    self.glassTrailWriteIndex = 0;
+    self.glassHasPreviousPanPoint = NO;
+    [super startRendering];
+}
+
+- (void)resumeRendering {
+    self.glassLastFrame = 0;
+    self.glassLastAudio = 0;
+    memset(&_glassAudio, 0, sizeof(_glassAudio));
+    memset(&_glassTrail, 0, sizeof(_glassTrail));
+    self.glassTrailWriteIndex = 0;
+    self.glassHasPreviousPanPoint = NO;
+    [super resumeRendering];
+}
+
+- (void)updateUniforms:(NSTimeInterval)time {
+    [super updateUniforms:time];
+    Uniforms *u = self.uniformBuffer.contents;
+    NSTimeInterval now = CACurrentMediaTime();
+    float dt = self.glassLastFrame > 0 ? fmin(now-self.glassLastFrame, 0.1) : 1.0f/30;
+    self.glassLastFrame = now;
+    float bands[80] = {0};
+    BOOL fresh = self.glassLastAudio > 0 && now-self.glassLastAudio < 0.25;
+    if (fresh) for (int i=0;i<80;i++) bands[i]=u->audioData[i].x;
+    NSDictionary *params = self.renderParameters;
+    float sensitivity = params[@"audioSensitivity"] ? [params[@"audioSensitivity"] floatValue] : 1.15f;
+    glassAudioStep(&_glassAudio, bands, fresh ? u->activityMeter1.y : 0,
+                   fresh ? u->categoryFeatures.x : 0, fresh ? u->activityMeter5.z : 0,
+                   [params[@"beatTrigger"] floatValue], sensitivity, dt);
+    self.renderParameters[@"beatTrigger"] = @0;
+
+    // A small set of deliberate camera compositions. Transitions happen on a
+    // musical impact or after a long hold, so the camera feels edited rather
+    // than continuously orbiting at a fixed speed.
+    self.glassShotElapsed += dt;
+    BOOL newImpact = _glassAudio.impact > 0.16f && self.glassPreviousImpact <= 0.16f;
+    float climax = fresh ? u->activityMeter5.z : 0.0f;
+    if ((newImpact && (climax > 0.38f || self.glassShotElapsed > 3.2f)) || self.glassShotElapsed > 9.0f) {
+        static const float yaw[]   = {0.0f, 0.72f, -0.58f, 1.14f, -0.94f};
+        static const float pitch[] = {-0.20f, 0.16f, 0.34f, -0.38f, 0.05f};
+        static const float zoom[]  = {1.00f, 1.14f, 0.90f, 1.22f, 1.04f};
+        self.glassShotIndex = (self.glassShotIndex + 1) % 5;
+        self.glassCameraTargetYaw = yaw[self.glassShotIndex];
+        self.glassCameraTargetPitch = pitch[self.glassShotIndex];
+        self.glassCameraTargetZoom = zoom[self.glassShotIndex];
+        self.glassShotElapsed = 0;
+    }
+    if (newImpact) {
+        self.glassCameraKick = fmaxf(self.glassCameraKick, 0.13f + _glassAudio.impact * 0.16f);
+    }
+    self.glassPreviousImpact = _glassAudio.impact;
+    float cameraBlend = 1.0f - expf(-dt * (self.glassShotElapsed < 1.0f ? 3.8f : 1.8f));
+    self.glassCameraYaw += (self.glassCameraTargetYaw - self.glassCameraYaw) * cameraBlend;
+    self.glassCameraPitch += (self.glassCameraTargetPitch - self.glassCameraPitch) * cameraBlend;
+    self.glassCameraZoom += (self.glassCameraTargetZoom - self.glassCameraZoom) * cameraBlend;
+    self.glassCameraKick *= expf(-dt * 7.5f);
+    self.glassTouchImpulse *= expf(-dt * 2.8f);
+    for (NSUInteger i = 0; i < GlassTrailPointCount; i++) {
+        if (_glassTrail.points[i].w > 0.001f) {
+            _glassTrail.points[i].z += dt;
+            _glassTrail.points[i].w *= expf(-dt * 1.55f);
+        }
+    }
+    u->galaxyParams1 = (vector_float4){_glassAudio.low,_glassAudio.mid,_glassAudio.high,_glassAudio.impact};
+    u->galaxyParams2 = (vector_float4){_glassAudio.phase,_glassAudio.strain,_glassAudio.impactAge,_glassAudio.energy};
+    float bloom = params[@"glassBloom"] ? glassUnit([params[@"glassBloom"] floatValue]) : 0.32f;
+    u->galaxyParams3 = (vector_float4){bloom,1.05f,self.glassTouchX,self.glassTouchY};
+    u->cyberpunkControls = (vector_float4){self.glassCameraYaw,self.glassCameraPitch,
+                                           self.glassTouchImpulse,self.glassShotElapsed};
+    u->cyberpunkFrequencyControls = (vector_float4){self.glassCameraZoom + self.glassCameraKick,
+                                                    climax, fresh ? 1.0f : 0.0f, 0.0f};
+}
+
+- (id<MTLTexture>)glassTexture:(MTLPixelFormat)format width:(NSUInteger)w height:(NSUInteger)h {
+    MTLTextureDescriptor *d = [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:format width:w height:h mipmapped:NO];
+    d.storageMode = MTLStorageModePrivate;
+    d.usage = MTLTextureUsageRenderTarget | (format == MTLPixelFormatDepth32Float ? 0 : MTLTextureUsageShaderRead);
+    return [self.device newTextureWithDescriptor:d];
+}
+
+- (void)drawInMTKView:(MTKView *)view {
+    if (!self.isRendering || view.paused || dispatch_semaphore_wait(self.glassFrames, DISPATCH_TIME_NOW) != 0) return;
+    dispatch_semaphore_t frames = self.glassFrames;
+    id<CAMetalDrawable> drawable = view.currentDrawable;
+    if (!drawable) { dispatch_semaphore_signal(frames); return; }
+    NSUInteger w=drawable.texture.width, h=drawable.texture.height;
+    if (self.glassScene.width != w || self.glassScene.height != h) {
+        self.glassScene = [self glassTexture:MTLPixelFormatRGBA16Float width:w height:h];
+        self.glassRear = [self glassTexture:MTLPixelFormatRGBA16Float width:w height:h];
+        self.glassDepth = [self glassTexture:MTLPixelFormatDepth32Float width:w height:h];
+        self.glassBloom = [self glassTexture:MTLPixelFormatRGBA16Float width:MAX(1,w/2) height:MAX(1,h/2)];
+    }
+    if (!self.glassScene || !self.glassRear || !self.glassDepth || !self.glassBloom) { dispatch_semaphore_signal(frames); return; }
+    [self updateUniforms:CACurrentMediaTime()-self.startTime];
+    Uniforms frame = *(Uniforms *)self.uniformBuffer.contents;
+    id<MTLCommandBuffer> command = [self.commandQueue commandBuffer];
+    if (!command) { dispatch_semaphore_signal(frames); return; }
+    command.label = @"GlassResonance HDR + bloom";
+    MTLRenderPassDescriptor *scene = [MTLRenderPassDescriptor renderPassDescriptor];
+    scene.colorAttachments[0].texture = self.glassRear;
+    scene.colorAttachments[0].loadAction = MTLLoadActionClear;
+    scene.colorAttachments[0].storeAction = MTLStoreActionStore;
+    scene.depthAttachment.texture = self.glassDepth;
+    scene.depthAttachment.loadAction = MTLLoadActionClear;
+    scene.depthAttachment.storeAction = MTLStoreActionDontCare;
+    scene.depthAttachment.clearDepth = 1;
+    id<MTLRenderCommandEncoder> encoder = [command renderCommandEncoderWithDescriptor:scene];
+    [encoder setVertexBytes:&frame length:sizeof(frame) atIndex:0];
+    [encoder setFragmentBytes:&frame length:sizeof(frame) atIndex:0];
+    [encoder setVertexBytes:&_glassTrail length:sizeof(_glassTrail) atIndex:1];
+    [encoder setRenderPipelineState:self.glassBackdropPipeline];
+    [encoder drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:3];
+    [encoder setRenderPipelineState:self.glassParticlePipeline];
+    [encoder drawPrimitives:MTLPrimitiveTypePoint vertexStart:0 vertexCount:1152];
+    [encoder drawPrimitives:MTLPrimitiveTypePoint vertexStart:1152 vertexCount:GlassTrailPointCount * 10];
+    [encoder setDepthStencilState:self.glassDepthState];
+    [encoder setFrontFacingWinding:MTLWindingCounterClockwise];
+    [encoder setCullMode:MTLCullModeFront];
+    [encoder setRenderPipelineState:self.glassBackPipeline];
+    [encoder drawIndexedPrimitives:MTLPrimitiveTypeTriangle indexCount:160*28*6 indexType:MTLIndexTypeUInt16 indexBuffer:self.glassIndices indexBufferOffset:0];
+    [encoder endEncoding];
+    // Rear surfaces are a separate immutable refraction source for this frame.
+    scene.colorAttachments[0].texture = self.glassScene;
+    encoder = [command renderCommandEncoderWithDescriptor:scene];
+    [encoder setVertexBytes:&frame length:sizeof(frame) atIndex:0];
+    [encoder setFragmentBytes:&frame length:sizeof(frame) atIndex:0];
+    [encoder setVertexBytes:&_glassTrail length:sizeof(_glassTrail) atIndex:1];
+    [encoder setRenderPipelineState:self.glassBackdropPipeline];
+    [encoder drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:3];
+    [encoder setRenderPipelineState:self.glassParticlePipeline];
+    [encoder drawPrimitives:MTLPrimitiveTypePoint vertexStart:0 vertexCount:1152];
+    [encoder drawPrimitives:MTLPrimitiveTypePoint vertexStart:1152 vertexCount:GlassTrailPointCount * 10];
+    [encoder setDepthStencilState:self.glassDepthState];
+    [encoder setFrontFacingWinding:MTLWindingCounterClockwise];
+    [encoder setCullMode:MTLCullModeBack];
+    [encoder setRenderPipelineState:self.glassScenePipeline];
+    [encoder setFragmentTexture:self.glassRear atIndex:0];
+    [encoder drawIndexedPrimitives:MTLPrimitiveTypeTriangle indexCount:160*28*6 indexType:MTLIndexTypeUInt16 indexBuffer:self.glassIndices indexBufferOffset:0];
+    [encoder endEncoding];
+    MTLRenderPassDescriptor *blur = [MTLRenderPassDescriptor renderPassDescriptor];
+    blur.colorAttachments[0].texture = self.glassBloom;
+    blur.colorAttachments[0].loadAction = MTLLoadActionDontCare;
+    blur.colorAttachments[0].storeAction = MTLStoreActionStore;
+    encoder = [command renderCommandEncoderWithDescriptor:blur];
+    [encoder setRenderPipelineState:self.glassBloomPipeline];
+    [encoder setFragmentTexture:self.glassScene atIndex:0];
+    [encoder drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:3];
+    [encoder endEncoding];
+    MTLRenderPassDescriptor *composite = [MTLRenderPassDescriptor renderPassDescriptor];
+    composite.colorAttachments[0].texture = drawable.texture;
+    composite.colorAttachments[0].loadAction = MTLLoadActionDontCare;
+    composite.colorAttachments[0].storeAction = MTLStoreActionStore;
+    encoder = [command renderCommandEncoderWithDescriptor:composite];
+    [encoder setRenderPipelineState:self.glassCompositePipeline];
+    [encoder setFragmentBytes:&frame length:sizeof(frame) atIndex:0];
+    [encoder setFragmentTexture:self.glassScene atIndex:0];
+    [encoder setFragmentTexture:self.glassBloom atIndex:1];
+    [encoder drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:3];
+    [encoder endEncoding];
+    [command addCompletedHandler:^(id<MTLCommandBuffer> completed) {
+        if (completed.error) NSLog(@"GlassResonance GPU error: %@", completed.error);
+        dispatch_semaphore_signal(frames);
+    }];
+    [command presentDrawable:drawable];
+    [command commit];
+}
+@end
+
 @implementation MetalRendererFactory
 
 + (instancetype)sharedFactory {
@@ -2954,6 +3402,11 @@ typedef struct {
         case VisualEffectTypeNeuralResonance:
             return [[NeuralResonanceRenderer alloc] initWithMetalView:metalView];
 
+        case VisualEffectTypeGlassResonance:
+            return [[GlassResonanceRenderer alloc] initWithMetalView:metalView];
+
+        case VisualEffectTypeCellularWormhole:
+            return [[CellularWormholeRenderer alloc] initWithMetalView:metalView];
         case VisualEffectTypeWormholeDrive:
             return [[WormholeDriveRenderer alloc] initWithMetalView:metalView];
 

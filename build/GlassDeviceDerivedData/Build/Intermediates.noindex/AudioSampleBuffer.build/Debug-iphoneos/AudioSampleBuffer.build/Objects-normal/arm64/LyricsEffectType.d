@@ -1,0 +1,4 @@
+dependencies: \
+  /Users/lzz/Documents/GitHub/AudioSampleBuffer/AudioSampleBuffer/Lyrics/LyricsEffectType.m \
+  /Users/lzz/Documents/GitHub/AudioSampleBuffer/AudioSampleBuffer/Lyrics/LyricsEffectType.h \
+  /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS.sdk/System/Library/Frameworks/Foundation.framework/Modules/module.modulemap

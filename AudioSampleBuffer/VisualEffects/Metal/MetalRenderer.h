@@ -244,6 +244,12 @@ NS_ASSUME_NONNULL_BEGIN
 @interface WormholeDriveRenderer : BaseMetalRenderer
 @end
 
+@interface GlassResonanceRenderer : BaseMetalRenderer
+@end
+
+@interface CellularWormholeRenderer : WormholeDriveRenderer
+@end
+
 /**
  * 棱镜共振渲染器 - 实验性效果
  * 以清晰几何线稿分层表现低频、中频与高频，强调边缘锐度与结构可读性

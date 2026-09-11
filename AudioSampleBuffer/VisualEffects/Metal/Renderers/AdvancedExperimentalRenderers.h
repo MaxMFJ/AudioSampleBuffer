@@ -15,6 +15,9 @@ NS_ASSUME_NONNULL_BEGIN
 @interface WormholeDriveRenderer : BaseMetalRenderer
 @end
 
+@interface CellularWormholeRenderer : WormholeDriveRenderer
+@end
+
 @interface PrismResonanceRenderer : BaseMetalRenderer
 @end
 
