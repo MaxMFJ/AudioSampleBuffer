@@ -105,6 +105,11 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)setRenderParameters:(NSDictionary *)parameters;
 
 /**
+ * Push the current song's album artwork into effects that can display it.
+ */
+- (void)updateAlbumArtwork:(nullable UIImage *)image;
+
+/**
  * 获取当前性能统计
  */
 - (NSDictionary *)performanceStatistics;

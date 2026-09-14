@@ -1,0 +1,183 @@
+{
+  "version": 1,
+  "purpose": "Dataset-backed truth mapping for instrument presence experiments. This file contains taxonomy and calibration defaults, not copyrighted audio data.",
+  "recommended_primary_dataset": "moisesdb",
+  "datasets": {
+    "moisesdb": {
+      "role": "primary_real_music_truth",
+      "license": "CC BY-NC-SA 4.0",
+      "repository": "https://github.com/moises-ai/moises-db",
+      "paper": "https://arxiv.org/abs/2307.15913",
+      "notes": "Best fit for real-song fine-grained stems beyond vocals/drums/bass/other. Use track.stems keys when present.",
+      "stem_aliases": {
+        "bass": ["bass", "bass_guitar", "electric_bass", "synth_bass"],
+        "guitar": ["guitar", "electric_guitar", "acoustic_guitar", "distorted_guitar"],
+        "drums": ["drums"],
+        "vocals": ["vocals"],
+        "piano": ["piano", "keys"]
+      }
+    },
+    "musdb18": {
+      "role": "bass_baseline_truth",
+      "license": "academic_access",
+      "repository": "https://github.com/sigsep/sigsep-mus-db",
+      "notes": "Reliable for bass presence. Guitar is not separated and is usually inside other.",
+      "stem_order": ["mixture", "drums", "bass", "other", "vocals"],
+      "targets": ["mixture", "drums", "bass", "other", "vocals", "accompaniment"]
+    },
+    "slakh2100": {
+      "role": "clean_synthetic_instrument_truth",
+      "license": "dataset_specific",
+      "repository": "https://github.com/ethman/slakh-utils",
+      "loader": "https://github.com/KinWaiCheuk/slakh_loader",
+      "notes": "Synthetic but clean instrument labels. Good for validating guitar/bass taxonomy before real-song testing.",
+      "metadata_keys": ["inst_class", "program_num", "midi_program_name", "plugin_name"],
+      "midi_program_groups": {
+        "bass_all": [32, 33, 34, 35, 36, 37, 38, 39],
+        "electric_bass": [33, 34, 35, 36, 37],
+        "synth_bass": [38, 39],
+        "guitar_all": [24, 25, 26, 27, 28, 29, 30, 31],
+        "electric_guitar": [26, 27, 28, 29, 30, 31],
+        "distorted_guitar": [29, 30],
+        "acoustic_guitar": [24, 25]
+      }
+    }
+  },
+  "analysis_window": {
+    "frame_ms": 100,
+    "hop_ms": 50,
+    "sample_rate_hz": 44100,
+    "smoothing": {
+      "attack_alpha": 0.42,
+      "release_alpha": 0.12
+    }
+  },
+  "truth_metrics": {
+    "stem_rms": "sqrt(mean(stem^2)) per frame",
+    "mix_rms": "sqrt(mean(mixture^2)) per frame",
+    "ratio_to_mix": "stem_rms / max(mix_rms, 1e-9)",
+    "presence": "smoothstep(ratio_floor, ratio_strong, ratio_to_mix) * smoothstep(db_floor, db_strong, stem_rms_dbfs)"
+  },
+  "labels": {
+    "electric_bass_line": {
+      "display_name_zh": "斯线",
+      "truth_priority": [
+        {
+          "dataset": "moisesdb",
+          "stems": ["bass"],
+          "source_aliases": ["bass", "bass_guitar", "electric_bass"]
+        },
+        {
+          "dataset": "musdb18",
+          "stems": ["bass"]
+        },
+        {
+          "dataset": "slakh2100",
+          "program_groups": ["electric_bass"]
+        }
+      ],
+      "frequency_focus_hz": [40, 700],
+      "calibration": {
+        "ratio_floor": 0.08,
+        "ratio_strong": 0.32,
+        "db_floor": -42,
+        "db_strong": -20,
+        "solo_expected_presence": 0.75
+      }
+    },
+    "electric_guitar_texture": {
+      "display_name_zh": "纹理",
+      "truth_priority": [
+        {
+          "dataset": "moisesdb",
+          "stems": ["guitar"],
+          "source_aliases": ["guitar", "electric_guitar", "distorted_guitar"]
+        },
+        {
+          "dataset": "slakh2100",
+          "program_groups": ["electric_guitar"]
+        }
+      ],
+      "frequency_focus_hz": [180, 6000],
+      "calibration": {
+        "ratio_floor": 0.06,
+        "ratio_strong": 0.28,
+        "db_floor": -44,
+        "db_strong": -22,
+        "solo_expected_presence": 0.75
+      }
+    },
+    "distorted_guitar": {
+      "display_name_zh": "失真",
+      "truth_priority": [
+        {
+          "dataset": "moisesdb",
+          "stems": ["guitar"],
+          "source_aliases": ["distorted_guitar", "electric_guitar", "guitar"]
+        },
+        {
+          "dataset": "slakh2100",
+          "program_groups": ["distorted_guitar"]
+        }
+      ],
+      "frequency_focus_hz": [250, 8000],
+      "calibration": {
+        "ratio_floor": 0.05,
+        "ratio_strong": 0.24,
+        "db_floor": -46,
+        "db_strong": -24,
+        "solo_expected_presence": 0.70
+      }
+    },
+    "pluck_grain": {
+      "display_name_zh": "拨弦颗粒",
+      "truth_priority": [
+        {
+          "dataset": "moisesdb",
+          "stems": ["guitar", "bass"],
+          "source_aliases": ["guitar", "electric_guitar", "bass", "electric_bass"]
+        },
+        {
+          "dataset": "slakh2100",
+          "program_groups": ["electric_guitar", "electric_bass", "acoustic_guitar"]
+        }
+      ],
+      "frequency_focus_hz": [700, 9000],
+      "requires_transient": true,
+      "calibration": {
+        "ratio_floor": 0.04,
+        "ratio_strong": 0.20,
+        "db_floor": -48,
+        "db_strong": -26,
+        "solo_expected_presence": 0.60
+      }
+    },
+    "sound_wall": {
+      "display_name_zh": "持续音墙",
+      "truth_priority": [
+        {
+          "dataset": "moisesdb",
+          "stems": ["guitar", "other", "keys", "piano"]
+        },
+        {
+          "dataset": "slakh2100",
+          "program_groups": ["electric_guitar", "synth_bass"]
+        }
+      ],
+      "frequency_focus_hz": [120, 10000],
+      "requires_sustain": true,
+      "calibration": {
+        "ratio_floor": 0.10,
+        "ratio_strong": 0.38,
+        "db_floor": -44,
+        "db_strong": -22,
+        "solo_expected_presence": 0.70
+      }
+    }
+  },
+  "embedding_notes": {
+    "use_as": "Load as a local JSON resource. Treat dataset stems as truth channels when available; do not treat existing DSP combo labels as truth.",
+    "expected_app_experiment": "Compare live feature labels against presence curves computed from these truth definitions. If solo bass/guitar is below solo_expected_presence, the live detector needs a model or a separated-stem proxy.",
+    "license_warning": "This config is safe to embed, but source datasets/audio may have non-commercial or academic restrictions."
+  }
+}

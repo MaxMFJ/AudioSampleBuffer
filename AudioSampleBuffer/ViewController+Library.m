@@ -1,5 +1,6 @@
 #import "ViewController+Private.h"
 
+#import "AppleMusicArtworkService.h"
 #import "AudioFileFormats.h"
 #import "AudioPlayCell.h"
 #import "LLMAPISettings.h"
@@ -15,6 +16,10 @@
 
 static NSString * const kBackgroundMediaDirectoryName = @"BackgroundMedia";
 static NSString * const kBackgroundMediaManifestFileName = @"background_media_items.dat";
+
+@interface ViewController (AppleMusicArtworkPrivate)
+- (void)fetchAppleMusicArtworkForItem:(MusicItem *)musicItem;
+@end
 
 static UIEdgeInsets RhythmEffectiveSafeAreaInsets(UIView *view) {
     UIEdgeInsets insets = UIEdgeInsetsZero;
@@ -580,38 +585,127 @@ static UIEdgeInsets RhythmEffectiveSafeAreaInsets(UIView *view) {
         }
 
         UIImage *image = [self musicImageWithMusicURL:fileUrl];
-
-        if (image) {
-            self.coverImageView.image = image;
-            self.coverImageView.hidden = self.isBackgroundMediaEffectActive;
-            self.vinylRecordView.hidden = YES;
-
-            if (self.isShowingVinylRecord) {
-                [self.vinylRecordView stopSpinning];
-                self.isShowingVinylRecord = NO;
-
-                [self.animationCoordinator addRotationViews:@[self.coverImageView]
-                                                  rotations:@[@(6.0)]
-                                                  durations:@[@(120.0)]
-                                              rotationTypes:@[@(RotationTypeCounterClockwise)]];
-            }
-
-            [self.animationCoordinator updateParticleImage:image];
-            NSLog(@"🖼️ 显示音乐封面");
-        } else {
-            self.coverImageView.hidden = YES;
-            self.vinylRecordView.hidden = self.isBackgroundMediaEffectActive;
-            self.isShowingVinylRecord = !self.isBackgroundMediaEffectActive;
-
-            [self.vinylRecordView regenerateAppearanceWithSongName:songName];
-
-            if (!self.isBackgroundMediaEffectActive && self.player.isPlaying) {
-                [self.vinylRecordView startSpinning];
-            }
-
-            NSLog(@"🎵 显示黑胶唱片动画（无封面）: %@", songName);
+        [self displayAlbumArtwork:image songName:songName];
+        if (!image) {
+            [self fetchAppleMusicArtworkForItem:musicItem];
         }
     }
+}
+
+- (void)displayAlbumArtwork:(UIImage *)image songName:(NSString *)songName {
+    [self.visualEffectManager updateAlbumArtwork:image];
+
+    BOOL glassActive = self.visualEffectManager.currentEffectType == VisualEffectTypeGlassResonance;
+    if (glassActive) {
+        if (image) {
+            self.coverImageView.image = image;
+        }
+        self.coverImageView.hidden = YES;
+        self.vinylRecordView.hidden = YES;
+        return;
+    }
+
+    if (image) {
+        self.coverImageView.image = image;
+        self.coverImageView.hidden = self.isBackgroundMediaEffectActive;
+        self.vinylRecordView.hidden = YES;
+
+        if (self.isShowingVinylRecord) {
+            [self.vinylRecordView stopSpinning];
+            self.isShowingVinylRecord = NO;
+
+            [self.animationCoordinator addRotationViews:@[self.coverImageView]
+                                              rotations:@[@(6.0)]
+                                              durations:@[@(120.0)]
+                                              rotationTypes:@[@(RotationTypeCounterClockwise)]];
+        }
+
+        [self.animationCoordinator updateParticleImage:image];
+        NSLog(@"🖼️ 显示音乐封面");
+    } else {
+        self.coverImageView.hidden = YES;
+        self.vinylRecordView.hidden = self.isBackgroundMediaEffectActive;
+        self.isShowingVinylRecord = !self.isBackgroundMediaEffectActive;
+
+        if (songName.length > 0) {
+            [self.vinylRecordView regenerateAppearanceWithSongName:songName];
+        }
+
+        if (!self.isBackgroundMediaEffectActive && self.player.isPlaying) {
+            [self.vinylRecordView startSpinning];
+        }
+
+        NSLog(@"🎵 显示黑胶唱片动画（无封面）: %@", songName);
+    }
+}
+
+- (void)fetchAppleMusicArtworkForCurrentItemIfNeeded {
+    if (self.currentIndex >= self.displayedMusicItems.count) {
+        return;
+    }
+    if (self.coverImageView.image && !self.isShowingVinylRecord) {
+        return;
+    }
+
+    MusicItem *musicItem = self.displayedMusicItems[self.currentIndex];
+    [self fetchAppleMusicArtworkForItem:musicItem];
+}
+
+- (void)fetchAppleMusicArtworkForItem:(MusicItem *)musicItem {
+    if (!musicItem) {
+        return;
+    }
+
+    NSString *token = musicItem.filePath.length > 0 ? musicItem.filePath : musicItem.fileName;
+    self.artworkLookupToken = token;
+    NSUInteger generation = ++self.artworkLookupGeneration;
+
+    NSString *title = musicItem.displayName;
+    NSString *artist = musicItem.artist;
+    NSString *album = musicItem.album;
+    LRCParser *parser = self.player.lyricsParser;
+    if (parser.title.length > 0) {
+        title = parser.title;
+    }
+    if (parser.artist.length > 0) {
+        artist = parser.artist;
+    }
+    if (parser.album.length > 0) {
+        album = parser.album;
+    }
+
+    __weak typeof(self) weakSelf = self;
+    [[AppleMusicArtworkService sharedService] fetchArtworkWithTitle:title
+                                                             artist:artist
+                                                              album:album
+                                                           filePath:musicItem.filePath
+                                                         completion:^(UIImage *image, NSError *error) {
+        __strong typeof(weakSelf) self = weakSelf;
+        if (!self || !image) {
+            if (error) {
+                NSLog(@"⚠️ [Apple Music] 未找到封面: %@", error.localizedDescription);
+            }
+            return;
+        }
+
+        if (self.artworkLookupGeneration != generation) {
+            NSLog(@"🍎 [Apple Music] 歌曲已切换，忽略过期封面");
+            return;
+        }
+        NSString *currentToken = nil;
+        if (self.currentIndex < self.displayedMusicItems.count) {
+            MusicItem *current = self.displayedMusicItems[self.currentIndex];
+            currentToken = current.filePath.length > 0 ? current.filePath : current.fileName;
+        }
+        if (![currentToken isEqualToString:token] || ![self.artworkLookupToken isEqualToString:token]) {
+            NSLog(@"🍎 [Apple Music] 歌曲已切换，忽略过期封面");
+            return;
+        }
+
+        NSString *songName = musicItem.displayName ?: musicItem.fileName;
+        [self displayAlbumArtwork:image songName:songName];
+        [self updateNowPlayingInfoImmediate];
+    }];
 }
 
 #pragma mark - File Metadata
@@ -651,6 +745,12 @@ static UIEdgeInsets RhythmEffectiveSafeAreaInsets(UIView *view) {
         if (externalCover) {
             NSLog(@"✅ 使用外部封面文件: %@", url.path.lastPathComponent);
             return externalCover;
+        }
+
+        UIImage *appleMusicCover = [[AppleMusicArtworkService sharedService] cachedArtworkForFilePath:url.path];
+        if (appleMusicCover) {
+            NSLog(@"✅ 使用 Apple Music 缓存封面: %@", url.path.lastPathComponent);
+            return appleMusicCover;
         }
     }
 

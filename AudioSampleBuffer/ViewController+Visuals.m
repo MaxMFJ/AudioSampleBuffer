@@ -841,21 +841,9 @@ static UIEdgeInsets RhythmEffectiveSafeAreaInsets(UIView *view) {
         coverImage = [self musicImageWithMusicURL:fileUrl];
     }
 
-    if (coverImage) {
-        self.coverImageView.image = coverImage;
-        self.coverImageView.hidden = self.isBackgroundMediaEffectActive;
-        self.vinylRecordView.hidden = YES;
-        self.isShowingVinylRecord = NO;
-        NSLog(@"🖼️ 显示音乐封面");
-    } else {
-        self.coverImageView.hidden = YES;
-        self.vinylRecordView.hidden = self.isBackgroundMediaEffectActive;
-        self.isShowingVinylRecord = !self.isBackgroundMediaEffectActive;
-
-        if (songName) {
-            [self.vinylRecordView regenerateAppearanceWithSongName:songName];
-        }
-        NSLog(@"🎵 显示黑胶唱片动画（无封面）");
+    [self displayAlbumArtwork:coverImage songName:songName];
+    if (!coverImage) {
+        [self fetchAppleMusicArtworkForCurrentItemIfNeeded];
     }
 
     self.coverImageView.layer.cornerRadius = self.coverImageView.frame.size.height / 2.0;
@@ -1838,6 +1826,13 @@ static UIEdgeInsets RhythmEffectiveSafeAreaInsets(UIView *view) {
     [self refreshVisualLyricsOverlayVisibility];
     [self updateAudioActivityMeterOverlayWithFeatures:self.latestAudioFeatures];
     [self updateMusicFeatureScopeOverlayWithFeatures:self.latestAudioFeatures];
+    if (effectType == VisualEffectTypeGlassResonance) {
+        self.coverImageView.hidden = YES;
+        self.vinylRecordView.hidden = YES;
+        [self.visualEffectManager updateAlbumArtwork:self.coverImageView.image];
+    } else if (!self.isBackgroundMediaEffectActive) {
+        [self updateAudioSelection];
+    }
 }
 
 - (void)visualEffectManager:(VisualEffectManager *)manager didUpdatePerformance:(NSDictionary *)stats {

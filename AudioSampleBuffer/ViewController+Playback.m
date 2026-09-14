@@ -901,6 +901,9 @@ static void ASBRunImpactAnimation(CAShapeLayer *layer,
             [self updateVisualLyricsOverlayForCurrentIndex:-1];
         }
         [self refreshVisualLyricsOverlayVisibility];
+        if (parser) {
+            [self fetchAppleMusicArtworkForCurrentItemIfNeeded];
+        }
     });
 }
 

@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>logFormatVersion</key>
+	<integer>11</integer>
+	<key>logs</key>
+	<dict>
+		<key>F6192178-6768-46C4-B2CA-4932C593B563</key>
+		<dict>
+			<key>className</key>
+			<string>IDECommandLineBuildLog</string>
+			<key>documentTypeString</key>
+			<string>&lt;nil&gt;</string>
+			<key>domainType</key>
+			<string>Xcode.IDEActivityLogDomainType.BuildLog</string>
+			<key>fileName</key>
+			<string>F6192178-6768-46C4-B2CA-4932C593B563.xcactivitylog</string>
+			<key>hasPrimaryLog</key>
+			<true/>
+			<key>primaryObservable</key>
+			<dict>
+				<key>highLevelStatus</key>
+				<string>W</string>
+				<key>totalNumberOfAnalyzerIssues</key>
+				<integer>0</integer>
+				<key>totalNumberOfErrors</key>
+				<integer>0</integer>
+				<key>totalNumberOfTestFailures</key>
+				<integer>0</integer>
+				<key>totalNumberOfWarnings</key>
+				<integer>52</integer>
+			</dict>
+			<key>schemeIdentifier-containerName</key>
+			<string>AudioSampleBuffer project</string>
+			<key>schemeIdentifier-schemeName</key>
+			<string>AudioSampleBuffer</string>
+			<key>schemeIdentifier-sharedScheme</key>
+			<integer>1</integer>
+			<key>signature</key>
+			<string>Building project AudioSampleBuffer with scheme AudioSampleBuffer and configuration Debug</string>
+			<key>timeStartedRecording</key>
+			<real>810813479.89972496</real>
+			<key>timeStoppedRecording</key>
+			<real>810813482.70222402</real>
+			<key>title</key>
+			<string>Building project AudioSampleBuffer with scheme AudioSampleBuffer and configuration Debug</string>
+			<key>uniqueIdentifier</key>
+			<string>F6192178-6768-46C4-B2CA-4932C593B563</string>
+		</dict>
+	</dict>
+</dict>
+</plist>

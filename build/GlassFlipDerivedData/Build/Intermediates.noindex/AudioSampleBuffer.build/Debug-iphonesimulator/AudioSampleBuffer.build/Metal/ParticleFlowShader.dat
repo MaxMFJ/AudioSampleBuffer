@@ -1,0 +1,4 @@
+dependencies: \
+  /Users/lzz/Documents/GitHub/AudioSampleBuffer/AudioSampleBuffer/VisualEffects/Metal/ParticleFlowShader.metal \
+  /private/var/run/com.apple.security.cryptexd/mnt/com.apple.MobileAsset.MetalToolchain-v17.1.324.0.Z1DKNo/Metal.xctoolchain/usr/metal/32023/lib/clang/32023.830/include/metal/module.modulemap \
+  /Users/lzz/Documents/GitHub/AudioSampleBuffer/AudioSampleBuffer/VisualEffects/Metal/ShaderCommon.metal

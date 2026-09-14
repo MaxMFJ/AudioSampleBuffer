@@ -44,6 +44,7 @@ static const CGFloat kDefaultEffectRenderScale = 0.85f;
 
 // 🤖 AI控制器 (readwrite for internal use, header declares readonly)
 @property (nonatomic, strong, readwrite) VisualEffectAIController *aiController;
+@property (nonatomic, strong) UIImage *albumArtwork;
 
 @end
 
@@ -406,7 +407,7 @@ static const CGFloat kDefaultEffectRenderScale = 0.85f;
     if (effectType == VisualEffectTypeGlassResonance) {
         if (squareSize <= 0.0 || !isfinite(squareSize)) return;
         // Square logical camera; cap HDR allocation and fill cost on large devices.
-        CGFloat side = MAX(1.0, round(MIN(1440.0, squareSize * screenScale * 0.55)));
+        CGFloat side = MAX(1.0, round(MIN(1440.0, squareSize * screenScale * 0.62)));
         _metalView.drawableSize = CGSizeMake(side, side);
     } else if (effectType == VisualEffectTypeCellularWormhole) {
         if (squareSize <= 0.0 || !isfinite(squareSize)) return;
@@ -543,6 +544,9 @@ static const CGFloat kDefaultEffectRenderScale = 0.85f;
                 NSDictionary *settings = _effectSettings[settingsKey];
                 if (settings) {
                     [_currentRenderer setRenderParameters:settings];
+                }
+                if ([_currentRenderer respondsToSelector:@selector(updateAlbumArtwork:)]) {
+                    [(BaseMetalRenderer *)_currentRenderer updateAlbumArtwork:self.albumArtwork];
                 }
                 
                 _currentEffectType = effectType;
@@ -721,6 +725,13 @@ static const CGFloat kDefaultEffectRenderScale = 0.85f;
         if ([_currentRenderer respondsToSelector:@selector(setRenderParameters:)]) {
             [_currentRenderer setRenderParameters:parameters];
         }
+    }
+}
+
+- (void)updateAlbumArtwork:(UIImage *)image {
+    self.albumArtwork = image;
+    if ([_currentRenderer respondsToSelector:@selector(updateAlbumArtwork:)]) {
+        [(BaseMetalRenderer *)_currentRenderer updateAlbumArtwork:image];
     }
 }
 

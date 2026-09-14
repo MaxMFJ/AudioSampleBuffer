@@ -1,0 +1,28 @@
+dependencies: \
+  /Users/lzz/Documents/GitHub/AudioSampleBuffer/AudioSampleBuffer/VisualEffects/Core/VisualEffectManager.m \
+  /Users/lzz/Documents/GitHub/AudioSampleBuffer/AudioSampleBuffer/VisualEffects/Core/VisualEffectManager.h \
+  /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator.sdk/System/Library/Frameworks/Foundation.framework/Modules/module.modulemap \
+  /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/17/include/module.modulemap \
+  /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator.sdk/System/Library/Frameworks/UIKit.framework/Modules/module.modulemap \
+  /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator.sdk/System/Library/Frameworks/Metal.framework/Modules/module.modulemap \
+  /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator.sdk/System/Library/Frameworks/QuartzCore.framework/Modules/module.modulemap \
+  /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator.sdk/System/Library/Frameworks/MetalKit.framework/Modules/module.modulemap \
+  /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator.sdk/usr/include/simd/module.modulemap \
+  /Users/lzz/Documents/GitHub/AudioSampleBuffer/AudioSampleBuffer/VisualEffects/Core/VisualEffectType.h \
+  /Users/lzz/Documents/GitHub/AudioSampleBuffer/AudioSampleBuffer/VisualEffects/Core/../Metal/MetalRenderer.h \
+  /Users/lzz/Documents/GitHub/AudioSampleBuffer/AudioSampleBuffer/VisualEffects/Core/../Metal/../Core/VisualEffectType.h \
+  /Users/lzz/Documents/GitHub/AudioSampleBuffer/AudioSampleBuffer/VisualEffects/Core/../UI/EffectSelectorView.h \
+  /Users/lzz/Documents/GitHub/AudioSampleBuffer/AudioSampleBuffer/VisualEffects/Core/../UI/../Core/VisualEffectType.h \
+  /Users/lzz/Documents/GitHub/AudioSampleBuffer/AudioSampleBuffer/VisualEffects/Core/../../AudioSampleBuffer/SpectrumView.h \
+  /Users/lzz/Documents/GitHub/AudioSampleBuffer/AudioSampleBuffer/VisualEffects/Core/../../AI/VisualEffectAIController.h \
+  /Users/lzz/Documents/GitHub/AudioSampleBuffer/AudioSampleBuffer/VisualEffects/Core/../../AI/AudioFeatureExtractor.h \
+  /Users/lzz/Documents/GitHub/AudioSampleBuffer/AudioSampleBuffer/VisualEffects/Core/../../AI/../AudioSampleBuffer/RealtimeAnalyzerDSP.h \
+  /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator.sdk/System/Library/Frameworks/Accelerate.framework/Modules/module.modulemap \
+  /Users/lzz/Documents/GitHub/AudioSampleBuffer/AudioSampleBuffer/VisualEffects/Core/../../AI/MusicStyleClassifier.h \
+  /Users/lzz/Documents/GitHub/AudioSampleBuffer/AudioSampleBuffer/VisualEffects/Core/../../AI/EffectDecisionAgent.h \
+  /Users/lzz/Documents/GitHub/AudioSampleBuffer/AudioSampleBuffer/VisualEffects/Core/../../AI/UserPreferenceEngine.h \
+  /Users/lzz/Documents/GitHub/AudioSampleBuffer/AudioSampleBuffer/VisualEffects/Core/../../AI/UserContext.h \
+  /Users/lzz/Documents/GitHub/AudioSampleBuffer/AudioSampleBuffer/VisualEffects/Core/../../AI/RealtimeParameterTuner.h \
+  /Users/lzz/Documents/GitHub/AudioSampleBuffer/AudioSampleBuffer/VisualEffects/Core/../../AI/EffectTransitionController.h \
+  /Users/lzz/Documents/GitHub/AudioSampleBuffer/AudioSampleBuffer/VisualEffects/Core/../../AI/MusicAIAnalyzer.h \
+  /Users/lzz/Documents/GitHub/AudioSampleBuffer/AudioSampleBuffer/VisualEffects/Core/../../AI/AIColorConfiguration.h

@@ -58,6 +58,7 @@
 		4C51693FE5D91950459F8E6D /* VoiceEffectProcessor.mm in Sources */ = {isa = PBXBuildFile; fileRef = 4C51DB61D13DB2C847B685D5 /* VoiceEffectProcessor.mm */; };
 		4C5C27AE2E9CC24D00D9AEA9 /* PerformanceControlPanel.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C5C27AD2E9CC24D00D9AEA9 /* PerformanceControlPanel.m */; };
 		4C5E4BC52EA10E13009B5708 /* MusicLibraryManager.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C5E4BC42EA10E13009B5708 /* MusicLibraryManager.m */; };
+		A1AM000130C3000000000001 /* AppleMusicArtworkService.m in Sources */ = {isa = PBXBuildFile; fileRef = A1AM000130C3000000000003 /* AppleMusicArtworkService.m */; };
 		4C65485C2EA0A47E006DD8DD /* AudioFileFormats.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C65485B2EA0A47E006DD8DD /* AudioFileFormats.m */; };
 		4C6548652EA0AB71006DD8DD /* QQMusicLyricsAPI.m in Sources */ = {isa = PBXBuildFile; fileRef = 4C6548642EA0AB71006DD8DD /* QQMusicLyricsAPI.m */; };
 		4C65487C2EA0C500006DD8DD /* test_qqmusic_lyrics.sh in Resources */ = {isa = PBXBuildFile; fileRef = 4C6548792EA0C500006DD8DD /* test_qqmusic_lyrics.sh */; };
@@ -273,6 +274,8 @@
 		4C5C27AD2E9CC24D00D9AEA9 /* PerformanceControlPanel.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = PerformanceControlPanel.m; sourceTree = "<group>"; };
 		4C5E4BC32EA10E13009B5708 /* MusicLibraryManager.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = MusicLibraryManager.h; sourceTree = "<group>"; };
 		4C5E4BC42EA10E13009B5708 /* MusicLibraryManager.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = MusicLibraryManager.m; sourceTree = "<group>"; };
+		A1AM000130C3000000000002 /* AppleMusicArtworkService.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AppleMusicArtworkService.h; sourceTree = "<group>"; };
+		A1AM000130C3000000000003 /* AppleMusicArtworkService.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AppleMusicArtworkService.m; sourceTree = "<group>"; };
 		4C65485A2EA0A47E006DD8DD /* AudioFileFormats.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AudioFileFormats.h; sourceTree = "<group>"; };
 		4C65485B2EA0A47E006DD8DD /* AudioFileFormats.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AudioFileFormats.m; sourceTree = "<group>"; };
 		4C6548632EA0AB71006DD8DD /* QQMusicLyricsAPI.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = QQMusicLyricsAPI.h; sourceTree = "<group>"; };
@@ -872,6 +875,8 @@
 				4C65485B2EA0A47E006DD8DD /* AudioFileFormats.m */,
 				4C5E4BC32EA10E13009B5708 /* MusicLibraryManager.h */,
 				4C5E4BC42EA10E13009B5708 /* MusicLibraryManager.m */,
+				A1AM000130C3000000000002 /* AppleMusicArtworkService.h */,
+				A1AM000130C3000000000003 /* AppleMusicArtworkService.m */,
 				9B10000130A3000000000001 /* RhythmEffects */,
 				64C5446628C838D100C23393 /* ViewController.h */,
 				64C5446728C838D100C23393 /* ViewController.m */,
@@ -1157,6 +1162,7 @@
 				4C5167F02E9DF28C00853960 /* KaraokeAudioEngine.m in Sources */,
 				4C51693FE5D91950459F8E6D /* VoiceEffectProcessor.mm in Sources */,
 				4C5E4BC52EA10E13009B5708 /* MusicLibraryManager.m in Sources */,
+				A1AM000130C3000000000001 /* AppleMusicArtworkService.m in Sources */,
 				4C66E7362E8A9255003200DA /* CyberpunkShader.metal in Sources */,
 				4C66E7372E8A9255003200DA /* GalaxyShader.metal in Sources */,
 				4C66E7382E8A9256003200DA /* LightningShader.metal in Sources */,

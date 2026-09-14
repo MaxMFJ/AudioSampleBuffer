@@ -255,6 +255,8 @@ typedef NS_ENUM(NSInteger, BackgroundMediaKind) {
 
 @property (nonatomic, strong) VinylRecordView *vinylRecordView;
 @property (nonatomic, assign) BOOL isShowingVinylRecord;
+@property (nonatomic, copy, nullable) NSString *artworkLookupToken;
+@property (nonatomic, assign) NSUInteger artworkLookupGeneration;
 
 @property (nonatomic, assign) BOOL wasPlayingBeforeInterruption;
 @property (nonatomic, assign) BOOL wasPlayingBeforeBackground;
@@ -296,6 +298,8 @@ typedef NS_ENUM(NSInteger, BackgroundMediaKind) {
 - (void)setupMusicLibrary;
 - (void)refreshMusicList;
 - (void)updateAudioSelection;
+- (void)displayAlbumArtwork:(nullable UIImage *)image songName:(nullable NSString *)songName;
+- (void)fetchAppleMusicArtworkForCurrentItemIfNeeded;
 - (UIImage *)musicImageWithMusicURL:(NSURL *)url;
 - (UIImage *)loadExternalCoverForMusicFile:(NSString *)musicFilePath;
 - (void)showAlert:(NSString *)title message:(NSString *)message;

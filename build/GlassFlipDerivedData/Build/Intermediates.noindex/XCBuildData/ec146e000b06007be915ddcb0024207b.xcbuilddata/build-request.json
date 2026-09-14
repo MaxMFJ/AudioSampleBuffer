@@ -1,0 +1,64 @@
+{
+  "buildCommand" : {
+    "command" : "build",
+    "skipDependencies" : false,
+    "style" : "buildOnly"
+  },
+  "configuredTargets" : [
+    {
+      "guid" : "d3a4caebfdd24b3d30525b8a4a4bb3cd4eda92f2875579b3386e407c531d2c61"
+    }
+  ],
+  "containerPath" : "/Users/lzz/Documents/GitHub/AudioSampleBuffer/AudioSampleBuffer.xcodeproj",
+  "continueBuildingAfterErrors" : false,
+  "dependencyScope" : "workspace",
+  "enableIndexBuildArena" : false,
+  "hideShellScriptEnvironment" : false,
+  "parameters" : {
+    "action" : "build",
+    "activeArchitecture" : "undefined_arch",
+    "activeRunDestination" : {
+      "disableOnlyActiveArch" : true,
+      "platform" : "iphonesimulator",
+      "sdk" : "iphonesimulator26.0",
+      "sdkVariant" : "iphonesimulator",
+      "supportedArchitectures" : [
+        "i386",
+        "x86_64"
+      ],
+      "targetArchitecture" : "undefined_arch"
+    },
+    "arenaInfo" : {
+      "buildIntermediatesPath" : "/Users/lzz/Documents/GitHub/AudioSampleBuffer/build/GlassFlipDerivedData/Build/Intermediates.noindex",
+      "buildProductsPath" : "/Users/lzz/Documents/GitHub/AudioSampleBuffer/build/GlassFlipDerivedData/Build/Products",
+      "derivedDataPath" : "/Users/lzz/Documents/GitHub/AudioSampleBuffer/build/GlassFlipDerivedData",
+      "indexDataStoreFolderPath" : "/Users/lzz/Documents/GitHub/AudioSampleBuffer/build/GlassFlipDerivedData/Index.noindex/DataStore",
+      "indexEnableDataStore" : true,
+      "indexPCHPath" : "/Users/lzz/Documents/GitHub/AudioSampleBuffer/build/GlassFlipDerivedData/Index.noindex/PrecompiledHeaders",
+      "pchPath" : "/Users/lzz/Documents/GitHub/AudioSampleBuffer/build/GlassFlipDerivedData/Build/Intermediates.noindex/PrecompiledHeaders"
+    },
+    "configurationName" : "Debug",
+    "overrides" : {
+      "commandLine" : {
+        "table" : {
+          "SDKROOT" : "iphonesimulator26.0"
+        }
+      },
+      "synthesized" : {
+        "table" : {
+          "ACTION" : "build",
+          "ENABLE_PREVIEWS" : "NO",
+          "ENABLE_XOJIT_PREVIEWS" : "YES",
+          "ONLY_ACTIVE_ARCH" : "YES",
+          "TOOLCHAINS" : "com.apple.dt.toolchain.Metal.32023 $(inherited)"
+        }
+      }
+    }
+  },
+  "schemeCommand" : "launch",
+  "showNonLoggedProgress" : true,
+  "useDryRun" : false,
+  "useImplicitDependencies" : true,
+  "useLegacyBuildLocations" : false,
+  "useParallelTargets" : true
+}

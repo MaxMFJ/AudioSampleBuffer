@@ -6,6 +6,7 @@
 //
 
 #import <Foundation/Foundation.h>
+#import <UIKit/UIKit.h>
 #import <Metal/Metal.h>
 #import <MetalKit/MetalKit.h>
 #import <QuartzCore/QuartzCore.h>
@@ -94,6 +95,9 @@ NS_ASSUME_NONNULL_BEGIN
 - (id<MTLBuffer>)createBufferWithData:(const void *)data length:(NSUInteger)length;
 - (id<MTLTexture>)createTextureWithWidth:(NSUInteger)width height:(NSUInteger)height;
 - (id<MTLTexture>)createRenderTargetTextureWithWidth:(NSUInteger)width height:(NSUInteger)height;
+
+/// Album artwork for effects that composite a cover onto 3D geometry. Default is a no-op.
+- (void)updateAlbumArtwork:(nullable UIImage *)image;
 
 @end
 
