@@ -53,6 +53,7 @@ typedef NS_ENUM(NSUInteger, VisualEffectType) {
     VisualEffectTypeCellularWormhole,       // 深空蜂巢 - 音谱驱动有机孔洞
 
     VisualEffectTypeGlassResonance,         // 玻璃回旋 - 音乐驱动原生 3D 玻璃艺术体
+    VisualEffectTypeMirrorStrata,           // 镜层回廊 - 3D 玻璃边框回廊，LLM 主题色
 
     // 数量
     VisualEffectTypeCount

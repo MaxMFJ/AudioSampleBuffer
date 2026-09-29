@@ -2192,6 +2192,424 @@ typedef struct {
 
 @end
 
+#pragma mark - 镜层回廊渲染器
+
+#define MirrorPathSeg 128
+#define MirrorTubeSeg 16
+#define MirrorLayers 6
+#define MirrorIndexCount (MirrorPathSeg * MirrorTubeSeg * 6)
+
+@interface MirrorStrataRenderer () {
+    float _waveAge[4];
+    float _waveAmp[4];
+    int _waveSlot;
+    vector_float3 _themeAtmosphere;
+    vector_float3 _themePrimary;
+    vector_float3 _themeAccent;
+}
+@property (nonatomic, assign) NSTimeInterval lastHostTime;
+@property (nonatomic, assign) NSTimeInterval lastBeatTime;
+@property (nonatomic, assign) float motionTime;
+@property (nonatomic, assign) float beatPeriod;
+@property (nonatomic, assign) float lowFollower;
+@property (nonatomic, assign) float midFollower;
+@property (nonatomic, assign) float highFollower;
+@property (nonatomic, assign) float activityFollower;
+@property (nonatomic, assign) float bassImpact;
+@property (nonatomic, assign) float previousLowTarget;
+@property (nonatomic, assign) float previousEnergyTarget;
+@property (nonatomic, assign) float previousHighTransient;
+@property (nonatomic, assign) float climaxEnvelope;
+@property (nonatomic, strong) AIColorConfiguration *currentAIConfig;
+@property (nonatomic, strong) id<MTLRenderPipelineState> mirrorScenePipeline;
+@property (nonatomic, strong) id<MTLRenderPipelineState> mirrorBackPipeline;
+@property (nonatomic, strong) id<MTLRenderPipelineState> mirrorBackdropPipeline;
+@property (nonatomic, strong) id<MTLRenderPipelineState> mirrorBloomPipeline;
+@property (nonatomic, strong) id<MTLRenderPipelineState> mirrorCompositePipeline;
+@property (nonatomic, strong) id<MTLDepthStencilState> mirrorDepthState;
+@property (nonatomic, strong) id<MTLBuffer> mirrorIndices;
+@property (nonatomic, strong) id<MTLTexture> mirrorScene;
+@property (nonatomic, strong) id<MTLTexture> mirrorRear;
+@property (nonatomic, strong) id<MTLTexture> mirrorSceneMSAA;
+@property (nonatomic, strong) id<MTLTexture> mirrorRearMSAA;
+@property (nonatomic, strong) id<MTLTexture> mirrorDepth;
+@property (nonatomic, strong) id<MTLTexture> mirrorBloom;
+@property (nonatomic, assign) NSUInteger mirrorSampleCount;
+@property (nonatomic, strong) dispatch_semaphore_t mirrorFrames;
+@end
+
+static inline float MirrorStrataFollow(float current, float target, float dt,
+                                       float attack, float release) {
+    float rate = target > current ? attack : release;
+    return current + (target - current) * (1.0f - expf(-dt * rate));
+}
+
+@implementation MirrorStrataRenderer
+
+- (instancetype)initWithMetalView:(MTKView *)metalView {
+    self = [super initWithMetalView:metalView];
+    if (self) {
+        _beatPeriod = 0.50f;
+        _waveSlot = 0;
+        _themeAtmosphere = (vector_float3){0.10f, 0.08f, 0.10f};
+        _themePrimary = (vector_float3){0.92f, 0.84f, 0.70f};
+        _themeAccent = (vector_float3){0.86f, 0.70f, 0.42f};
+        [[NSNotificationCenter defaultCenter] addObserver:self
+                                                 selector:@selector(mirrorStrataAIConfigurationDidChange:)
+                                                     name:kAIConfigurationDidChangeNotification
+                                                   object:nil];
+        _currentAIConfig = [MusicAIAnalyzer sharedAnalyzer].currentConfiguration;
+    }
+    return self;
+}
+
+- (void)dealloc {
+    [[NSNotificationCenter defaultCenter] removeObserver:self];
+}
+
+- (void)mirrorStrataAIConfigurationDidChange:(NSNotification *)notification {
+    AIColorConfiguration *config = notification.userInfo[kAIConfigurationKey];
+    if (config) {
+        self.currentAIConfig = config;
+        NSLog(@"🪞 镜层回廊: 已应用 AI 主题色 %@ - %@", config.songName, config.artist ?: @"");
+    }
+}
+
+- (MTLRenderPipelineDescriptor *)mirrorPipelineDescriptor:(NSString *)vertex
+                                                 fragment:(NSString *)fragment
+                                                   format:(MTLPixelFormat)format
+                                                    depth:(BOOL)depth
+                                                   bloom:(BOOL)bloom {
+    NSUInteger samples = MAX(self.mirrorSampleCount, (NSUInteger)1);
+    MTLRenderPipelineDescriptor *d = [MTLRenderPipelineDescriptor new];
+    d.label = fragment;
+    d.vertexFunction = [self.defaultLibrary newFunctionWithName:vertex];
+    d.fragmentFunction = [self.defaultLibrary newFunctionWithName:fragment];
+    d.colorAttachments[0].pixelFormat = format;
+    d.sampleCount = bloom ? 1 : samples;
+    if (depth) d.depthAttachmentPixelFormat = MTLPixelFormatDepth32Float;
+    return d;
+}
+
+- (void)setupPipeline {
+    if ([self.device supportsTextureSampleCount:4]) self.mirrorSampleCount = 4;
+    else if ([self.device supportsTextureSampleCount:2]) self.mirrorSampleCount = 2;
+    else self.mirrorSampleCount = 1;
+
+    NSError *error = nil;
+    self.mirrorScenePipeline = [self.device newRenderPipelineStateWithDescriptor:[self mirrorPipelineDescriptor:@"mirrorFrameVertex" fragment:@"mirrorFrameFragment" format:MTLPixelFormatRGBA16Float depth:YES bloom:NO] error:&error];
+    if (!self.mirrorScenePipeline) NSLog(@"❌ 镜层回廊 scene: %@", error);
+    error = nil;
+    self.mirrorBackPipeline = [self.device newRenderPipelineStateWithDescriptor:[self mirrorPipelineDescriptor:@"mirrorFrameVertex" fragment:@"mirrorFrameBackFragment" format:MTLPixelFormatRGBA16Float depth:YES bloom:NO] error:&error];
+    if (!self.mirrorBackPipeline) NSLog(@"❌ 镜层回廊 back: %@", error);
+    error = nil;
+    self.mirrorBackdropPipeline = [self.device newRenderPipelineStateWithDescriptor:[self mirrorPipelineDescriptor:@"glassFullscreenVertex" fragment:@"mirrorBackdropFragment" format:MTLPixelFormatRGBA16Float depth:YES bloom:NO] error:&error];
+    if (!self.mirrorBackdropPipeline) NSLog(@"❌ 镜层回廊 backdrop: %@", error);
+    error = nil;
+    self.mirrorBloomPipeline = [self.device newRenderPipelineStateWithDescriptor:[self mirrorPipelineDescriptor:@"glassFullscreenVertex" fragment:@"glassBloomHorizontal" format:MTLPixelFormatRGBA16Float depth:NO bloom:YES] error:&error];
+    if (!self.mirrorBloomPipeline) NSLog(@"❌ 镜层回廊 bloom: %@", error);
+    error = nil;
+    self.mirrorCompositePipeline = [self.device newRenderPipelineStateWithDescriptor:[self mirrorPipelineDescriptor:@"glassFullscreenVertex" fragment:@"glassCompositeFragment" format:self.metalView.colorPixelFormat depth:NO bloom:YES] error:&error];
+    if (!self.mirrorCompositePipeline) NSLog(@"❌ 镜层回廊 composite: %@", error);
+
+    MTLDepthStencilDescriptor *depth = [MTLDepthStencilDescriptor new];
+    depth.depthCompareFunction = MTLCompareFunctionLess;
+    depth.depthWriteEnabled = YES;
+    self.mirrorDepthState = [self.device newDepthStencilStateWithDescriptor:depth];
+
+    uint16_t indices[MirrorIndexCount];
+    NSUInteger k = 0;
+    for (int i = 0; i < MirrorPathSeg; i++) {
+        for (int j = 0; j < MirrorTubeSeg; j++) {
+            uint16_t a = i * (MirrorTubeSeg + 1) + j;
+            uint16_t b = (i + 1) * (MirrorTubeSeg + 1) + j;
+            indices[k++] = a; indices[k++] = a + 1; indices[k++] = b;
+            indices[k++] = a + 1; indices[k++] = b + 1; indices[k++] = b;
+        }
+    }
+    self.mirrorIndices = [self createBufferWithData:indices length:sizeof(indices)];
+    self.mirrorFrames = dispatch_semaphore_create(2);
+}
+
+- (void)updateUniforms:(NSTimeInterval)time {
+    [super updateUniforms:time];
+    Uniforms *uniforms = (Uniforms *)[self.uniformBuffer contents];
+
+    float dt = self.lastHostTime > 0.0 ? (float)(time - self.lastHostTime) : (1.0f / 30.0f);
+    self.lastHostTime = time;
+    if (!isfinite(dt)) dt = 0.0f;
+    dt = fminf(fmaxf(dt, 0.0f), 0.10f);
+
+    float lowSq = 0.0f, midSq = 0.0f, highSq = 0.0f, highTransient = 0.0f;
+    for (int i = 0; i < 80; ++i) {
+        float value = fminf(fmaxf(uniforms->audioData[i].x, 0.0f), 1.0f);
+        if (i < 22) {
+            lowSq += value * value;
+        } else if (i < 53) {
+            midSq += value * value;
+        } else {
+            highSq += value * value;
+            highTransient += fminf(fmaxf(uniforms->audioData[i].w, 0.0f), 1.0f);
+        }
+    }
+
+    float sensitivity = self.renderParameters[@"audioSensitivity"] ?
+                        [self.renderParameters[@"audioSensitivity"] floatValue] : 1.22f;
+    sensitivity = fminf(fmaxf(sensitivity, 0.35f), 2.4f);
+    float lowRaw = sqrtf(lowSq / 22.0f);
+    float midRaw = sqrtf(midSq / 31.0f);
+    float highRaw = sqrtf(highSq / 27.0f);
+    float lowTarget = 1.0f - expf(-3.8f * lowRaw * sensitivity);
+    float midTarget = 1.0f - expf(-3.4f * midRaw * sensitivity);
+    float highTarget = 1.0f - expf(-3.1f * highRaw * sensitivity);
+
+    self.lowFollower = MirrorStrataFollow(self.lowFollower, lowTarget, dt, 10.0f, 3.0f);
+    self.midFollower = MirrorStrataFollow(self.midFollower, midTarget, dt, 7.0f, 2.3f);
+    self.highFollower = MirrorStrataFollow(self.highFollower, highTarget, dt, 14.0f, 4.8f);
+
+    float lowRise = fmaxf(lowTarget - self.previousLowTarget, 0.0f);
+    self.previousLowTarget = lowTarget;
+    float impactTarget = fminf(lowRise * 5.5f, 1.0f);
+    self.bassImpact = MirrorStrataFollow(self.bassImpact, impactTarget, dt, 18.0f, 3.8f);
+
+    float energy = fminf(self.lowFollower * 0.44f + self.midFollower * 0.36f +
+                         self.highFollower * 0.20f, 1.0f);
+    float energyRise = fmaxf(energy - self.previousEnergyTarget, 0.0f);
+    self.previousEnergyTarget = energy;
+    float activityTarget = (lowRaw * 0.44f + midRaw * 0.36f + highRaw * 0.20f) > 0.003f ? 1.0f : 0.0f;
+    self.activityFollower = MirrorStrataFollow(self.activityFollower, activityTarget, dt, 7.0f, 2.2f);
+
+    AIColorConfiguration *config = self.currentAIConfig;
+    float animSpeed = 1.0f;
+    float brightness = 1.02f;
+    vector_float3 targetAtmosphere = (vector_float3){0.10f, 0.08f, 0.10f};
+    vector_float3 targetPrimary = (vector_float3){0.92f, 0.84f, 0.70f};
+    vector_float3 targetAccent = (vector_float3){0.86f, 0.70f, 0.42f};
+    if (config && config.isLLMGenerated) {
+        animSpeed = fmaxf(0.50f, fminf(config.animationSpeed, 2.0f));
+        brightness = fmaxf(0.70f, fminf(config.brightnessMultiplier, 1.18f));
+        float bpmScale = sqrtf(fmaxf(60.0f, fminf((float)config.bpm, 200.0f)) / 120.0f);
+        animSpeed = fmaxf(0.45f, fminf(animSpeed * (0.86f + bpmScale * 0.14f), 2.10f));
+        targetAtmosphere = config.atmosphereColor;
+        targetPrimary = config.volumetricBeamColor * 0.62f + config.topLightArrayColor * 0.38f;
+        targetAccent = config.pulseRingColor * 0.58f + config.edgeLightColor * 0.42f;
+    }
+    float themeK = 1.0f - expf(-1.2f * dt);
+    _themeAtmosphere += (targetAtmosphere - _themeAtmosphere) * themeK;
+    _themePrimary += (targetPrimary - _themePrimary) * themeK;
+    _themeAccent += (targetAccent - _themeAccent) * themeK;
+
+    if (activityTarget > 0.0f) {
+        self.motionTime += dt * (0.38f + self.midFollower * 0.55f + energy * 0.18f
+                                 + self.climaxEnvelope * 0.35f) * animSpeed;
+    } else {
+        self.motionTime += dt * 0.06f * animSpeed;
+    }
+
+    float beatTrigger = self.renderParameters[@"beatTrigger"] ?
+                        [self.renderParameters[@"beatTrigger"] floatValue] : 0.0f;
+    beatTrigger = fminf(fmaxf(beatTrigger, 0.0f), 1.2f);
+    float highRawTransient = fminf(highTransient / 27.0f, 1.0f);
+    float highRise = fmaxf(highRawTransient - self.previousHighTransient, 0.0f);
+    self.previousHighTransient = highRawTransient;
+    float onset = fmaxf(lowRise * 4.8f, fmaxf(energyRise * 3.6f,
+                                              fmaxf(beatTrigger, highRise * 5.2f)));
+    float sinceBeat = self.lastBeatTime > 0.0 ? (float)(time - self.lastBeatTime) : 1.0f;
+    if (onset > 0.12f && sinceBeat > 0.22f && activityTarget > 0.0f) {
+        if (self.lastBeatTime > 0.0) {
+            float interval = sinceBeat;
+            if (interval > 0.24f && interval < 1.20f) {
+                self.beatPeriod = self.beatPeriod * 0.62f + interval * 0.38f;
+            }
+        }
+        self.lastBeatTime = time;
+        self.beatPeriod = fminf(fmaxf(self.beatPeriod, 0.26f), 1.05f);
+        _waveAge[_waveSlot] = 0.0f;
+        _waveAmp[_waveSlot] = fminf(fmaxf(onset, 0.32f), 0.88f);
+        _waveSlot = (_waveSlot + 1) & 3;
+    }
+    if (beatTrigger > 0.0f) {
+        self.renderParameters[@"beatTrigger"] = @(0.0f);
+    }
+
+    float peak = fmaxf(self.lowFollower, fmaxf(self.midFollower, self.highFollower));
+    float sectionClimax = fminf(fmaxf([self.renderParameters[@"activityClimax"] floatValue], 0.0f), 1.0f);
+    float climaxTarget = fmaxf(fmaxf((peak - 0.38f) * 1.85f, 0.0f), sectionClimax);
+    climaxTarget = fminf(climaxTarget, 1.0f);
+    self.climaxEnvelope = MirrorStrataFollow(self.climaxEnvelope, climaxTarget, dt, 5.6f, 0.92f);
+
+    float travel = fmaxf(self.beatPeriod, 0.26f);
+    for (int w = 0; w < 4; ++w) {
+        if (_waveAmp[w] < 0.008f) {
+            _waveAge[w] = 0.0f;
+            _waveAmp[w] = 0.0f;
+            continue;
+        }
+        _waveAge[w] += dt / travel;
+        if (_waveAge[w] > 0.90f) {
+            _waveAmp[w] *= expf(-dt * 1.15f);
+        }
+    }
+
+    float bloom = self.renderParameters[@"edgeGlow"] ?
+                  [self.renderParameters[@"edgeGlow"] floatValue] : 0.42f;
+    bloom = fminf(fmaxf(bloom, 0.28f), 0.56f);
+    float zoom = 1.02f + self.bassImpact * 0.03f + self.climaxEnvelope * 0.025f;
+    CGSize container = self.actualContainerSize;
+    float square = fmaxf((float)container.width, (float)container.height);
+    float coverNdc = (square > 1.0f) ? (170.0f / square) : 0.20f;
+    coverNdc = fminf(fmaxf(coverNdc, 0.12f), 0.38f);
+
+    uniforms->galaxyParams1 = (vector_float4){self.lowFollower, self.midFollower,
+                                               self.highFollower, self.bassImpact};
+    uniforms->galaxyParams2 = (vector_float4){self.motionTime, 0.0f,
+                                               self.climaxEnvelope, energy};
+    uniforms->galaxyParams3 = (vector_float4){bloom, brightness, zoom, coverNdc};
+    uniforms->cyberpunkControls = (vector_float4){_waveAge[0], _waveAge[1], _waveAge[2], _waveAge[3]};
+    uniforms->cyberpunkFrequencyControls = (vector_float4){_waveAmp[0], _waveAmp[1], _waveAmp[2], _waveAmp[3]};
+    uniforms->cyberpunkBackgroundParams = (vector_float4){self.activityFollower, 0.0f, 0.0f, 0.0f};
+    uniforms->activityMeter3 = (vector_float4){_themeAtmosphere.x, _themeAtmosphere.y, _themeAtmosphere.z, 1.0f};
+    uniforms->activityMeter4 = (vector_float4){_themePrimary.x, _themePrimary.y, _themePrimary.z, brightness};
+    uniforms->activityMeter5 = (vector_float4){_themeAccent.x, _themeAccent.y, _themeAccent.z, 1.0f};
+}
+
+- (id<MTLTexture>)mirrorTexture:(MTLPixelFormat)format width:(NSUInteger)w height:(NSUInteger)h samples:(NSUInteger)samples {
+    MTLTextureDescriptor *d = [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:format width:w height:h mipmapped:NO];
+    if (samples > 1) {
+        d.textureType = MTLTextureType2DMultisample;
+        d.sampleCount = samples;
+        d.usage = MTLTextureUsageRenderTarget;
+        d.storageMode = MTLStorageModeMemoryless;
+        id<MTLTexture> memoryless = [self.device newTextureWithDescriptor:d];
+        if (memoryless) return memoryless;
+        d.storageMode = MTLStorageModePrivate;
+        return [self.device newTextureWithDescriptor:d];
+    }
+    d.storageMode = MTLStorageModePrivate;
+    d.usage = MTLTextureUsageRenderTarget | (format == MTLPixelFormatDepth32Float ? 0 : MTLTextureUsageShaderRead);
+    return [self.device newTextureWithDescriptor:d];
+}
+
+- (void)drawInMTKView:(MTKView *)view {
+    if (!self.isRendering || view.paused || !self.mirrorScenePipeline || !self.mirrorIndices) return;
+    if (dispatch_semaphore_wait(self.mirrorFrames, DISPATCH_TIME_NOW) != 0) return;
+    dispatch_semaphore_t frames = self.mirrorFrames;
+    id<CAMetalDrawable> drawable = view.currentDrawable;
+    if (!drawable) { dispatch_semaphore_signal(frames); return; }
+
+    NSUInteger w = drawable.texture.width, h = drawable.texture.height;
+    NSUInteger samples = MAX(self.mirrorSampleCount, (NSUInteger)1);
+    if (self.mirrorScene.width != w || self.mirrorScene.height != h) {
+        self.mirrorScene = [self mirrorTexture:MTLPixelFormatRGBA16Float width:w height:h samples:1];
+        self.mirrorRear = [self mirrorTexture:MTLPixelFormatRGBA16Float width:w height:h samples:1];
+        self.mirrorBloom = [self mirrorTexture:MTLPixelFormatRGBA16Float width:MAX(1, w / 2) height:MAX(1, h / 2) samples:1];
+        if (samples > 1) {
+            self.mirrorSceneMSAA = [self mirrorTexture:MTLPixelFormatRGBA16Float width:w height:h samples:samples];
+            self.mirrorRearMSAA = [self mirrorTexture:MTLPixelFormatRGBA16Float width:w height:h samples:samples];
+            self.mirrorDepth = [self mirrorTexture:MTLPixelFormatDepth32Float width:w height:h samples:samples];
+        } else {
+            self.mirrorSceneMSAA = nil;
+            self.mirrorRearMSAA = nil;
+            self.mirrorDepth = [self mirrorTexture:MTLPixelFormatDepth32Float width:w height:h samples:1];
+        }
+    }
+    BOOL msaa = samples > 1 && self.mirrorSceneMSAA && self.mirrorRearMSAA;
+    if (!self.mirrorScene || !self.mirrorRear || !self.mirrorDepth || !self.mirrorBloom || (samples > 1 && !msaa)) {
+        dispatch_semaphore_signal(frames);
+        return;
+    }
+
+    [self updateUniforms:CACurrentMediaTime() - self.startTime];
+    Uniforms frame = *(Uniforms *)self.uniformBuffer.contents;
+    id<MTLCommandBuffer> command = [self.commandQueue commandBuffer];
+    if (!command) { dispatch_semaphore_signal(frames); return; }
+    command.label = @"MirrorStrata 3D glass";
+
+    MTLRenderPassDescriptor *scene = [MTLRenderPassDescriptor renderPassDescriptor];
+    scene.colorAttachments[0].texture = msaa ? self.mirrorRearMSAA : self.mirrorRear;
+    scene.colorAttachments[0].resolveTexture = msaa ? self.mirrorRear : nil;
+    scene.colorAttachments[0].loadAction = MTLLoadActionClear;
+    scene.colorAttachments[0].storeAction = msaa ? MTLStoreActionMultisampleResolve : MTLStoreActionStore;
+    scene.colorAttachments[0].clearColor = MTLClearColorMake(0, 0, 0, 1);
+    scene.depthAttachment.texture = self.mirrorDepth;
+    scene.depthAttachment.loadAction = MTLLoadActionClear;
+    scene.depthAttachment.storeAction = MTLStoreActionDontCare;
+    scene.depthAttachment.clearDepth = 1;
+
+    id<MTLRenderCommandEncoder> encoder = [command renderCommandEncoderWithDescriptor:scene];
+    [encoder setVertexBytes:&frame length:sizeof(frame) atIndex:0];
+    [encoder setFragmentBytes:&frame length:sizeof(frame) atIndex:0];
+    [encoder setRenderPipelineState:self.mirrorBackdropPipeline];
+    [encoder drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:3];
+    [encoder setDepthStencilState:self.mirrorDepthState];
+    [encoder setFrontFacingWinding:MTLWindingCounterClockwise];
+    [encoder setCullMode:MTLCullModeFront];
+    [encoder setRenderPipelineState:self.mirrorBackPipeline];
+    [encoder drawIndexedPrimitives:MTLPrimitiveTypeTriangle
+                         indexCount:MirrorIndexCount
+                          indexType:MTLIndexTypeUInt16
+                        indexBuffer:self.mirrorIndices
+                  indexBufferOffset:0
+                      instanceCount:MirrorLayers];
+    [encoder endEncoding];
+
+    scene.colorAttachments[0].texture = msaa ? self.mirrorSceneMSAA : self.mirrorScene;
+    scene.colorAttachments[0].resolveTexture = msaa ? self.mirrorScene : nil;
+    encoder = [command renderCommandEncoderWithDescriptor:scene];
+    [encoder setVertexBytes:&frame length:sizeof(frame) atIndex:0];
+    [encoder setFragmentBytes:&frame length:sizeof(frame) atIndex:0];
+    [encoder setRenderPipelineState:self.mirrorBackdropPipeline];
+    [encoder drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:3];
+    [encoder setDepthStencilState:self.mirrorDepthState];
+    [encoder setFrontFacingWinding:MTLWindingCounterClockwise];
+    [encoder setCullMode:MTLCullModeBack];
+    [encoder setRenderPipelineState:self.mirrorScenePipeline];
+    [encoder setFragmentTexture:self.mirrorRear atIndex:0];
+    [encoder drawIndexedPrimitives:MTLPrimitiveTypeTriangle
+                         indexCount:MirrorIndexCount
+                          indexType:MTLIndexTypeUInt16
+                        indexBuffer:self.mirrorIndices
+                  indexBufferOffset:0
+                      instanceCount:MirrorLayers];
+    [encoder endEncoding];
+
+    MTLRenderPassDescriptor *blur = [MTLRenderPassDescriptor renderPassDescriptor];
+    blur.colorAttachments[0].texture = self.mirrorBloom;
+    blur.colorAttachments[0].loadAction = MTLLoadActionDontCare;
+    blur.colorAttachments[0].storeAction = MTLStoreActionStore;
+    encoder = [command renderCommandEncoderWithDescriptor:blur];
+    [encoder setRenderPipelineState:self.mirrorBloomPipeline];
+    [encoder setFragmentTexture:self.mirrorScene atIndex:0];
+    [encoder drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:3];
+    [encoder endEncoding];
+
+    MTLRenderPassDescriptor *composite = [MTLRenderPassDescriptor renderPassDescriptor];
+    composite.colorAttachments[0].texture = drawable.texture;
+    composite.colorAttachments[0].loadAction = MTLLoadActionDontCare;
+    composite.colorAttachments[0].storeAction = MTLStoreActionStore;
+    encoder = [command renderCommandEncoderWithDescriptor:composite];
+    [encoder setRenderPipelineState:self.mirrorCompositePipeline];
+    [encoder setFragmentBytes:&frame length:sizeof(frame) atIndex:0];
+    [encoder setFragmentTexture:self.mirrorScene atIndex:0];
+    [encoder setFragmentTexture:self.mirrorBloom atIndex:1];
+    [encoder drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:3];
+    [encoder endEncoding];
+
+    [command addCompletedHandler:^(id<MTLCommandBuffer> completed) {
+        if (completed.error) NSLog(@"MirrorStrata GPU error: %@", completed.error);
+        dispatch_semaphore_signal(frames);
+    }];
+    [command presentDrawable:drawable];
+    [command commit];
+}
+
+- (void)encodeRenderCommands:(id<MTLRenderCommandEncoder>)encoder {
+    (void)encoder;
+}
+
+
+@end
+
 #pragma mark - 神经共振渲染器 (实验性效果)
 
 @interface NeuralResonanceRenderer ()
@@ -3616,6 +4034,9 @@ typedef struct {
 
         case VisualEffectTypeGlassResonance:
             return [[GlassResonanceRenderer alloc] initWithMetalView:metalView];
+
+        case VisualEffectTypeMirrorStrata:
+            return [[MirrorStrataRenderer alloc] initWithMetalView:metalView];
 
         case VisualEffectTypeCellularWormhole:
             return [[CellularWormholeRenderer alloc] initWithMetalView:metalView];

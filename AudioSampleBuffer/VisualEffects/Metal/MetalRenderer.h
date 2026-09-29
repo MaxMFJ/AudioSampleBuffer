@@ -251,6 +251,12 @@ NS_ASSUME_NONNULL_BEGIN
 @interface GlassResonanceRenderer : BaseMetalRenderer
 @end
 
+/**
+ * 镜层回廊渲染器 - 3D 半透明玻璃边框回廊，参照玻璃回旋
+ */
+@interface MirrorStrataRenderer : BaseMetalRenderer
+@end
+
 @interface CellularWormholeRenderer : WormholeDriveRenderer
 @end
 

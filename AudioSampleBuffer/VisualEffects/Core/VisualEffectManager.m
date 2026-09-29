@@ -330,6 +330,13 @@ static const CGFloat kDefaultEffectRenderScale = 0.85f;
             settings[@"glassBloom"] = @(0.48);
             break;
 
+        case VisualEffectTypeMirrorStrata:
+            settings[@"audioSensitivity"] = @(1.28);
+            settings[@"layerContrast"] = @(1.16);
+            settings[@"edgeGlow"] = @(0.96);
+            settings[@"mirrorDepth"] = @(1.08);
+            break;
+
         case VisualEffectTypeCellularWormhole:
             settings[@"coreRadius"] = @(0.32);
             settings[@"poreCount"] = @(18);
@@ -403,7 +410,9 @@ static const CGFloat kDefaultEffectRenderScale = 0.85f;
 
     // This effect owns its reduced drawable resolution. MTKView's automatic
     // layout resize must not briefly replace it with a full-resolution surface.
-    _metalView.autoResizeDrawable = (effectType != VisualEffectTypeCellularWormhole && effectType != VisualEffectTypeGlassResonance);
+    _metalView.autoResizeDrawable = (effectType != VisualEffectTypeCellularWormhole &&
+                                     effectType != VisualEffectTypeGlassResonance &&
+                                     effectType != VisualEffectTypeMirrorStrata);
     if (effectType == VisualEffectTypeGlassResonance) {
         if (squareSize <= 0.0 || !isfinite(squareSize)) return;
         // Square logical camera; cap HDR allocation and fill cost on large devices.
@@ -416,6 +425,10 @@ static const CGFloat kDefaultEffectRenderScale = 0.85f;
         if (!CGSizeEqualToSize(_metalView.drawableSize, targetSize)) {
             _metalView.drawableSize = targetSize;
         }
+    } else if (effectType == VisualEffectTypeMirrorStrata) {
+        if (squareSize <= 0.0 || !isfinite(squareSize)) return;
+        CGFloat side = MAX(1.0, round(MIN(1440.0, squareSize * screenScale * 0.62)));
+        _metalView.drawableSize = CGSizeMake(side, side);
     } else if (effectType == VisualEffectTypeWormholeDrive) {
         // 虫洞特效本身已针对宽屏做过专门调优，保留原有低功耗缩放。
         CGFloat renderScale = 0.58;
@@ -563,6 +576,8 @@ static const CGFloat kDefaultEffectRenderScale = 0.85f;
                     NSInteger fps = [_savedPerformanceSettings[@"fps"] integerValue];
                     _metalView.preferredFramesPerSecond = fps > 0 ? MIN(fps, 30) : 30;
                 } else if (effectType == VisualEffectTypeCellularWormhole) {
+                    _metalView.preferredFramesPerSecond = 30;
+                } else if (effectType == VisualEffectTypeMirrorStrata) {
                     _metalView.preferredFramesPerSecond = 30;
                 } else if (effectType == VisualEffectTypeWormholeDrive) {
                     NSInteger targetFPS = 18;
@@ -874,6 +889,7 @@ static const CGFloat kDefaultEffectRenderScale = 0.85f;
         case VisualEffectTypeWormholeDrive:
         case VisualEffectTypeGlassResonance:
         case VisualEffectTypeCellularWormhole:
+        case VisualEffectTypeMirrorStrata:
         case VisualEffectTypePrismResonance:
         case VisualEffectTypeVisualLyricsTunnel:
         case VisualEffectTypeAudioActivityMeter:
@@ -1000,7 +1016,8 @@ static const CGFloat kDefaultEffectRenderScale = 0.85f;
 - (void)aiController:(id)controller didDetectBeatWithIntensity:(float)intensity {
     if ((_currentEffectType == VisualEffectTypeWormholeDrive ||
          _currentEffectType == VisualEffectTypeCellularWormhole ||
-         _currentEffectType == VisualEffectTypeGlassResonance) && _currentRenderer) {
+         _currentEffectType == VisualEffectTypeGlassResonance ||
+         _currentEffectType == VisualEffectTypeMirrorStrata) && _currentRenderer) {
         float clamped = fmaxf(0.0f, fminf(intensity, 0.9f));
         [_currentRenderer setRenderParameters:@{@"beatTrigger": @(clamped)}];
     }
@@ -1040,7 +1057,9 @@ static const CGFloat kDefaultEffectRenderScale = 0.85f;
     
     // 更新帧率
     if (_metalView && fps > 0) {
-        _metalView.preferredFramesPerSecond = _currentEffectType == VisualEffectTypeGlassResonance ? MIN(fps, 30) : fps;
+        BOOL cappedAtThirty = (_currentEffectType == VisualEffectTypeGlassResonance ||
+                               _currentEffectType == VisualEffectTypeMirrorStrata);
+        _metalView.preferredFramesPerSecond = cappedAtThirty ? MIN(fps, 30) : fps;
         NSLog(@"✅ 帧率已立即更新为 %ldfps", (long)fps);
     } else {
         NSLog(@"⚠️ 帧率无效或Metal视图未初始化");

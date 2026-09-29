@@ -245,6 +245,14 @@
     glass.requiresMetal = YES;
     [effects addObject:glass];
 
+    VisualEffectInfo *mirrorStrata = [VisualEffectInfo effectWithType:VisualEffectTypeMirrorStrata
+                                                                 name:@"镜层回廊"
+                                                          description:@"3D 玻璃边框回廊，内框贴封面圆、外框贴屏幕边缘；音频点亮边框成圆角光环"
+                                                             category:EffectCategoryExperimental
+                                                     performanceLevel:PerformanceLevelMedium];
+    mirrorStrata.requiresMetal = YES;
+    [effects addObject:mirrorStrata];
+
     self.effects = [effects copy];
 }
 

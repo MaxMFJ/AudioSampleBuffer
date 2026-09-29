@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		C31109012EAD600000D59E12 /* GlassResonanceShader.metal in Sources */ = {isa = PBXBuildFile; fileRef = C31109022EAD600000D59E12 /* GlassResonanceShader.metal */; };
+		C3110A012EAD700000D59E12 /* MirrorStrataShader.metal in Sources */ = {isa = PBXBuildFile; fileRef = C3110A022EAD700000D59E12 /* MirrorStrataShader.metal */; };
 		C31100012EAD600000D59E12 /* CellularWormholeShader.metal in Sources */ = {isa = PBXBuildFile; fileRef = C31100022EAD600000D59E12 /* CellularWormholeShader.metal */; };
 		4C09454D2F7A4F8000D48B3B /* SKILL.md in Resources */ = {isa = PBXBuildFile; fileRef = 4C09454C2F7A4F8000D48B3B /* SKILL.md */; };
 		4C110D482EA9CD5100D59E12 /* AudioReactive3DShader.metal in Sources */ = {isa = PBXBuildFile; fileRef = 4C110D412EA9CD5100D59E12 /* AudioReactive3DShader.metal */; };
@@ -178,6 +179,7 @@
 
 /* Begin PBXFileReference section */
 		C31109022EAD600000D59E12 /* GlassResonanceShader.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = GlassResonanceShader.metal; sourceTree = "<group>"; };
+		C3110A022EAD700000D59E12 /* MirrorStrataShader.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = MirrorStrataShader.metal; sourceTree = "<group>"; };
 		C31109032EAD600000D59E12 /* GlassResonanceAudio.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = GlassResonanceAudio.h; sourceTree = "<group>"; };
 		C31100022EAD600000D59E12 /* CellularWormholeShader.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = CellularWormholeShader.metal; sourceTree = "<group>"; };
 		4C09454C2F7A4F8000D48B3B /* SKILL.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = SKILL.md; sourceTree = "<group>"; };
@@ -809,6 +811,7 @@
 				4C110D5B2EAD400000D59E12 /* TyndallBeamShader.metal */,
 				4C110D5D2EAD500000D59E12 /* NeuralResonanceShader.metal */,
 				C31109022EAD600000D59E12 /* GlassResonanceShader.metal */,
+				C3110A022EAD700000D59E12 /* MirrorStrataShader.metal */,
 				C31109032EAD600000D59E12 /* GlassResonanceAudio.h */,
 				C31100022EAD600000D59E12 /* CellularWormholeShader.metal */,
 				4C110D5F2EAD600000D59E12 /* WormholeDriveShader.metal */,
@@ -1134,6 +1137,7 @@
 				4C110D5A2EAD400000D59E12 /* TyndallBeamShader.metal in Sources */,
 				4C110D5C2EAD500000D59E12 /* NeuralResonanceShader.metal in Sources */,
 				C31109012EAD600000D59E12 /* GlassResonanceShader.metal in Sources */,
+				C3110A012EAD700000D59E12 /* MirrorStrataShader.metal in Sources */,
 				C31100012EAD600000D59E12 /* CellularWormholeShader.metal in Sources */,
 				4C110D5E2EAD600000D59E12 /* WormholeDriveShader.metal in Sources */,
 				4C8A100130BA500000ACCA11 /* PrismResonanceShader.metal in Sources */,

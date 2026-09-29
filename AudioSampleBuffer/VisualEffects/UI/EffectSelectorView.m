@@ -250,6 +250,9 @@
     
     // 根据效果类型生成不同的预览图
     switch (effectType) {
+        case VisualEffectTypeMirrorStrata:
+            [self drawMirrorStrataPreview:context size:size];
+            break;
         case VisualEffectTypeGlassResonance:
             [self drawGlassResonancePreview:context size:size];
             break;
@@ -277,6 +280,36 @@
     UIGraphicsEndImageContext();
     
     return image;
+}
+
+- (void)drawMirrorStrataPreview:(CGContextRef)context size:(CGSize)size {
+    CGContextSetRGBFillColor(context, 0.008, 0.007, 0.010, 1.0);
+    CGContextFillRect(context, (CGRect){CGPointZero, size});
+    CGPoint c = CGPointMake(size.width * 0.5, size.height * 0.5);
+    for (NSInteger i = 0; i < 4; i++) {
+        CGFloat a = -0.55 + i * 0.42;
+        CGContextMoveToPoint(context, c.x, c.y);
+        CGContextAddLineToPoint(context, c.x + cos(a) * size.width, c.y + sin(a) * size.height);
+        CGContextSetRGBStrokeColor(context, 0.86, 0.74, 0.48, 0.10 + i * 0.03);
+        CGContextSetLineWidth(context, 1.2);
+        CGContextStrokePath(context);
+    }
+    for (NSInteger layer = 0; layer < 4; layer++) {
+        CGFloat t = powf((CGFloat)layer / 3.0, 0.62);
+        CGFloat insetX = size.width * (0.04 + t * 0.30);
+        CGFloat insetY = size.height * (0.04 + t * 0.16);
+        CGRect r = CGRectInset((CGRect){CGPointZero, size}, insetX, insetY);
+        CGFloat side = MIN(r.size.width, r.size.height);
+        CGFloat width = r.size.width + (side - r.size.width) * t;
+        r.origin.x += (r.size.width - width) * 0.5;
+        r.size.width = width;
+        UIBezierPath *path = [UIBezierPath bezierPathWithRoundedRect:r cornerRadius:2.0 + t * 6.0];
+        CGFloat alpha = 0.94 - t * 0.42;
+        CGContextSetRGBStrokeColor(context, 0.90, 0.82, 0.66, alpha);
+        CGContextSetLineWidth(context, layer == 0 ? 1.3 : 0.7);
+        CGContextAddPath(context, path.CGPath);
+        CGContextStrokePath(context);
+    }
 }
 
 - (void)drawGlassResonancePreview:(CGContextRef)context size:(CGSize)size {
