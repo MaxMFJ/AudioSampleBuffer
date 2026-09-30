@@ -180,9 +180,10 @@
 }
 
 - (void)updateSettingsButtonVisibility {
-    // 只在 Galaxy 和 CyberPunk 特效上显示配置按钮
+    // 深空蜂巢的齿轮用于切换吉他控制数据源。
     BOOL shouldShowSettings = (_effectInfo.type == VisualEffectTypeGalaxy || 
-                               _effectInfo.type == VisualEffectTypeCyberPunk);
+                               _effectInfo.type == VisualEffectTypeCyberPunk ||
+                               _effectInfo.type == VisualEffectTypeCellularWormhole);
     _configButton.hidden = !shouldShowSettings;
 }
 

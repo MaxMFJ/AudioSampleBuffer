@@ -12,6 +12,7 @@
 NSString *const kAudioPlayerDidLoadLyricsNotification = @"AudioPlayerDidLoadLyricsNotification";
 NSString *const kAudioPlayerDidUpdateTimeNotification = @"AudioPlayerDidUpdateTimeNotification";
 NSString *const kAudioPlayerDidStartPlaybackNotification = @"AudioPlayerDidStartPlaybackNotification";
+NSString *const kAudioPlayerDidFinishYAMNetAnalysisNotification = @"AudioPlayerDidFinishYAMNetAnalysisNotification";
 
 @interface AudioSpectrumPlayer ()
 {
@@ -34,6 +35,10 @@ NSString *const kAudioPlayerDidStartPlaybackNotification = @"AudioPlayerDidStart
 @property (nonatomic, strong) NSString *currentFilePath;  // 当前播放文件路径
 @property (nonatomic, strong, readwrite) LRCParser *lyricsParser;  // 歌词解析器
 @property (nonatomic, assign) NSTimeInterval pausedTime; // 🔧 暂停时的播放时间
+@property (nonatomic, strong, readwrite, nullable) NSDictionary *lastYAMNetAnalysis;
+@property (nonatomic, strong, readwrite, nullable) NSDictionary *lastHTDemucsGuitarAnalysis;
+@property (nonatomic, assign) BOOL currentTrackEligibleForHTDemucs;
+@property (nonatomic, copy, nullable) NSString *htDemucsAnalysisInProgressPath;
 
 @end
 
@@ -64,6 +69,7 @@ NSString *const kAudioPlayerDidStartPlaybackNotification = @"AudioPlayerDidStart
     self.enableLyrics = YES;  // 默认启用歌词
     // Default to low-power path. HPSS extended analysis is opt-in from UI.
     self.extendedAnalysisEnabled = NO;
+    self.yamnetAnalysisEnabled = YES;
     
     // 🎵 初始化音高/速率参数
     _pitchShift = 0.0f;      // 默认原调
@@ -151,6 +157,7 @@ NSString *const kAudioPlayerDidStartPlaybackNotification = @"AudioPlayerDidStart
 //}
 // 🎨 新方法：支持 AI 分析的播放
 - (void)playWithFileName:(NSString *)fileName songName:(NSString *)songName artist:(NSString *)artist {
+    self.currentTrackEligibleForHTDemucs = YES;
     // 调用核心播放逻辑
     [self _playWithFileName:fileName];
     
@@ -178,6 +185,7 @@ NSString *const kAudioPlayerDidStartPlaybackNotification = @"AudioPlayerDidStart
 
 // 兼容旧版本的方法
 - (void)playWithFileName:(NSString *)fileName {
+    self.currentTrackEligibleForHTDemucs = NO;
     [self _playWithFileName:fileName];
 }
 
@@ -225,6 +233,47 @@ NSString *const kAudioPlayerDidStartPlaybackNotification = @"AudioPlayerDidStart
     
     // 保存当前文件路径
     self.currentFilePath = fileUrl.path;
+    self.currentTrackEligibleForHTDemucs = fileUrl.isFileURL;
+
+    // Full-track model inference runs away from the real-time audio tap. A
+    // cache hit returns the saved timestamped score series for this exact PCM.
+    self.lastYAMNetAnalysis = nil;
+    self.lastHTDemucsGuitarAnalysis = nil;
+    __weak typeof(self) weakSelf = self;
+    NSString *analysisPath = fileUrl.path;
+    YAMNetAudioAnalyzer *yamnet = [YAMNetAudioAnalyzer sharedAnalyzer];
+    if (self.yamnetAnalysisEnabled && yamnet.modelInstalled) {
+        NSLog(@"[YAMNet] PLAYER QUEUED ANALYSIS: %@.", fileUrl.lastPathComponent);
+        [yamnet analyzeAudioAtURL:fileUrl completion:^(NSDictionary * _Nullable analysis, NSError * _Nullable analysisError) {
+            __strong typeof(weakSelf) completedSelf = weakSelf;
+            if (!completedSelf || ![completedSelf.currentFilePath isEqualToString:analysisPath]) return;
+            completedSelf.lastYAMNetAnalysis = analysis;
+            if (analysisError) {
+                NSLog(@"[YAMNet] PLAYER RECEIVED FAILURE: %@ | %@", analysisPath, analysisError.localizedDescription);
+            } else {
+                NSArray *patches = [analysis[@"patches"] isKindOfClass:NSArray.class] ? analysis[@"patches"] : @[];
+                NSLog(@"[YAMNet] PLAYER RECEIVED RESULT: %@ | %@ windows | cache-backed analysis ready.",
+                      analysisPath, @((unsigned long)patches.count));
+            }
+            NSDictionary *userInfo = @{
+                @"filePath": analysisPath,
+                @"analysis": analysis ?: [NSNull null],
+                @"error": analysisError ?: [NSNull null]
+            };
+            [[NSNotificationCenter defaultCenter] postNotificationName:kAudioPlayerDidFinishYAMNetAnalysisNotification
+                                                                object:completedSelf userInfo:userInfo];
+            if ([completedSelf.delegate respondsToSelector:@selector(playerDidFinishYAMNetAnalysis:error:)]) {
+                [completedSelf.delegate playerDidFinishYAMNetAnalysis:analysis error:analysisError];
+            }
+        }];
+    } else {
+        NSLog(@"[YAMNet] PLAYER SKIPPED ANALYSIS: %@.",
+              !self.yamnetAnalysisEnabled ? @"disabled" : @"model unavailable");
+    }
+
+    if (self.htDemucsGuitarAnalysisEnabled && self.currentTrackEligibleForHTDemucs) {
+        [self startHTDemucsGuitarAnalysisForCurrentTrack];
+    }
     
     [self.player stop];
     [self.player scheduleFile:self.file atTime:nil completionHandler:nil];
@@ -296,6 +345,37 @@ NSString *const kAudioPlayerDidStartPlaybackNotification = @"AudioPlayerDidStart
     if (self.enableLyrics) {
         [self loadLyricsForCurrentTrack];
     }
+}
+
+- (void)setHtDemucsGuitarAnalysisEnabled:(BOOL)enabled {
+    _htDemucsGuitarAnalysisEnabled = enabled;
+    if (enabled && self.currentTrackEligibleForHTDemucs && self.currentFilePath.length > 0) {
+        [self startHTDemucsGuitarAnalysisForCurrentTrack];
+    }
+}
+
+- (void)startHTDemucsGuitarAnalysisForCurrentTrack {
+    if (!self.htDemucsGuitarAnalysisEnabled || !self.currentTrackEligibleForHTDemucs || self.currentFilePath.length == 0) return;
+    NSURL *url = [NSURL fileURLWithPath:self.currentFilePath];
+    NSString *analysisPath = self.currentFilePath;
+    if ([self.htDemucsAnalysisInProgressPath isEqualToString:analysisPath]) return;
+    self.htDemucsAnalysisInProgressPath = analysisPath;
+    NSLog(@"[DemucsPhone] 播放先保持 YAMNet；后台检查缓存并计算整首吉他曲线：%@", url.lastPathComponent);
+    __weak typeof(self) weakSelf = self;
+    [[HTDemucsGuitarAnalyzer sharedAnalyzer] analyzeAudioAtURL:url completion:^(NSDictionary *analysis, NSError *error) {
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) return;
+        if ([strongSelf.htDemucsAnalysisInProgressPath isEqualToString:analysisPath]) {
+            strongSelf.htDemucsAnalysisInProgressPath = nil;
+        }
+        if (![strongSelf.currentFilePath isEqualToString:analysisPath] || !strongSelf.htDemucsGuitarAnalysisEnabled) return;
+        if (analysis) {
+            strongSelf.lastHTDemucsGuitarAnalysis = analysis;
+            NSLog(@"[DemucsPhone] 整首分离完成；特效将在当前播放时间切换到 Demucs。 ");
+        } else {
+            NSLog(@"[DemucsPhone] 全曲分析失败，继续由 YAMNet 驱动：%@", error.localizedDescription);
+        }
+    }];
 }
 
 //开始倒计时

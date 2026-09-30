@@ -39,6 +39,7 @@ typedef struct {
     vector_float4 activityMeter3; // (pan, echo, sidechain, energy)
     vector_float4 activityMeter4; // (flatness, electricBassLine, electricGuitarTexture, distortedGuitar)
     vector_float4 activityMeter5; // (pluckGrain, soundWall, reserved, reserved)
+    vector_float4 guitarWaves[8]; // Cellular Wormhole independent guitar waves: (age, strength, palette index, reserved)
 } Uniforms;
 
 #define GlassTrailPointCount 28
@@ -2820,16 +2821,20 @@ static inline float MirrorStrataFollow(float current, float target, float dt,
 // renderer instance so switching effects cannot share temporal audio state.
 @interface CellularWormholeRenderer () {
     float _cellularFeatureState[20];
+    float _guitarWaveAges[8];
+    float _guitarWaveStrengths[8];
+    float _guitarWavePaletteIndices[8];
+    NSUInteger _nextGuitarWaveSlot;
+    NSUInteger _nextGuitarWavePalette;
 }
 @property (nonatomic, assign) float impactAge;
 @property (nonatomic, assign) float impactStrength;
 @property (nonatomic, assign) float previousImpact;
 @property (nonatomic, assign) float climaxEnvelope;
-@property (nonatomic, assign) float guitarWaveAge;
-@property (nonatomic, assign) float guitarWaveStrength;
 @property (nonatomic, assign) float guitarEnvelope;
 @property (nonatomic, assign) float previousGuitarInput;
 @property (nonatomic, assign) NSTimeInterval guitarLastUpdateTime;
+@property (nonatomic, assign) NSTimeInterval guitarLastWaveTriggerTime;
 @end
 
 @implementation CellularWormholeRenderer
@@ -2862,11 +2867,32 @@ static inline float MirrorStrataFollow(float current, float target, float dt,
     guitarInput = isfinite(guitarInput) ? fmaxf(0.0f, fminf(guitarInput, 1.0f)) : 0.0f;
     float guitarRate = guitarInput > self.guitarEnvelope ? 18.0f : 1.4f;
     self.guitarEnvelope += (guitarInput - self.guitarEnvelope) * (1.0f - expf(-guitarRate * guitarDT));
-    self.guitarWaveAge += guitarDT;
-    if (guitarInput > 0.22f && guitarInput - self.previousGuitarInput > 0.035f &&
-        (self.guitarWaveStrength == 0.0f || self.guitarWaveAge > 0.20f)) {
-        self.guitarWaveAge = 0.0f;
-        self.guitarWaveStrength = guitarInput;
+    const float guitarWaveLifetime = 2.8f;
+    for (NSUInteger i = 0; i < 8; i++) {
+        if (_guitarWaveStrengths[i] > 0.0f) {
+            _guitarWaveAges[i] += guitarDT;
+            if (_guitarWaveAges[i] >= guitarWaveLifetime) {
+                _guitarWaveAges[i] = 0.0f;
+                _guitarWaveStrengths[i] = 0.0f;
+            }
+        }
+    }
+    // Trigger on a meaningful new rise. The cooldown filters score jitter;
+    // each accepted event takes its own ring slot, so it cannot restart any
+    // color wave already travelling through the hive.
+    if (guitarInput > 0.12f && guitarInput - self.previousGuitarInput > 0.022f &&
+        (self.guitarLastWaveTriggerTime <= 0.0 || time - self.guitarLastWaveTriggerTime >= 0.38)) {
+        NSUInteger slot = _nextGuitarWaveSlot;
+        for (NSUInteger offset = 0; offset < 8; offset++) {
+            NSUInteger candidate = (_nextGuitarWaveSlot + offset) % 8;
+            if (_guitarWaveStrengths[candidate] <= 0.0f) { slot = candidate; break; }
+        }
+        _guitarWaveAges[slot] = 0.0f;
+        _guitarWaveStrengths[slot] = guitarInput;
+        _guitarWavePaletteIndices[slot] = (float)(_nextGuitarWavePalette % 4);
+        _nextGuitarWavePalette++;
+        _nextGuitarWaveSlot = (slot + 1) % 8;
+        self.guitarLastWaveTriggerTime = time;
     }
     self.previousGuitarInput = guitarInput;
     float input = fmaxf(u->categoryFeatures.y, u->activityMeter1.y);
@@ -2916,9 +2942,13 @@ static inline float MirrorStrataFollow(float current, float target, float dt,
     self.climaxEnvelope += (climaxTarget - self.climaxEnvelope) *
                            (1.0f - expf(-climaxRate * dt));
     u->galaxyParams2.z = self.climaxEnvelope;
-    u->galaxyParams2.x = fminf(self.guitarWaveAge, 8.0f);
+    u->galaxyParams2.x = 0.0f;
     u->galaxyParams2.y = self.guitarEnvelope;
-    u->galaxyParams3.z = self.guitarWaveStrength;
+    u->galaxyParams3.z = 0.0f;
+    for (NSUInteger i = 0; i < 8; i++) {
+        u->guitarWaves[i] = (vector_float4){_guitarWaveAges[i], _guitarWaveStrengths[i],
+                                           _guitarWavePaletteIndices[i], 0.0f};
+    }
     float coreRadius = [self.renderParameters[@"coreRadius"] floatValue];
     if (!isfinite(coreRadius) || coreRadius <= 0.0f) coreRadius = 0.32f;
     float poreCount = [self.renderParameters[@"poreCount"] floatValue];

@@ -44,6 +44,7 @@ struct Uniforms {
     float4 activityMeter3; // (pan, echo, sidechain, energy)
     float4 activityMeter4; // (flatness, electricBassLine, electricGuitarTexture, distortedGuitar)
     float4 activityMeter5; // (pluckGrain, soundWall, reserved, reserved)
+    float4 guitarWaves[8]; // Cellular Wormhole independent guitar waves: (age, strength, palette index, reserved)
 };
 
 // AI 增强的 Uniforms（用于丁达尔效应等需要动态颜色的效果）

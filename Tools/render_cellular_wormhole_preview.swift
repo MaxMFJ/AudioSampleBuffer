@@ -32,7 +32,13 @@ let featureOffsets = ["low": 388, "hit": 389, "melody": 390, "haze": 391,
                       "pluck": 404, "sound-wall": 405]
 let featureCases = featureOffsets.keys.sorted().map { ($0, Float(0.18)) }
 let cases = [("quiet",Float(0)),("beat",Float(0.9)),
-                      ("guitar-stem",Float(0)),
+                      ("guitar-stem",Float(0)),("guitar-weak",Float(0)),
+                      ("guitar-later",Float(0)),
+                      ("purple-base",Float(0.45)),
+                      ("purple-guitar",Float(0.45)),
+                      ("purple-guitar-weak",Float(0.45)),
+                      ("purple-guitar-later",Float(0.45)),
+                      ("purple-guitar-faded",Float(0.45)),
                       ("silent-stale-features",Float(0)),
                       ("single-band",Float(0)),("motion",Float(0)),
                       ("climax",Float(0.55)),
@@ -43,8 +49,9 @@ for (name, level) in cases {
  let td = MTLTextureDescriptor.texture2DDescriptor(pixelFormat:.rgba8Unorm,width:w,height:h,mipmapped:false)
  td.usage = [.renderTarget]; td.storageMode = .shared
  let tex=device.makeTexture(descriptor:td)!
- // Shared Uniforms: two matrices, time/resolution, 80 bands, 12 float4s.
- var values=[Float](repeating:0,count:32+8+320+48)
+ // Shared Uniforms: two matrices, time/resolution, 80 bands, 12 float4s,
+ // then 8 independent guitar-wave float4s.
+ var values=[Float](repeating:0,count:32+8+320+48+32)
  values[32]=4; values[34]=2; values[36]=Float(w); values[37]=Float(h); values[38]=1
  if name == "motion" { values[32] = 5; values[34] = 3 }
  for i in 0..<80 {values[40+i*4]=level * (0.25 + 0.75 * Float(i%9)/8);values[41+i*4]=values[40+i*4]*0.8}
@@ -52,11 +59,11 @@ for (name, level) in cases {
  values[360+7]=1.15; values[360+11]=level; values[383]=1.08
  values[360+14]=level*0.7; values[360+15]=level*0.5; values[360+16]=level*0.6;values[360+17]=level*0.7
  if name == "single-band" { values[40+24*4]=1; values[41+24*4]=1 }
- if name == "guitar-stem" {
-     // Representative envelope from the isolated 02:54–03:30 Guitar stem.
-     values[364] = 0.32  // outward wave age
-     values[365] = 0.82  // smoothed guitar level
-     values[370] = 0.92  // guitar onset strength
+ if name == "guitar-stem" || name == "guitar-weak" || name == "guitar-later" ||
+    name == "purple-guitar" || name == "purple-guitar-weak" ||
+    name == "purple-guitar-later" || name == "purple-guitar-faded" {
+     values[408] = name.hasSuffix("faded") ? 2.8 : (name.hasSuffix("later") ? 0.9 : 0.65)
+     values[409] = name.contains("weak") ? 0.25 : 0.92 // guitar confidence
  }
  if let offset = featureOffsets[name] { values[offset] = 0.85 }
  // Keep sweep active in the baseline to isolate pan's effect on its shafts.
@@ -85,6 +92,12 @@ for (name, level) in cases {
      values[382] = 0.48
      values[383] = 1.08
  }
+ if name.hasPrefix("purple-") {
+     values[379] = 1
+     values[380] = 0.54
+     values[381] = 0.20
+     values[382] = 0.75
+ }
  frameInputs[name] = values
  let buf=device.makeBuffer(bytes:values,length:values.count*4,options:.storageModeShared)!
  let pass=MTLRenderPassDescriptor();pass.colorAttachments[0].texture=tex;pass.colorAttachments[0].loadAction = .clear;pass.colorAttachments[0].storeAction = .store
@@ -105,7 +118,7 @@ for (name, level) in cases {
 let quiet = frames["quiet"]!
 precondition(quiet == frames["silent-stale-features"]!,
              "Stale analysis features must not trigger music layers in silence")
-for name in ["beat", "guitar-stem", "single-band", "motion", "climax", "llm-theme"] {
+for name in ["beat", "guitar-stem", "guitar-weak", "guitar-later", "single-band", "motion", "climax", "llm-theme"] {
     let changed = zip(quiet, frames[name]!).filter { $0 != $1 }.count
     precondition(changed > 100, "Audio input failed to change the rendered tunnel")
     print("\(name): \(changed) changed color channels")
@@ -117,6 +130,10 @@ for name in featureOffsets.keys.sorted() + ["impact-late"] {
 }
 let themeChanges = zip(frames["layered"]!, frames["llm-theme"]!).filter { $0 != $1 }.count
 precondition(themeChanges > 100, "LLM palette failed with identical audio and time")
+let purpleChange = zip(frames["purple-base"]!, frames["purple-guitar"]!).filter { $0 != $1 }.count
+precondition(purpleChange > 100, "Guitar failed to recolor a purple LLM theme")
+precondition(frames["purple-base"]! == frames["purple-guitar-faded"]!,
+             "The hive must recover its original theme after a guitar wave fades")
 
 // Reproduce CPU uniform reuse while GPU frames are pending, as can happen
 // under UI/scrolling load. Snapshots must match the serial reference exactly.

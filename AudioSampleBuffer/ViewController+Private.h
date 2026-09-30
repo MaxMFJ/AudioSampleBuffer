@@ -51,6 +51,9 @@ typedef NS_ENUM(NSInteger, BackgroundMediaKind) {
 @interface ViewController ()
 
 @property (nonatomic, assign) BOOL isInBackground;
+@property (nonatomic, assign) BOOL guitarDemucsExperimentEnabled;
+@property (nonatomic, assign) BOOL guitarDemucsOnDeviceExperimentEnabled;
+@property (nonatomic, strong, nullable) UIView *guitarDemucsExperimentPanel;
 @property (nonatomic, assign) NSInteger currentIndex;
 @property (nonatomic, strong) CAShapeLayer *backgroundRingLayer;
 @property (nonatomic, strong) UIImageView *coverImageView;
@@ -198,6 +201,8 @@ typedef NS_ENUM(NSInteger, BackgroundMediaKind) {
 @property (nonatomic, strong) UIView *lyricsContainer;
 @property (nonatomic, strong) NSArray<NSNumber *> *latestSpectrumData;
 @property (nonatomic, strong, nullable) AudioFeatures *latestAudioFeatures;
+@property (nonatomic, assign) BOOL dedicatedGuitarVisualActive;
+@property (nonatomic, assign) NSInteger dedicatedGuitarLastScoreLogSecond;
 @property (nonatomic, strong, nullable) UIView *audioActivityMeterOverlayView;
 @property (nonatomic, strong, nullable) NSArray<UILabel *> *audioActivityMeterLabels;
 @property (nonatomic, strong, nullable) UIView *musicFeatureScopeOverlayView;

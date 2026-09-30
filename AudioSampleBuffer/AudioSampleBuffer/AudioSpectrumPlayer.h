@@ -1,6 +1,8 @@
 
 #import <Foundation/Foundation.h>
 #import "RealtimeAnalyzerDSP.h"
+#import "YAMNetAudioAnalyzer.h"
+#import "HTDemucsGuitarAnalyzer.h"
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -13,6 +15,8 @@ extern NSString *const kAudioPlayerDidLoadLyricsNotification;
 extern NSString *const kAudioPlayerDidUpdateTimeNotification;
 /// 开始播放通知，userInfo: filePath
 extern NSString *const kAudioPlayerDidStartPlaybackNotification;
+/// userInfo: filePath, analysis, error. The analysis is the cached YAMNet timeline.
+extern NSString *const kAudioPlayerDidFinishYAMNetAnalysisNotification;
 
 @protocol AudioSpectrumPlayerDelegate <NSObject>
 
@@ -29,6 +33,9 @@ extern NSString *const kAudioPlayerDidStartPlaybackNotification;
 /// HPSS 拆分后的扩展分析结果：包含 H/P/R 频段与 4 类标量特征。
 /// 在 `playerDidGenerateSpectrum:` 之后调用，且仅当 player 启用了扩展分析。
 - (void)playerDidGenerateExtendedAnalysis:(RealtimeAnalyzerResult *)result;
+/// Called after YAMNet finishes the background full-track scan or loads a cache.
+- (void)playerDidFinishYAMNetAnalysis:(nullable NSDictionary *)analysis
+                                error:(nullable NSError *)error;
 
 @end
 
@@ -62,6 +69,16 @@ extern NSString *const kAudioPlayerDidStartPlaybackNotification;
 /// 是否启用扩展分析（HPSS + 4 类标量特征）。开启后 delegate 将收到
 /// `playerDidGenerateExtendedAnalysis:` 回调。默认 YES。
 @property (nonatomic, assign) BOOL extendedAnalysisEnabled;
+
+/// Analyze each local track with YAMNet when a model has been installed.
+/// This runs off the audio render thread and stores reusable per-track results.
+@property (nonatomic, assign) BOOL yamnetAnalysisEnabled;
+@property (nonatomic, strong, nullable, readonly) NSDictionary *lastYAMNetAnalysis;
+
+/// Experimental on-device Demucs guitar analysis. Playback stays on YAMNet
+/// until the full-track Demucs curve has completed and been cached.
+@property (nonatomic, assign) BOOL htDemucsGuitarAnalysisEnabled;
+@property (nonatomic, strong, nullable, readonly) NSDictionary *lastHTDemucsGuitarAnalysis;
 
 - (void)playWithFileName:(NSString *)fileName;
 

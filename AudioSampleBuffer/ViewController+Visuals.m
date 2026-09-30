@@ -18,6 +18,8 @@ static NSString * const kSpectrumOpacityDefaultsKey = @"SpectrumOpacity";
 static NSString * const kSpectrumPositionXDefaultsKey = @"SpectrumLayoutOffsetX";
 static NSString * const kSpectrumPositionYDefaultsKey = @"SpectrumLayoutOffsetY";
 static NSString * const kSpectrumScaleDefaultsKey     = @"SpectrumLayoutScale";
+static NSString * const kGuitarDemucsExperimentDefaultsKey = @"GuitarDemucsFullSongExperimentEnabled";
+static NSString * const kGuitarDemucsOnDeviceDefaultsKey = @"GuitarDemucsOnDeviceExperimentEnabled";
 
 static UIEdgeInsets RhythmEffectiveSafeAreaInsets(UIView *view) {
     UIEdgeInsets insets = UIEdgeInsetsZero;
@@ -38,6 +40,9 @@ static UIEdgeInsets RhythmEffectiveSafeAreaInsets(UIView *view) {
 #pragma mark - Setup
 
 - (void)setupVisualEffectSystem {
+    self.guitarDemucsExperimentEnabled = [[NSUserDefaults standardUserDefaults] boolForKey:kGuitarDemucsExperimentDefaultsKey];
+    self.guitarDemucsOnDeviceExperimentEnabled = [[NSUserDefaults standardUserDefaults] boolForKey:kGuitarDemucsOnDeviceDefaultsKey];
+    self.player.htDemucsGuitarAnalysisEnabled = self.guitarDemucsOnDeviceExperimentEnabled;
     self.visualEffectManager = [[VisualEffectManager alloc] initWithContainerView:self.view];
     self.visualEffectManager.delegate = self;
     [self.visualEffectManager setCurrentEffect:VisualEffectTypeNeonGlow animated:NO];
@@ -1770,7 +1775,103 @@ static UIEdgeInsets RhythmEffectiveSafeAreaInsets(UIView *view) {
         [self galaxyControlButtonTapped:nil];
     } else if (effectType == VisualEffectTypeCyberPunk) {
         [self cyberpunkControlButtonTapped:nil];
+    } else if (effectType == VisualEffectTypeCellularWormhole) {
+        [self showGuitarDemucsExperimentPanel];
     }
+}
+
+- (void)showGuitarDemucsExperimentPanel {
+    if (self.guitarDemucsExperimentPanel) {
+        [self.guitarDemucsExperimentPanel removeFromSuperview];
+        self.guitarDemucsExperimentPanel = nil;
+    }
+    UIView *panel = [[UIView alloc] initWithFrame:CGRectZero];
+    panel.translatesAutoresizingMaskIntoConstraints = NO;
+    panel.backgroundColor = [UIColor colorWithRed:0.10 green:0.09 blue:0.17 alpha:0.97];
+    panel.layer.cornerRadius = 18.0;
+    panel.layer.borderWidth = 1.0;
+    panel.layer.borderColor = [UIColor colorWithRed:0.57 green:0.43 blue:0.81 alpha:0.65].CGColor;
+    panel.layer.shadowColor = UIColor.blackColor.CGColor;
+    panel.layer.shadowOpacity = 0.55;
+    panel.layer.shadowRadius = 20.0;
+    panel.layer.shadowOffset = CGSizeMake(0, 8);
+    [self.view addSubview:panel];
+    CGFloat panelWidth = MIN(330.0, self.view.bounds.size.width - 32.0);
+    [NSLayoutConstraint activateConstraints:@[
+        [panel.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
+        [panel.centerYAnchor constraintEqualToAnchor:self.view.centerYAnchor],
+        [panel.widthAnchor constraintEqualToConstant:panelWidth],
+    [panel.heightAnchor constraintEqualToConstant:222.0]
+    ]];
+
+    UILabel *title = [[UILabel alloc] initWithFrame:CGRectMake(18, 16, 250, 27)];
+    title.text = @"深空蜂巢 · 吉他数据对比";
+    title.textColor = UIColor.whiteColor;
+    title.font = [UIFont systemFontOfSize:17 weight:UIFontWeightSemibold];
+    [panel addSubview:title];
+
+    UIButton *close = [UIButton buttonWithType:UIButtonTypeSystem];
+    close.frame = CGRectMake(panelWidth - 44, 14, 28, 28);
+    [close setImage:[UIImage systemImageNamed:@"xmark.circle.fill"] forState:UIControlStateNormal];
+    close.tintColor = [UIColor colorWithWhite:0.8 alpha:1.0];
+    [close addTarget:self action:@selector(closeGuitarDemucsExperimentPanel) forControlEvents:UIControlEventTouchUpInside];
+    [panel addSubview:close];
+
+    UILabel *row = [[UILabel alloc] initWithFrame:CGRectMake(18, 58, 225, 29)];
+    row.text = @"电脑分离数据（Demucs）";
+    row.textColor = UIColor.whiteColor;
+    row.font = [UIFont systemFontOfSize:14 weight:UIFontWeightMedium];
+    [panel addSubview:row];
+
+    UISwitch *sourceSwitch = [[UISwitch alloc] initWithFrame:CGRectMake(panelWidth - 68, 56, 51, 31)];
+    sourceSwitch.onTintColor = [UIColor colorWithRed:0.24 green:0.77 blue:0.91 alpha:1.0];
+    sourceSwitch.on = self.guitarDemucsExperimentEnabled;
+    sourceSwitch.accessibilityIdentifier = @"guitarDemucsFullSongExperimentSwitch";
+    [sourceSwitch addTarget:self action:@selector(guitarDemucsExperimentSwitchChanged:)
+           forControlEvents:UIControlEventValueChanged];
+    [panel addSubview:sourceSwitch];
+
+    UILabel *phoneRow = [[UILabel alloc] initWithFrame:CGRectMake(18, 96, 225, 29)];
+    phoneRow.text = @"手机本地 Demucs（实验）";
+    phoneRow.textColor = UIColor.whiteColor;
+    phoneRow.font = [UIFont systemFontOfSize:14 weight:UIFontWeightMedium];
+    [panel addSubview:phoneRow];
+
+    UISwitch *phoneSwitch = [[UISwitch alloc] initWithFrame:CGRectMake(panelWidth - 68, 94, 51, 31)];
+    phoneSwitch.onTintColor = [UIColor colorWithRed:0.24 green:0.77 blue:0.91 alpha:1.0];
+    phoneSwitch.on = self.guitarDemucsOnDeviceExperimentEnabled;
+    phoneSwitch.accessibilityIdentifier = @"guitarDemucsOnDeviceExperimentSwitch";
+    [phoneSwitch addTarget:self action:@selector(guitarDemucsOnDeviceExperimentSwitchChanged:)
+          forControlEvents:UIControlEventValueChanged];
+    [panel addSubview:phoneSwitch];
+
+    UILabel *note = [[UILabel alloc] initWithFrame:CGRectMake(18, 137, panelWidth - 36, 69)];
+    note.text = @"电脑数据开关：仅用于《李荣浩 - 名字》的已有整首曲线。手机实验开关：任意本地歌曲先用 YAMNet 播放，同时后台分离吉他；完成并缓存后自动切到 Demucs，重播可使用缓存。不同歌曲的分离效果会有差异。模型约 186 MB，需要 iOS 16 或更新版本。";
+    note.textColor = [UIColor colorWithWhite:0.79 alpha:1.0];
+    note.font = [UIFont systemFontOfSize:11.5];
+    note.numberOfLines = 0;
+    [panel addSubview:note];
+    self.guitarDemucsExperimentPanel = panel;
+}
+
+- (void)closeGuitarDemucsExperimentPanel {
+    [self.guitarDemucsExperimentPanel removeFromSuperview];
+    self.guitarDemucsExperimentPanel = nil;
+}
+
+- (void)guitarDemucsExperimentSwitchChanged:(UISwitch *)sender {
+    self.guitarDemucsExperimentEnabled = sender.on;
+    [[NSUserDefaults standardUserDefaults] setBool:sender.on forKey:kGuitarDemucsExperimentDefaultsKey];
+    self.dedicatedGuitarLastScoreLogSecond = -1;
+    NSLog(@"[GuitarVisual] Demucs 全曲实验开关 %@；YAMNet 分析保持可用", sender.on ? @"开启" : @"关闭");
+}
+
+- (void)guitarDemucsOnDeviceExperimentSwitchChanged:(UISwitch *)sender {
+    self.guitarDemucsOnDeviceExperimentEnabled = sender.on;
+    [[NSUserDefaults standardUserDefaults] setBool:sender.on forKey:kGuitarDemucsOnDeviceDefaultsKey];
+    self.player.htDemucsGuitarAnalysisEnabled = sender.on;
+    self.dedicatedGuitarLastScoreLogSecond = -1;
+    NSLog(@"[DemucsPhone] 手机上 Demucs 吉他实验 %@；启用时先沿用 YAMNet，完整分析成功后切换。", sender.on ? @"开启" : @"关闭");
 }
 
 - (void)quickEffectButtonTapped:(UIButton *)sender {

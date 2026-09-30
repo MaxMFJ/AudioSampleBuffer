@@ -131,23 +131,37 @@ fragment float4 cellularWormholeFragment(RasterizerData in [[stage_in]],
     float nearLight = smoothstep(0.0, 0.55, wallRadius);
     float3 tint = mix(theme, deepTheme, nearLight * 0.72);
     float3 color = mix(float3(0.001, 0.004, 0.014), deepTheme, 0.08);
-    // The isolated lead-guitar control recolors the honeycomb while the note
-    // is present, then releases smoothly back to the original palette.
-    // Its onset launches a separate inner-to-outer colored front.
-    float guitarLevel = saturate(u.galaxyParams2.y);
-    float guitarAge = max(u.galaxyParams2.x, 0.0);
-    float guitarWaveRadius = core + guitarAge * 0.38;
-    float guitarReached = 1.0 - smoothstep(guitarWaveRadius - 0.018,
-                                           guitarWaveRadius + 0.018, r);
-    float guitarWave = exp(-pow((r - guitarWaveRadius) / 0.018, 2.0))
-                     * exp(-guitarAge * 0.72)
-                     * saturate(u.galaxyParams3.z);
-    float3 guitarAccent = float3(1.0, 0.18, 0.52);
-    float guitarSurface = wall * membrane * guitarLevel * guitarReached * 0.52;
-    tint = mix(tint, guitarAccent, guitarLevel * guitarReached * 0.58);
+    // The travelling front converts the surface it has crossed. Each wave
+    // keeps its color until its own lifetime ends, then the theme returns.
+    float3 waveTrailColor = float3(0.0);
+    float waveTrailWeight = 0.0;
+    float3 waveFrontColor = float3(0.0);
+    for (int waveIndex = 0; waveIndex < 8; waveIndex++) {
+        float waveAge = max(u.guitarWaves[waveIndex].x, 0.0);
+        float waveStrength = saturate(u.guitarWaves[waveIndex].y);
+        if (waveStrength <= 0.001 || waveAge >= 2.8) continue;
+        float waveRadius = core + waveAge * 0.38;
+        float waveFrontDistance = (r - waveRadius) / 0.024;
+        float waveFront = exp(-waveFrontDistance * waveFrontDistance);
+        float distanceFromFront = r - waveRadius;
+        float waveReached = 1.0 - smoothstep(-0.012, 0.028, distanceFromFront);
+        float lifeFade = 1.0 - smoothstep(2.0, 2.8, waveAge);
+        float confidence = smoothstep(0.12, 0.80, waveStrength);
+        float opacity = (0.38 + confidence * 0.62) * exp(-waveAge * 0.22) * lifeFade;
+        float palette = u.guitarWaves[waveIndex].z;
+        float3 waveColor = float3(0.04, 0.88, 1.0);
+        if (palette < 0.5) waveColor = float3(0.04, 0.88, 1.0);
+        else if (palette < 1.5) waveColor = float3(1.0, 0.66, 0.08);
+        else if (palette < 2.5) waveColor = float3(0.45, 1.0, 0.18);
+        else waveColor = float3(0.20, 0.45, 1.0);
+        float trailWeight = waveReached * opacity;
+        waveTrailColor += waveColor * trailWeight;
+        waveTrailWeight += trailWeight;
+        waveFrontColor += waveColor * waveFront * opacity
+                        * (0.65 + confidence * 1.10);
+    }
     color += wall * membrane * tint * (0.30 + ridges * 0.45 + bass * 0.20);
-    color += guitarAccent * guitarWave * (0.42 + guitarLevel * 0.48);
-    color += wall * membrane * guitarAccent * guitarSurface;
+    color += waveFrontColor;
     color += wall * detail * lip * highlight
            * (0.14 + poreSignal * 0.70 + beat * 0.20);
     color += wall * detail * softGlow * tint * (0.06 + energy * 0.10);
@@ -210,7 +224,8 @@ fragment float4 cellularWormholeFragment(RasterizerData in [[stage_in]],
            * climax * climaxBreath * 0.48;
     float climaxPhase = fract(t * 0.24);
     float climaxRadius = core + climaxPhase * 0.46;
-    float climaxRing = exp(-pow((r - climaxRadius) / (0.010 + climax * 0.008), 2.0));
+    float climaxRingDistance = (r - climaxRadius) / (0.010 + climax * 0.008);
+    float climaxRing = exp(-climaxRingDistance * climaxRingDistance);
     color += highlight * climaxRing * climax * (1.0 - climaxPhase) * 0.80;
     color += wall * membrane * tint * climax * (0.18 + climaxBreath * 0.20);
 
@@ -220,7 +235,8 @@ fragment float4 cellularWormholeFragment(RasterizerData in [[stage_in]],
         float age = impactAge - float(ring) * 0.19;
         float radius = baseCore + max(age, 0.0) * 0.30;
         float ringWidth = 0.004 + low * 0.006 + float(ring) * 0.001;
-        float ringMask = exp(-pow((r - radius) / ringWidth, 2.0));
+        float ringDistance = (r - radius) / ringWidth;
+        float ringMask = exp(-ringDistance * ringDistance);
         float gain = ring == 0 ? 1.0 : echo * (0.55 / float(ring));
         float envelope = step(0.0, age) * exp(-max(age, 0.0) * 3.4);
         color += highlight * ringMask * gain * envelope * saturate(u.galaxyParams1.z)
@@ -309,6 +325,17 @@ fragment float4 cellularWormholeFragment(RasterizerData in [[stage_in]],
            * mix(float3(0.72, 0.86, 1.0), highlight, 0.32)
            * (0.12 + high * 0.58);
     color += holeVisibility * starBloom * highlight * 0.34;
+    // Recolor the final honeycomb surface and pore rims. Doing this after the
+    // other light layers prevents the original purple theme from covering the
+    // guitar color again, while the dark openings remain untouched.
+    if (waveTrailWeight > 0.0001) {
+        float3 waveHue = waveTrailColor / waveTrailWeight;
+        float hiveMask = saturate(wall * (membrane + lip * 0.72)
+                                  + innerSpace * 0.90 + throat * 0.70);
+        float hueOpacity = hiveMask * saturate(waveTrailWeight);
+        float surfaceLight = max(max(color.r, color.g), color.b);
+        color = mix(color, waveHue * surfaceLight, hueOpacity);
+    }
     color *= 1.0 - 0.32 * smoothstep(0.50, 1.35, r);
     color = 1.0 - exp(-color * (1.5 * paletteBoost));
     return float4(saturate(color), 1.0);

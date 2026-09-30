@@ -12,6 +12,9 @@ def main():
     parser.add_argument("input", type=Path)
     parser.add_argument("output", type=Path)
     parser.add_argument("--frame-ms", type=float, default=50.0)
+    parser.add_argument("--calibration-start-sec", type=float, default=None,
+                        help="Use a reference passage to preserve a previous PoC's intensity scale")
+    parser.add_argument("--calibration-end-sec", type=float, default=None)
     args = parser.parse_args()
 
     with wave.open(str(args.input), "rb") as source:
@@ -40,8 +43,17 @@ def main():
         levels.append(float(np.sqrt(power[high_band].sum())))
 
     values = np.asarray(levels, dtype=np.float32)
-    floor = float(np.percentile(values, 12))
-    ceiling = float(np.percentile(values, 96))
+    calibration = values
+    if args.calibration_start_sec is not None or args.calibration_end_sec is not None:
+        if args.calibration_start_sec is None or args.calibration_end_sec is None:
+            raise SystemExit("both calibration times are required")
+        start = max(0, round(args.calibration_start_sec * rate / hop))
+        end = min(len(values), round(args.calibration_end_sec * rate / hop))
+        if end <= start:
+            raise SystemExit("calibration passage is empty")
+        calibration = values[start:end]
+    floor = float(np.percentile(calibration, 12))
+    ceiling = float(np.percentile(calibration, 96))
     if ceiling <= floor:
         raise SystemExit("guitar stem has no usable high-frequency dynamic range")
     normalized = np.clip((values - floor) / (ceiling - floor), 0.0, 1.0)

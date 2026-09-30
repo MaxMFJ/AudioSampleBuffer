@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		A1AG000130C3000000000001 /* LiRongHao-MingZi-GuitarControl.csv in Resources */ = {isa = PBXBuildFile; fileRef = A1AG000130C3000000000002 /* LiRongHao-MingZi-GuitarControl.csv */; };
+		A1AG000130C3000000000003 /* LiRongHao-MingZi-GuitarControl-Full.csv in Resources */ = {isa = PBXBuildFile; fileRef = A1AG000130C3000000000004 /* LiRongHao-MingZi-GuitarControl-Full.csv */; };
 		C31109012EAD600000D59E12 /* GlassResonanceShader.metal in Sources */ = {isa = PBXBuildFile; fileRef = C31109022EAD600000D59E12 /* GlassResonanceShader.metal */; };
 		C3110A012EAD700000D59E12 /* MirrorStrataShader.metal in Sources */ = {isa = PBXBuildFile; fileRef = C3110A022EAD700000D59E12 /* MirrorStrataShader.metal */; };
 		C31100012EAD600000D59E12 /* CellularWormholeShader.metal in Sources */ = {isa = PBXBuildFile; fileRef = C31100022EAD600000D59E12 /* CellularWormholeShader.metal */; };
@@ -158,6 +159,11 @@
 		64C5448C28C83A7700C23393 /* RealtimeAnalyzer.m in Sources */ = {isa = PBXBuildFile; fileRef = 64C5448A28C83A7700C23393 /* RealtimeAnalyzer.m */; };
 		64C5448D28C83A7700C23393 /* SpectrumView.m in Sources */ = {isa = PBXBuildFile; fileRef = 64C5448528C83A7700C23393 /* SpectrumView.m */; };
 		64C5448E28C83A7700C23393 /* AudioSpectrumPlayer.m in Sources */ = {isa = PBXBuildFile; fileRef = 64C5448628C83A7700C23393 /* AudioSpectrumPlayer.m */; };
+		A1A7000130C3000000000001 /* YAMNetAudioAnalyzer.m in Sources */ = {isa = PBXBuildFile; fileRef = A1A7000130C3000000000003 /* YAMNetAudioAnalyzer.m */; };
+		A1A7000130C3000000000005 /* CoreML.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A1A7000130C3000000000006 /* CoreML.framework */; };
+		A1A7000130C3000000000007 /* YAMNet.mlpackage in Resources */ = {isa = PBXBuildFile; fileRef = A1A7000130C3000000000008 /* YAMNet.mlpackage */; };
+		A1AD000130C3000000000001 /* HTDemucsGuitarAnalyzer.m in Sources */ = {isa = PBXBuildFile; fileRef = A1AD000130C3000000000003 /* HTDemucsGuitarAnalyzer.m */; };
+		A1AD000130C3000000000002 /* HTDemucs6s_Guitar_iOS16.mlpackage in Resources */ = {isa = PBXBuildFile; fileRef = A1AD000130C3000000000005 /* HTDemucs6s_Guitar_iOS16.mlpackage */; };
 		64C544CF28C83B1200C23393 /* AudioToolbox.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 64C544CE28C83B1200C23393 /* AudioToolbox.framework */; };
 		8A5F000130A2000000000012 /* ViewController+Playback.m in Sources */ = {isa = PBXBuildFile; fileRef = 8A5F000130A2000000000002 /* ViewController+Playback.m */; };
 		8A5F000130A2000000000013 /* ViewController+Lyrics.m in Sources */ = {isa = PBXBuildFile; fileRef = 8A5F000130A2000000000003 /* ViewController+Lyrics.m */; };
@@ -180,6 +186,7 @@
 
 /* Begin PBXFileReference section */
 		A1AG000130C3000000000002 /* LiRongHao-MingZi-GuitarControl.csv */ = {isa = PBXFileReference; lastKnownFileType = text; path = Resources/LiRongHao-MingZi-GuitarControl.csv; sourceTree = "<group>"; };
+		A1AG000130C3000000000004 /* LiRongHao-MingZi-GuitarControl-Full.csv */ = {isa = PBXFileReference; lastKnownFileType = text; path = Resources/LiRongHao-MingZi-GuitarControl-Full.csv; sourceTree = "<group>"; };
 		C31109022EAD600000D59E12 /* GlassResonanceShader.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = GlassResonanceShader.metal; sourceTree = "<group>"; };
 		C3110A022EAD700000D59E12 /* MirrorStrataShader.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = MirrorStrataShader.metal; sourceTree = "<group>"; };
 		C31109032EAD600000D59E12 /* GlassResonanceAudio.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = GlassResonanceAudio.h; sourceTree = "<group>"; };
@@ -445,6 +452,13 @@
 		64C5448A28C83A7700C23393 /* RealtimeAnalyzer.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = RealtimeAnalyzer.m; sourceTree = "<group>"; };
 		64C544CC28C83B1200C23393 /* AudioSampleBuffer.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = AudioSampleBuffer.entitlements; sourceTree = "<group>"; };
 		64C544CE28C83B1200C23393 /* AudioToolbox.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AudioToolbox.framework; path = System/Library/Frameworks/AudioToolbox.framework; sourceTree = SDKROOT; };
+		A1A7000130C3000000000002 /* YAMNetAudioAnalyzer.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = YAMNetAudioAnalyzer.h; sourceTree = "<group>"; };
+		A1A7000130C3000000000003 /* YAMNetAudioAnalyzer.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = YAMNetAudioAnalyzer.m; sourceTree = "<group>"; };
+		A1A7000130C3000000000006 /* CoreML.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreML.framework; path = System/Library/Frameworks/CoreML.framework; sourceTree = SDKROOT; };
+		A1A7000130C3000000000008 /* YAMNet.mlpackage */ = {isa = PBXFileReference; lastKnownFileType = wrapper.mlpackage; path = YAMNet.mlpackage; sourceTree = "<group>"; };
+		A1AD000130C3000000000003 /* HTDemucsGuitarAnalyzer.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = HTDemucsGuitarAnalyzer.m; sourceTree = "<group>"; };
+		A1AD000130C3000000000004 /* HTDemucsGuitarAnalyzer.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = HTDemucsGuitarAnalyzer.h; sourceTree = "<group>"; };
+		A1AD000130C3000000000005 /* HTDemucs6s_Guitar_iOS16.mlpackage */ = {isa = PBXFileReference; lastKnownFileType = wrapper.mlpackage; path = HTDemucs6s_Guitar_iOS16.mlpackage; sourceTree = "<group>"; };
 		8A5F000130A2000000000001 /* ViewController+Private.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "ViewController+Private.h"; sourceTree = "<group>"; };
 		8A5F000130A2000000000002 /* ViewController+Playback.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = "ViewController+Playback.m"; sourceTree = "<group>"; };
 		8A5F000130A2000000000003 /* ViewController+Lyrics.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = "ViewController+Lyrics.m"; sourceTree = "<group>"; };
@@ -483,6 +497,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				64C544CF28C83B1200C23393 /* AudioToolbox.framework in Frameworks */,
+				A1A7000130C3000000000005 /* CoreML.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -870,6 +885,7 @@
 			isa = PBXGroup;
 			children = (
 				A1AG000130C3000000000002 /* LiRongHao-MingZi-GuitarControl.csv */,
+				A1AG000130C3000000000004 /* LiRongHao-MingZi-GuitarControl-Full.csv */,
 				4CCFF6012F3B1DAC004FFF9A /* AI */,
 				4C66E6D82E8A89E8003200DA /* Audio */,
 				90A1000130C1000000000001 /* MotionPhoto */,
@@ -928,6 +944,12 @@
 		64C544D028C83B5A00C23393 /* AudioSampleBuffer */ = {
 			isa = PBXGroup;
 			children = (
+				A1A7000130C3000000000002 /* YAMNetAudioAnalyzer.h */,
+				A1A7000130C3000000000003 /* YAMNetAudioAnalyzer.m */,
+				A1A7000130C3000000000008 /* YAMNet.mlpackage */,
+				A1AD000130C3000000000004 /* HTDemucsGuitarAnalyzer.h */,
+				A1AD000130C3000000000003 /* HTDemucsGuitarAnalyzer.m */,
+				A1AD000130C3000000000005 /* HTDemucs6s_Guitar_iOS16.mlpackage */,
 				4C7D33982EFEEC950027CBC8 /* AudioProgressView.h */,
 				4C7D33992EFEEC950027CBC8 /* AudioProgressView.m */,
 				64C5448928C83A7700C23393 /* AudioSpectrumPlayer.h */,
@@ -1080,7 +1102,10 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A1A7000130C3000000000007 /* YAMNet.mlpackage in Resources */,
+				A1AD000130C3000000000002 /* HTDemucs6s_Guitar_iOS16.mlpackage in Resources */,
 				A1AG000130C3000000000001 /* LiRongHao-MingZi-GuitarControl.csv in Resources */,
+				A1AG000130C3000000000003 /* LiRongHao-MingZi-GuitarControl-Full.csv in Resources */,
 				64C5447028C838D400C23393 /* LaunchScreen.storyboard in Resources */,
 				64C5446D28C838D400C23393 /* Assets.xcassets in Resources */,
 				4C65487C2EA0C500006DD8DD /* test_qqmusic_lyrics.sh in Resources */,
@@ -1250,6 +1275,8 @@
 				4C66E70A2E8A8DBB003200DA /* ParticleAnimationManager.m in Sources */,
 				4C66E70B2E8A8DBB003200DA /* AnimationProtocol.m in Sources */,
 				64C5448C28C83A7700C23393 /* RealtimeAnalyzer.m in Sources */,
+				A1A7000130C3000000000001 /* YAMNetAudioAnalyzer.m in Sources */,
+				A1AD000130C3000000000001 /* HTDemucsGuitarAnalyzer.m in Sources */,
 				4CDSP00012F24CF0000000001 /* RealtimeAnalyzerDSP.c in Sources */,
 				4C7D33C02F11200000000001 /* LRCGenerator.m in Sources */,
 				4C7D33C02F11200000000002 /* LyricsEditorViewController.m in Sources */,
@@ -1333,7 +1360,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 15.5;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
@@ -1385,7 +1412,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 15.5;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				SDKROOT = iphoneos;
@@ -1414,7 +1441,7 @@
 				INFOPLIST_KEY_UILaunchStoryboardName = LaunchScreen;
 				INFOPLIST_KEY_UIMainStoryboardFile = Main;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
-				IPHONEOS_DEPLOYMENT_TARGET = 15.6;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -1449,7 +1476,7 @@
 				INFOPLIST_KEY_UILaunchStoryboardName = LaunchScreen;
 				INFOPLIST_KEY_UIMainStoryboardFile = Main;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
-				IPHONEOS_DEPLOYMENT_TARGET = 15.6;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",

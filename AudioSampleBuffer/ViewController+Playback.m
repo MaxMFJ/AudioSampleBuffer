@@ -67,46 +67,152 @@ static NSDictionary<NSString *, NSNumber *> *ASBActivityMeterParameters(AudioFea
     };
 }
 
-// PoC control stem for 李荣浩《名字》, separated from 02:54 to 03:30.
-// This is a control-only feature curve: the isolated WAV is never mixed into
-// playback, and the target song bypasses whole-mix guitar guesses for this cue.
-static NSDictionary<NSString *, NSNumber *> *ASBGuitarStemControl(MusicItem *item,
-                                                                  NSTimeInterval playbackTime) {
-    if (!item) return @{@"guitarStemControlEnabled": @NO, @"guitarStemControl": @0.0};
-    NSString *identity = [NSString stringWithFormat:@"%@ %@ %@", item.fileName ?: @"",
-                          item.displayName ?: @"", item.artist ?: @""];
-    BOOL artistMatches = item.artist.length > 0 ? [item.artist containsString:@"李荣浩"] :
-                                                   [identity containsString:@"李荣浩"];
-    BOOL isTargetSong = [identity containsString:@"名字"] && artistMatches;
-    static NSArray<NSNumber *> *envelope;
+// Sample the cached YAMNet electric-guitar class timeline at the current song
+// position. Patches advance every 480 ms; interpolation keeps the visual cue
+// smooth between adjacent model windows.
+static NSDictionary<NSString *, NSNumber *> *ASBYAMNetGuitarControl(NSDictionary *analysis,
+                                                                    NSTimeInterval playbackTime) {
+    NSArray *patches = [analysis[@"patches"] isKindOfClass:NSArray.class] ? analysis[@"patches"] : nil;
+    if (patches.count == 0 || playbackTime < 0.0) {
+        return @{@"guitarYAMNetScore": @0.0, @"guitarYAMNetControl": @0.0};
+    }
+    double duration = [analysis[@"duration_sec"] doubleValue];
+    if (duration > 0.0 && playbackTime >= duration) {
+        return @{@"guitarYAMNetScore": @0.0, @"guitarYAMNetControl": @0.0};
+    }
+    double hop = [analysis[@"patch_hop_sec"] doubleValue];
+    if (!isfinite(hop) || hop <= 0.0) hop = 0.48;
+    NSInteger classIndex = [analysis[@"class_indices"][@"electric_guitar"] respondsToSelector:@selector(integerValue)] ?
+        [analysis[@"class_indices"][@"electric_guitar"] integerValue] : 136;
+    if (classIndex < 0) classIndex = 136;
+
+    double patchLength = [analysis[@"patch_length_sec"] doubleValue];
+    if (!isfinite(patchLength) || patchLength <= 0.0) patchLength = 0.96;
+    // Each inference score describes a centered 0.96 s window. Align the
+    // playback cursor to those centers instead of treating the window start as
+    // its timestamp (the old mapping lagged the score timeline by 480 ms).
+    double position = fmax(0.0, (playbackTime - patchLength * 0.5) / hop);
+    NSUInteger firstIndex = MIN((NSUInteger)position, patches.count - 1);
+    NSUInteger secondIndex = MIN(firstIndex + 1, patches.count - 1);
+    NSDictionary *firstPatch = [patches[firstIndex] isKindOfClass:NSDictionary.class] ? patches[firstIndex] : nil;
+    NSDictionary *secondPatch = [patches[secondIndex] isKindOfClass:NSDictionary.class] ? patches[secondIndex] : nil;
+    NSArray *firstScores = [firstPatch[@"scores"] isKindOfClass:NSArray.class] ? firstPatch[@"scores"] : nil;
+    NSArray *secondScores = [secondPatch[@"scores"] isKindOfClass:NSArray.class] ? secondPatch[@"scores"] : nil;
+    double fraction = position - floor(position);
+    NSInteger guitarClassIndex = [analysis[@"class_indices"][@"guitar"] respondsToSelector:@selector(integerValue)] ?
+        [analysis[@"class_indices"][@"guitar"] integerValue] : 135;
+    double electricScore = 0.0;
+    double guitarScore = 0.0;
+    if (firstScores.count > (NSUInteger)classIndex && secondScores.count > (NSUInteger)classIndex) {
+        double a = [firstScores[(NSUInteger)classIndex] doubleValue];
+        double b = [secondScores[(NSUInteger)classIndex] doubleValue];
+        electricScore = fmax(0.0, fmin(1.0, a + (b - a) * fraction));
+    }
+    if (guitarClassIndex >= 0 && firstScores.count > (NSUInteger)guitarClassIndex &&
+        secondScores.count > (NSUInteger)guitarClassIndex) {
+        double a = [firstScores[(NSUInteger)guitarClassIndex] doubleValue];
+        double b = [secondScores[(NSUInteger)guitarClassIndex] doubleValue];
+        guitarScore = fmax(0.0, fmin(1.0, a + (b - a) * fraction));
+    }
+    // Some sustained or distorted leads score higher as the broader Guitar
+    // AudioSet class than Electric guitar. Use either class for this recall-
+    // focused PoC, and retain both values in diagnostics for later tuning.
+    double score = fmax(electricScore, guitarScore);
+    const double scoreFloor = 0.0008;
+    const double scoreFullScale = 0.0095;
+    // AudioSet confidence is low compared with a separated stem. This wider
+    // mapping range lowers the PoC trigger threshold; tune against false hits.
+    double control = fmax(0.0, fmin(1.0, (score - scoreFloor) / (scoreFullScale - scoreFloor)));
+    return @{@"guitarYAMNetScore": @(score),
+             @"guitarYAMNetElectricScore": @(electricScore),
+             @"guitarYAMNetGenericScore": @(guitarScore),
+             @"guitarYAMNetControl": @(control)};
+}
+
+static NSDictionary<NSString *, NSNumber *> *ASBGuitarVisualControl(NSTimeInterval playbackTime,
+                                                                    NSDictionary *yamnetAnalysis) {
+    NSDictionary *yamnet = ASBYAMNetGuitarControl(yamnetAnalysis, playbackTime);
+    float modelLevel = [yamnet[@"guitarYAMNetControl"] floatValue];
+    return @{
+        @"guitarStemControlEnabled": @(yamnetAnalysis[@"patches"] != nil),
+        @"guitarStemControl": @(modelLevel),
+        @"guitarStemControlSource": @(modelLevel > 0.0f ? 1 : 0),
+        @"guitarYAMNetScore": yamnet[@"guitarYAMNetScore"] ?: @0.0,
+        @"guitarYAMNetControl": @(modelLevel)
+    };
+}
+
+// Full-song 50 ms control curve generated from the desktop Demucs Guitar stem.
+// The old 2:54-3:30 passage uses the same calibration and matches frame for frame.
+static NSArray<NSNumber *> *ASBMingZiDemucsFullSongCurve(void) {
+    static NSArray<NSNumber *> *curve;
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
-        NSURL *url = [[NSBundle mainBundle] URLForResource:@"LiRongHao-MingZi-GuitarControl"
+        NSURL *url = [[NSBundle mainBundle] URLForResource:@"LiRongHao-MingZi-GuitarControl-Full"
                                              withExtension:@"csv"];
         NSString *contents = url ? [NSString stringWithContentsOfURL:url
-                                                            encoding:NSUTF8StringEncoding
-                                                               error:nil] : nil;
-        NSMutableArray<NSNumber *> *values = [NSMutableArray array];
-        for (NSString *token in [contents componentsSeparatedByCharactersInSet:
-                                 [NSCharacterSet characterSetWithCharactersInString:@",\n\r"]]) {
-            double value = token.doubleValue;
-            if (token.length > 0 && isfinite(value)) [values addObject:@(fmax(0.0, fmin(value, 1.0)))];
+                                                            encoding:NSUTF8StringEncoding error:nil] : nil;
+        NSMutableArray<NSNumber *> *frames = [NSMutableArray arrayWithCapacity:5328];
+        for (NSString *part in [contents componentsSeparatedByCharactersInSet:
+                               [NSCharacterSet characterSetWithCharactersInString:@",\n\r"]]) {
+            if (part.length == 0) continue;
+            double value = part.doubleValue;
+            if (!isfinite(value) || value < 0.0 || value > 1.0) {
+                [frames removeAllObjects];
+                break;
+            }
+            [frames addObject:@(value)];
         }
-        envelope = values.copy ?: @[];
+        curve = frames.count == 5328 ? frames.copy : @[];
+        NSLog(@"[GuitarVisual] Demucs 全曲控制数据 %@：%lu 帧",
+              curve.count ? @"已加载" : @"无效或缺失", (unsigned long)curve.count);
     });
+    return curve;
+}
 
+static NSDictionary<NSString *, NSNumber *> *ASBMingZiDemucsVisualControl(MusicItem *item,
+                                                                           NSTimeInterval duration,
+                                                                           NSTimeInterval playbackTime) {
+    if (!item) return nil;
+    NSString *identity = [NSString stringWithFormat:@"%@ %@ %@", item.fileName ?: @"",
+                          item.displayName ?: @"", item.artist ?: @""];
+    BOOL matchingSong = [identity containsString:@"李荣浩"] && [identity containsString:@"名字"] &&
+                        isfinite(duration) && fabs(duration - 266.37) < 2.0;
+    if (!matchingSong) return nil;
+    NSArray<NSNumber *> *curve = ASBMingZiDemucsFullSongCurve();
+    if (curve.count == 0) return nil;
     float level = 0.0f;
-    const NSTimeInterval stemStart = 174.0;
-    const NSTimeInterval stemDuration = 36.0;
-    if (isTargetSong && playbackTime >= stemStart && playbackTime < stemStart + stemDuration &&
-        envelope.count > 0) {
-        double position = (playbackTime - stemStart) * 20.0; // Generated at 50 ms/frame.
-        NSUInteger index = MIN((NSUInteger)position, envelope.count - 1);
-        NSUInteger next = MIN(index + 1, envelope.count - 1);
-        float fraction = (float)(position - index);
-        level = envelope[index].floatValue + (envelope[next].floatValue - envelope[index].floatValue) * fraction;
+    if (playbackTime >= 0.0 && playbackTime < 266.37) {
+        double position = playbackTime * 20.0;
+        NSUInteger index = MIN((NSUInteger)position, curve.count - 1);
+        NSUInteger next = MIN(index + 1, curve.count - 1);
+        level = curve[index].floatValue +
+                (curve[next].floatValue - curve[index].floatValue) * (float)(position - floor(position));
     }
-    return @{@"guitarStemControlEnabled": @(isTargetSong), @"guitarStemControl": @(level)};
+    return @{@"guitarStemControlEnabled": @YES,
+             @"guitarStemControl": @(ASBClamp01(level)),
+             @"guitarStemControlSource": @2};
+}
+
+static NSDictionary<NSString *, NSNumber *> *ASBPhoneDemucsVisualControl(MusicItem *item,
+                                                                         NSTimeInterval duration,
+                                                                         NSTimeInterval playbackTime,
+                                                                         NSDictionary *analysis) {
+    if (!item || ![analysis[@"frames"] isKindOfClass:NSArray.class]) return nil;
+    NSArray<NSNumber *> *frames = analysis[@"frames"];
+    BOOL matchingDuration = isfinite(duration) && fabs(duration - [analysis[@"duration_sec"] doubleValue]) < 2.0;
+    if (!matchingDuration || frames.count == 0) return nil;
+    float level = 0.0f;
+    if (playbackTime >= 0.0 && playbackTime < duration) {
+        double position = playbackTime / MAX(0.001, [analysis[@"frame_hop_sec"] doubleValue]);
+        NSUInteger index = MIN((NSUInteger)position, frames.count - 1);
+        NSUInteger next = MIN(index + 1, frames.count - 1);
+        level = frames[index].floatValue + (frames[next].floatValue - frames[index].floatValue) *
+                (float)(position - floor(position));
+    }
+    return @{@"guitarStemControlEnabled": @YES,
+             @"guitarStemControl": @(ASBClamp01(level)),
+             @"guitarStemControlSource": @3};
 }
 
 static NSDictionary<NSString *, NSNumber *> *ASBMusicFeatureScopeValues(AudioFeatures *features) {
@@ -403,6 +509,68 @@ static void ASBRunImpactAnimation(CAShapeLayer *layer,
 }
 
 @implementation ViewController (Playback)
+
+- (NSDictionary<NSString *, NSNumber *> *)guitarVisualControlForCurrentPlayback {
+    NSTimeInterval playbackTime = self.player.currentTime;
+    NSDictionary *analysis = self.player.lastYAMNetAnalysis;
+    MusicItem *item = self.currentIndex >= 0 && self.currentIndex < (NSInteger)self.displayedMusicItems.count ?
+                      self.displayedMusicItems[self.currentIndex] : nil;
+    NSDictionary *phoneDemucsControl = (self.guitarDemucsOnDeviceExperimentEnabled && analysis[@"patches"] != nil) ?
+        ASBPhoneDemucsVisualControl(item, self.player.duration, playbackTime,
+                                    self.player.lastHTDemucsGuitarAnalysis) : nil;
+    NSDictionary *demucsControl = self.guitarDemucsExperimentEnabled ?
+        ASBMingZiDemucsVisualControl(item, self.player.duration, playbackTime) : nil;
+    NSDictionary *control = phoneDemucsControl ?: (self.guitarDemucsOnDeviceExperimentEnabled ?
+        ASBGuitarVisualControl(playbackTime, analysis) : (demucsControl ?: ASBGuitarVisualControl(playbackTime, analysis)));
+    BOOL usingDemucs = phoneDemucsControl != nil || (!self.guitarDemucsOnDeviceExperimentEnabled && demucsControl != nil);
+    BOOL hiveSelected = self.visualEffectManager.currentEffectType == VisualEffectTypeCellularWormhole;
+    BOOL hasYAMNetTimeline = analysis[@"patches"] != nil;
+    BOOL hasGuitarTimeline = usingDemucs || hasYAMNetTimeline;
+    BOOL active = hiveSelected && hasGuitarTimeline &&
+                  [control[@"guitarStemControl"] floatValue] > 0.12f;
+    if (active != self.dedicatedGuitarVisualActive) {
+        self.dedicatedGuitarVisualActive = active;
+        if (active) {
+            if (phoneDemucsControl) {
+                NSLog(@"[GuitarVisual] 深空蜂巢 Phone Demucs 吉他触发开始: control=%.3f, playback=%.2fs",
+                      [control[@"guitarStemControl"] floatValue], playbackTime);
+            } else {
+                NSLog(@"[GuitarVisual] 深空蜂巢 %@ 吉他触发开始: electric=%.4f guitar=%.4f control=%.3f, playback=%.2fs",
+                      usingDemucs ? @"Demucs" : @"YAMNet",
+                      [control[@"guitarYAMNetElectricScore"] floatValue],
+                      [control[@"guitarYAMNetGenericScore"] floatValue],
+                      [control[@"guitarStemControl"] floatValue], playbackTime);
+            }
+        } else if (hiveSelected) {
+            NSLog(@"[GuitarVisual] 深空蜂巢 %@ 吉他触发结束; playback=%.2fs",
+                  usingDemucs ? (phoneDemucsControl ? @"Phone Demucs" : @"Demucs") : @"YAMNet", playbackTime);
+        }
+    }
+    NSInteger playbackLogBucket = (NSInteger)floor(playbackTime / 2.0);
+    if (hiveSelected && hasGuitarTimeline && playbackLogBucket != self.dedicatedGuitarLastScoreLogSecond) {
+        self.dedicatedGuitarLastScoreLogSecond = playbackLogBucket;
+        NSInteger playbackSecond = (NSInteger)floor(playbackTime);
+        if (usingDemucs) {
+            NSLog(@"[GuitarVisual] %@ full-song check: time=%02ld:%02ld control=%.3f triggerThreshold=0.12",
+                  phoneDemucsControl ? @"Phone Demucs" : @"Desktop Demucs",
+                  (long)(playbackSecond / 60), (long)(playbackSecond % 60),
+                  [control[@"guitarStemControl"] floatValue]);
+        } else {
+            NSLog(@"[GuitarVisual] YAMNet guitar check: time=%02ld:%02ld electric=%.4f guitar=%.4f max=%.4f control=%.3f triggerThreshold=0.12",
+                  (long)(playbackSecond / 60), (long)(playbackSecond % 60),
+                  [control[@"guitarYAMNetElectricScore"] floatValue],
+                  [control[@"guitarYAMNetGenericScore"] floatValue],
+                  [control[@"guitarYAMNetScore"] floatValue],
+                  [control[@"guitarStemControl"] floatValue]);
+        }
+    } else if (hiveSelected && !hasGuitarTimeline && playbackTime >= 174.0 && playbackTime < 210.0 &&
+               playbackLogBucket != self.dedicatedGuitarLastScoreLogSecond) {
+        self.dedicatedGuitarLastScoreLogSecond = playbackLogBucket;
+        NSLog(@"[GuitarVisual] guitar analysis 尚未就绪: time=%.2fs", playbackTime);
+    }
+    if (!hiveSelected) self.dedicatedGuitarVisualActive = NO;
+    return control;
+}
 
 - (void)ensureMusicFeatureScopeGuitarECGInOverlay:(UIView *)overlay {
     if (self.musicFeatureScopeGuitarECGView.superview == overlay) return;
@@ -860,9 +1028,7 @@ static void ASBRunImpactAnimation(CAShapeLayer *layer,
                     params[@"transient"] = @(self.latestAudioFeatures.transientStrength);
                     params[@"harmonic"] = @(self.latestAudioFeatures.harmonicStrength);
                     params[@"noise"] = @(self.latestAudioFeatures.noiseStrength);
-                    MusicItem *currentItem = self.currentIndex < self.displayedMusicItems.count ?
-                        self.displayedMusicItems[self.currentIndex] : nil;
-                    [params addEntriesFromDictionary:ASBGuitarStemControl(currentItem, self.player.currentTime)];
+                    [params addEntriesFromDictionary:[self guitarVisualControlForCurrentPlayback]];
                     [self.visualEffectManager setRenderParameters:params];
                 }
                 [self updateAudioActivityMeterOverlayWithFeatures:self.latestAudioFeatures];
@@ -899,9 +1065,7 @@ static void ASBRunImpactAnimation(CAShapeLayer *layer,
         params[@"transient"] = @(self.latestAudioFeatures.transientStrength);
         params[@"harmonic"] = @(self.latestAudioFeatures.harmonicStrength);
         params[@"noise"] = @(self.latestAudioFeatures.noiseStrength);
-        MusicItem *currentItem = self.currentIndex < self.displayedMusicItems.count ?
-            self.displayedMusicItems[self.currentIndex] : nil;
-        [params addEntriesFromDictionary:ASBGuitarStemControl(currentItem, self.player.currentTime)];
+        [params addEntriesFromDictionary:[self guitarVisualControlForCurrentPlayback]];
         [self.visualEffectManager setRenderParameters:params];
         [self updateAudioActivityMeterOverlayWithFeatures:self.latestAudioFeatures];
         [self updateMusicFeatureScopeOverlayWithFeatures:self.latestAudioFeatures];
@@ -1469,6 +1633,7 @@ static void ASBRunImpactAnimation(CAShapeLayer *layer,
         }
     }
 
+    self.player.htDemucsGuitarAnalysisEnabled = self.guitarDemucsOnDeviceExperimentEnabled;
     [self.player playWithFileName:playPath songName:songName artist:artist];
 
     if (self.isShowingVinylRecord) {

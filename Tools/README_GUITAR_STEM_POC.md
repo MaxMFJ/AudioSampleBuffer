@@ -127,4 +127,55 @@ python3 Tools/make_guitar_stem_control.py \
 ```
 
 This is a song-specific PoC based on the existing Demucs guitar stem. It does
-not yet run source separation on arbitrary songs in real time.
+not classify guitars in arbitrary songs.
+
+## Full-song A/B experiment in 深空蜂巢
+
+The app now bundles `LiRongHao-MingZi-GuitarControl-Full.csv`, a 50 ms control
+curve for the full 266.37 s Demucs Guitar stem. It is a small derived signal,
+not the WAV stem or the 45 MB separation model. Generate it from the full stem:
+
+```sh
+.venv-demucs/bin/python Tools/make_guitar_stem_control.py \
+  "build/guitar_poc/separated/htdemucs_6s/李荣浩 - 名字/guitar.wav" \
+  "AudioSampleBuffer/Resources/LiRongHao-MingZi-GuitarControl-Full.csv" \
+  --calibration-start-sec 174 --calibration-end-sec 210
+```
+
+The 174–210 s portion uses the previous PoC's scale and matches its 720
+control frames exactly. In the effect selector, choose 深空蜂巢 and tap its
+settings gear. The “电脑分离数据（Demucs）” switch is off by default. When enabled,
+only a track whose title/artist match 李荣浩《名字》 and duration is within 2 s of
+266.37 s uses the full-song curve. All other tracks continue to use YAMNet.
+Turning the switch off restores YAMNet control immediately; YAMNet analysis
+and its cache remain enabled while the experiment switch is on.
+
+The console prints `[GuitarVisual] Demucs full-song check` or
+`[GuitarVisual] YAMNet guitar check` every two seconds while 深空蜂巢 is selected.
+This is a one-song visual comparison, not evidence that a generic guitar
+detector works on other songs.
+
+## On-device Demucs handover experiment
+
+The settings panel has a separate **手机本地 Demucs（实验）** switch. With it
+enabled, any local song starts immediately while YAMNet remains the control
+source. In parallel, the app reads the track, runs the bundled
+HTDemucs6s Guitar Core ML model in 7-second chunks with 2 seconds of overlap,
+and writes only a 50 ms guitar control envelope into the app cache. When the
+full curve is ready, 深空蜂巢 switches sources at the current playback time;
+replays can reuse the content-hash cache. The existing **电脑分离数据（Demucs）**
+switch remains available for the bundled offline reference curve for 李荣浩《名字》.
+
+The model package is 186 MB and targets iOS 16, matching the app's minimum OS.
+The simulator app bundle is approximately 287 MB including both YAMNet and
+Demucs resources. The model is converted from the local `htdemucs_6s` checkpoint
+and emits the guitar source only. The Core ML package conversion passed its
+numerical comparison against the PyTorch wrapper on macOS, and the Xcode
+simulator build succeeds.
+
+This is wired for a real-device experiment, not yet accepted as a phone
+performance result: the connected iPhone was unavailable during this build, so
+on-device inference time, peak memory, thermal behavior, and the final visual
+handover still need to be measured on the phone. The phone cache stores only
+the derived control curve; it does not store a separated WAV or replace the
+original playback audio.

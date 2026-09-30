@@ -420,7 +420,9 @@ static const CGFloat kDefaultEffectRenderScale = 0.85f;
         _metalView.drawableSize = CGSizeMake(side, side);
     } else if (effectType == VisualEffectTypeCellularWormhole) {
         if (squareSize <= 0.0 || !isfinite(squareSize)) return;
-        CGFloat drawableSize = MAX(1.0, round(squareSize * screenScale * 0.55));
+        // Cellular Wormhole is fragment-heavy; keep square logical geometry
+        // while lowering pixel count to reduce sustained GPU load.
+        CGFloat drawableSize = MAX(1.0, round(squareSize * screenScale * 0.45));
         CGSize targetSize = CGSizeMake(drawableSize, drawableSize);
         if (!CGSizeEqualToSize(_metalView.drawableSize, targetSize)) {
             _metalView.drawableSize = targetSize;
@@ -576,7 +578,7 @@ static const CGFloat kDefaultEffectRenderScale = 0.85f;
                     NSInteger fps = [_savedPerformanceSettings[@"fps"] integerValue];
                     _metalView.preferredFramesPerSecond = fps > 0 ? MIN(fps, 30) : 30;
                 } else if (effectType == VisualEffectTypeCellularWormhole) {
-                    _metalView.preferredFramesPerSecond = 30;
+                    _metalView.preferredFramesPerSecond = 24;
                 } else if (effectType == VisualEffectTypeMirrorStrata) {
                     _metalView.preferredFramesPerSecond = 30;
                 } else if (effectType == VisualEffectTypeWormholeDrive) {
@@ -1059,7 +1061,9 @@ static const CGFloat kDefaultEffectRenderScale = 0.85f;
     if (_metalView && fps > 0) {
         BOOL cappedAtThirty = (_currentEffectType == VisualEffectTypeGlassResonance ||
                                _currentEffectType == VisualEffectTypeMirrorStrata);
-        _metalView.preferredFramesPerSecond = cappedAtThirty ? MIN(fps, 30) : fps;
+        BOOL cappedAtTwentyFour = (_currentEffectType == VisualEffectTypeCellularWormhole);
+        _metalView.preferredFramesPerSecond = cappedAtTwentyFour ? MIN(fps, 24) :
+                                               (cappedAtThirty ? MIN(fps, 30) : fps);
         NSLog(@"✅ 帧率已立即更新为 %ldfps", (long)fps);
     } else {
         NSLog(@"⚠️ 帧率无效或Metal视图未初始化");
