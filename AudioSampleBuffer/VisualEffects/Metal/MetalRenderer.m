@@ -2825,6 +2825,11 @@ static inline float MirrorStrataFollow(float current, float target, float dt,
 @property (nonatomic, assign) float impactStrength;
 @property (nonatomic, assign) float previousImpact;
 @property (nonatomic, assign) float climaxEnvelope;
+@property (nonatomic, assign) float guitarWaveAge;
+@property (nonatomic, assign) float guitarWaveStrength;
+@property (nonatomic, assign) float guitarEnvelope;
+@property (nonatomic, assign) float previousGuitarInput;
+@property (nonatomic, assign) NSTimeInterval guitarLastUpdateTime;
 @end
 
 @implementation CellularWormholeRenderer
@@ -2846,6 +2851,24 @@ static inline float MirrorStrataFollow(float current, float target, float dt,
     [super updateUniforms:time];
     Uniforms *u = (Uniforms *)self.uniformBuffer.contents;
     float dt = fmaxf(0.0f, fminf(u->time.y, 0.12f));
+    float guitarDT = self.guitarLastUpdateTime > 0.0 ?
+        (float)fmax(0.0, fmin(time - self.guitarLastUpdateTime, 0.12)) : (1.0f / 60.0f);
+    self.guitarLastUpdateTime = time;
+    NSDictionary *params = self.renderParameters ?: @{};
+    BOOL hasDedicatedGuitarStem = [params[@"guitarStemControlEnabled"] boolValue];
+    // Do not infer this one visual cue from the full mix: drums, voice and
+    // bass can never launch the guitar-only color wave.
+    float guitarInput = hasDedicatedGuitarStem ? [params[@"guitarStemControl"] floatValue] : 0.0f;
+    guitarInput = isfinite(guitarInput) ? fmaxf(0.0f, fminf(guitarInput, 1.0f)) : 0.0f;
+    float guitarRate = guitarInput > self.guitarEnvelope ? 18.0f : 1.4f;
+    self.guitarEnvelope += (guitarInput - self.guitarEnvelope) * (1.0f - expf(-guitarRate * guitarDT));
+    self.guitarWaveAge += guitarDT;
+    if (guitarInput > 0.22f && guitarInput - self.previousGuitarInput > 0.035f &&
+        (self.guitarWaveStrength == 0.0f || self.guitarWaveAge > 0.20f)) {
+        self.guitarWaveAge = 0.0f;
+        self.guitarWaveStrength = guitarInput;
+    }
+    self.previousGuitarInput = guitarInput;
     float input = fmaxf(u->categoryFeatures.y, u->activityMeter1.y);
     input = fmaxf(input, u->galaxyParams3.w);
     input = isfinite(input) ? fmaxf(0.0f, fminf(input, 1.0f)) : 0.0f;
@@ -2893,6 +2916,9 @@ static inline float MirrorStrataFollow(float current, float target, float dt,
     self.climaxEnvelope += (climaxTarget - self.climaxEnvelope) *
                            (1.0f - expf(-climaxRate * dt));
     u->galaxyParams2.z = self.climaxEnvelope;
+    u->galaxyParams2.x = fminf(self.guitarWaveAge, 8.0f);
+    u->galaxyParams2.y = self.guitarEnvelope;
+    u->galaxyParams3.z = self.guitarWaveStrength;
     float coreRadius = [self.renderParameters[@"coreRadius"] floatValue];
     if (!isfinite(coreRadius) || coreRadius <= 0.0f) coreRadius = 0.32f;
     float poreCount = [self.renderParameters[@"poreCount"] floatValue];

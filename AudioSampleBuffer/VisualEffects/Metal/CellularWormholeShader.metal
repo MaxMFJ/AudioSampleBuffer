@@ -131,7 +131,23 @@ fragment float4 cellularWormholeFragment(RasterizerData in [[stage_in]],
     float nearLight = smoothstep(0.0, 0.55, wallRadius);
     float3 tint = mix(theme, deepTheme, nearLight * 0.72);
     float3 color = mix(float3(0.001, 0.004, 0.014), deepTheme, 0.08);
+    // The isolated lead-guitar control recolors the honeycomb while the note
+    // is present, then releases smoothly back to the original palette.
+    // Its onset launches a separate inner-to-outer colored front.
+    float guitarLevel = saturate(u.galaxyParams2.y);
+    float guitarAge = max(u.galaxyParams2.x, 0.0);
+    float guitarWaveRadius = core + guitarAge * 0.38;
+    float guitarReached = 1.0 - smoothstep(guitarWaveRadius - 0.018,
+                                           guitarWaveRadius + 0.018, r);
+    float guitarWave = exp(-pow((r - guitarWaveRadius) / 0.018, 2.0))
+                     * exp(-guitarAge * 0.72)
+                     * saturate(u.galaxyParams3.z);
+    float3 guitarAccent = float3(1.0, 0.18, 0.52);
+    float guitarSurface = wall * membrane * guitarLevel * guitarReached * 0.52;
+    tint = mix(tint, guitarAccent, guitarLevel * guitarReached * 0.58);
     color += wall * membrane * tint * (0.30 + ridges * 0.45 + bass * 0.20);
+    color += guitarAccent * guitarWave * (0.42 + guitarLevel * 0.48);
+    color += wall * membrane * guitarAccent * guitarSurface;
     color += wall * detail * lip * highlight
            * (0.14 + poreSignal * 0.70 + beat * 0.20);
     color += wall * detail * softGlow * tint * (0.06 + energy * 0.10);

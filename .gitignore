@@ -1,0 +1,12 @@
+# Local Python environments
+.venv/
+.venv-*/
+
+# Generated Xcode build and index data (kept locally, not versioned)
+.deriveddata/
+build/DerivedData/
+build/*DerivedData/
+build/VerifyDerivedData/
+
+# Local source-separation experiments, weights, and derived audio
+build/guitar_poc/

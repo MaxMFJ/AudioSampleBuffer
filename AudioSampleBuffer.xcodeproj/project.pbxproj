@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		A1AG000130C3000000000001 /* LiRongHao-MingZi-GuitarControl.csv in Resources */ = {isa = PBXBuildFile; fileRef = A1AG000130C3000000000002 /* LiRongHao-MingZi-GuitarControl.csv */; };
 		C31109012EAD600000D59E12 /* GlassResonanceShader.metal in Sources */ = {isa = PBXBuildFile; fileRef = C31109022EAD600000D59E12 /* GlassResonanceShader.metal */; };
 		C3110A012EAD700000D59E12 /* MirrorStrataShader.metal in Sources */ = {isa = PBXBuildFile; fileRef = C3110A022EAD700000D59E12 /* MirrorStrataShader.metal */; };
 		C31100012EAD600000D59E12 /* CellularWormholeShader.metal in Sources */ = {isa = PBXBuildFile; fileRef = C31100022EAD600000D59E12 /* CellularWormholeShader.metal */; };
@@ -178,6 +179,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		A1AG000130C3000000000002 /* LiRongHao-MingZi-GuitarControl.csv */ = {isa = PBXFileReference; lastKnownFileType = text; path = Resources/LiRongHao-MingZi-GuitarControl.csv; sourceTree = "<group>"; };
 		C31109022EAD600000D59E12 /* GlassResonanceShader.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = GlassResonanceShader.metal; sourceTree = "<group>"; };
 		C3110A022EAD700000D59E12 /* MirrorStrataShader.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = MirrorStrataShader.metal; sourceTree = "<group>"; };
 		C31109032EAD600000D59E12 /* GlassResonanceAudio.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = GlassResonanceAudio.h; sourceTree = "<group>"; };
@@ -867,6 +869,7 @@
 		64C5445F28C838D100C23393 /* AudioSampleBuffer */ = {
 			isa = PBXGroup;
 			children = (
+				A1AG000130C3000000000002 /* LiRongHao-MingZi-GuitarControl.csv */,
 				4CCFF6012F3B1DAC004FFF9A /* AI */,
 				4C66E6D82E8A89E8003200DA /* Audio */,
 				90A1000130C1000000000001 /* MotionPhoto */,
@@ -1077,6 +1080,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A1AG000130C3000000000001 /* LiRongHao-MingZi-GuitarControl.csv in Resources */,
 				64C5447028C838D400C23393 /* LaunchScreen.storyboard in Resources */,
 				64C5446D28C838D400C23393 /* Assets.xcassets in Resources */,
 				4C65487C2EA0C500006DD8DD /* test_qqmusic_lyrics.sh in Resources */,

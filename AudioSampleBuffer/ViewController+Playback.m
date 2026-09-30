@@ -67,6 +67,48 @@ static NSDictionary<NSString *, NSNumber *> *ASBActivityMeterParameters(AudioFea
     };
 }
 
+// PoC control stem for 李荣浩《名字》, separated from 02:54 to 03:30.
+// This is a control-only feature curve: the isolated WAV is never mixed into
+// playback, and the target song bypasses whole-mix guitar guesses for this cue.
+static NSDictionary<NSString *, NSNumber *> *ASBGuitarStemControl(MusicItem *item,
+                                                                  NSTimeInterval playbackTime) {
+    if (!item) return @{@"guitarStemControlEnabled": @NO, @"guitarStemControl": @0.0};
+    NSString *identity = [NSString stringWithFormat:@"%@ %@ %@", item.fileName ?: @"",
+                          item.displayName ?: @"", item.artist ?: @""];
+    BOOL artistMatches = item.artist.length > 0 ? [item.artist containsString:@"李荣浩"] :
+                                                   [identity containsString:@"李荣浩"];
+    BOOL isTargetSong = [identity containsString:@"名字"] && artistMatches;
+    static NSArray<NSNumber *> *envelope;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        NSURL *url = [[NSBundle mainBundle] URLForResource:@"LiRongHao-MingZi-GuitarControl"
+                                             withExtension:@"csv"];
+        NSString *contents = url ? [NSString stringWithContentsOfURL:url
+                                                            encoding:NSUTF8StringEncoding
+                                                               error:nil] : nil;
+        NSMutableArray<NSNumber *> *values = [NSMutableArray array];
+        for (NSString *token in [contents componentsSeparatedByCharactersInSet:
+                                 [NSCharacterSet characterSetWithCharactersInString:@",\n\r"]]) {
+            double value = token.doubleValue;
+            if (token.length > 0 && isfinite(value)) [values addObject:@(fmax(0.0, fmin(value, 1.0)))];
+        }
+        envelope = values.copy ?: @[];
+    });
+
+    float level = 0.0f;
+    const NSTimeInterval stemStart = 174.0;
+    const NSTimeInterval stemDuration = 36.0;
+    if (isTargetSong && playbackTime >= stemStart && playbackTime < stemStart + stemDuration &&
+        envelope.count > 0) {
+        double position = (playbackTime - stemStart) * 20.0; // Generated at 50 ms/frame.
+        NSUInteger index = MIN((NSUInteger)position, envelope.count - 1);
+        NSUInteger next = MIN(index + 1, envelope.count - 1);
+        float fraction = (float)(position - index);
+        level = envelope[index].floatValue + (envelope[next].floatValue - envelope[index].floatValue) * fraction;
+    }
+    return @{@"guitarStemControlEnabled": @(isTargetSong), @"guitarStemControl": @(level)};
+}
+
 static NSDictionary<NSString *, NSNumber *> *ASBMusicFeatureScopeValues(AudioFeatures *features) {
     if (!features) return @{};
     CGFloat low = ASBClamp01(MAX(features.subBassEnergy, features.subOnlyEnergy));
@@ -818,6 +860,9 @@ static void ASBRunImpactAnimation(CAShapeLayer *layer,
                     params[@"transient"] = @(self.latestAudioFeatures.transientStrength);
                     params[@"harmonic"] = @(self.latestAudioFeatures.harmonicStrength);
                     params[@"noise"] = @(self.latestAudioFeatures.noiseStrength);
+                    MusicItem *currentItem = self.currentIndex < self.displayedMusicItems.count ?
+                        self.displayedMusicItems[self.currentIndex] : nil;
+                    [params addEntriesFromDictionary:ASBGuitarStemControl(currentItem, self.player.currentTime)];
                     [self.visualEffectManager setRenderParameters:params];
                 }
                 [self updateAudioActivityMeterOverlayWithFeatures:self.latestAudioFeatures];
@@ -854,6 +899,9 @@ static void ASBRunImpactAnimation(CAShapeLayer *layer,
         params[@"transient"] = @(self.latestAudioFeatures.transientStrength);
         params[@"harmonic"] = @(self.latestAudioFeatures.harmonicStrength);
         params[@"noise"] = @(self.latestAudioFeatures.noiseStrength);
+        MusicItem *currentItem = self.currentIndex < self.displayedMusicItems.count ?
+            self.displayedMusicItems[self.currentIndex] : nil;
+        [params addEntriesFromDictionary:ASBGuitarStemControl(currentItem, self.player.currentTime)];
         [self.visualEffectManager setRenderParameters:params];
         [self updateAudioActivityMeterOverlayWithFeatures:self.latestAudioFeatures];
         [self updateMusicFeatureScopeOverlayWithFeatures:self.latestAudioFeatures];

@@ -32,6 +32,7 @@ let featureOffsets = ["low": 388, "hit": 389, "melody": 390, "haze": 391,
                       "pluck": 404, "sound-wall": 405]
 let featureCases = featureOffsets.keys.sorted().map { ($0, Float(0.18)) }
 let cases = [("quiet",Float(0)),("beat",Float(0.9)),
+                      ("guitar-stem",Float(0)),
                       ("silent-stale-features",Float(0)),
                       ("single-band",Float(0)),("motion",Float(0)),
                       ("climax",Float(0.55)),
@@ -51,6 +52,12 @@ for (name, level) in cases {
  values[360+7]=1.15; values[360+11]=level; values[383]=1.08
  values[360+14]=level*0.7; values[360+15]=level*0.5; values[360+16]=level*0.6;values[360+17]=level*0.7
  if name == "single-band" { values[40+24*4]=1; values[41+24*4]=1 }
+ if name == "guitar-stem" {
+     // Representative envelope from the isolated 02:54–03:30 Guitar stem.
+     values[364] = 0.32  // outward wave age
+     values[365] = 0.82  // smoothed guitar level
+     values[370] = 0.92  // guitar onset strength
+ }
  if let offset = featureOffsets[name] { values[offset] = 0.85 }
  // Keep sweep active in the baseline to isolate pan's effect on its shafts.
  if name == "feature-base" || featureOffsets[name] != nil || name == "impact-late" {
@@ -98,7 +105,7 @@ for (name, level) in cases {
 let quiet = frames["quiet"]!
 precondition(quiet == frames["silent-stale-features"]!,
              "Stale analysis features must not trigger music layers in silence")
-for name in ["beat", "single-band", "motion", "climax", "llm-theme"] {
+for name in ["beat", "guitar-stem", "single-band", "motion", "climax", "llm-theme"] {
     let changed = zip(quiet, frames[name]!).filter { $0 != $1 }.count
     precondition(changed > 100, "Audio input failed to change the rendered tunnel")
     print("\(name): \(changed) changed color channels")
