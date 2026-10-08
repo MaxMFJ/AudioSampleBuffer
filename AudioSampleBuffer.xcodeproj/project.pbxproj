@@ -464,7 +464,7 @@
 		A1A7000130C3000000000008 /* YAMNet.mlpackage */ = {isa = PBXFileReference; lastKnownFileType = wrapper.mlpackage; path = YAMNet.mlpackage; sourceTree = "<group>"; };
 		A1AD000130C3000000000003 /* HTDemucsGuitarAnalyzer.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = HTDemucsGuitarAnalyzer.m; sourceTree = "<group>"; };
 		A1AD000130C3000000000004 /* HTDemucsGuitarAnalyzer.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = HTDemucsGuitarAnalyzer.h; sourceTree = "<group>"; };
-		A1AD000130C3000000000005 /* HTDemucs6s_Guitar_iOS16.mlpackage */ = {isa = PBXFileReference; lastKnownFileType = wrapper.mlpackage; path = HTDemucs6s_Guitar_iOS16.mlpackage; sourceTree = "<group>"; };
+		A1AD000130C3000000000005 /* HTDemucs6s_Guitar_iOS16.mlpackage */ = {isa = PBXFileReference; lastKnownFileType = wrapper.mlpackage; path = ../Models/HTDemucs6s_Guitar_iOS16.mlpackage; sourceTree = "<group>"; };
 		8A5F000130A2000000000001 /* ViewController+Private.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "ViewController+Private.h"; sourceTree = "<group>"; };
 		8A5F000130A2000000000002 /* ViewController+Playback.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = "ViewController+Playback.m"; sourceTree = "<group>"; };
 		8A5F000130A2000000000003 /* ViewController+Lyrics.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = "ViewController+Lyrics.m"; sourceTree = "<group>"; };
