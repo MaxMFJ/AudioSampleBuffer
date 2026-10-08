@@ -183,7 +183,8 @@
     // 深空蜂巢的齿轮用于切换吉他控制数据源。
     BOOL shouldShowSettings = (_effectInfo.type == VisualEffectTypeGalaxy || 
                                _effectInfo.type == VisualEffectTypeCyberPunk ||
-                               _effectInfo.type == VisualEffectTypeCellularWormhole);
+                               _effectInfo.type == VisualEffectTypeCellularWormhole ||
+                               _effectInfo.type == VisualEffectTypeCoverDotMatrix);
     _configButton.hidden = !shouldShowSettings;
 }
 
@@ -254,6 +255,15 @@
         case VisualEffectTypeMirrorStrata:
             [self drawMirrorStrataPreview:context size:size];
             break;
+        case VisualEffectTypeCoverDotMatrix:
+            [self drawCoverDotMatrixPreview:context size:size];
+            break;
+        case VisualEffectTypeLiquidPigment:
+            [self drawLiquidPigmentPreview:context size:size];
+            break;
+        case VisualEffectTypeOpticalDarkroom:
+            [self drawOpticalDarkroomPreview:context size:size];
+            break;
         case VisualEffectTypeGlassResonance:
             [self drawGlassResonancePreview:context size:size];
             break;
@@ -311,6 +321,92 @@
         CGContextAddPath(context, path.CGPath);
         CGContextStrokePath(context);
     }
+}
+
+- (void)drawCoverDotMatrixPreview:(CGContextRef)context size:(CGSize)size {
+    CGContextSetRGBFillColor(context, 0.012, 0.014, 0.022, 1.0);
+    CGContextFillRect(context, (CGRect){CGPointZero, size});
+    CGFloat cell = size.width / 12.0;
+    for (NSInteger y = 0; y < 12; y++) {
+        for (NSInteger x = 0; x < 12; x++) {
+            CGFloat hue = (CGFloat)(x + y * 0.45) / 16.0;
+            UIColor *color = [UIColor colorWithHue:hue saturation:0.72 brightness:0.38 + 0.5 * (CGFloat)y / 12.0 alpha:0.95];
+            CGContextSetFillColorWithColor(context, color.CGColor);
+            CGFloat radius = cell * (0.28 + 0.08 * sin((x + y) * 0.7));
+            CGContextFillEllipseInRect(context, CGRectMake(x * cell + (cell-radius)*0.5,
+                                                            y * cell + (cell-radius)*0.5,
+                                                            radius, radius));
+        }
+    }
+}
+
+- (void)drawLiquidPigmentPreview:(CGContextRef)context size:(CGSize)size {
+    CGContextSetRGBFillColor(context, 0.006, 0.008, 0.016, 1.0);
+    CGContextFillRect(context, (CGRect){CGPointZero, size});
+    CGContextSaveGState(context);
+    CGContextSetBlendMode(context, kCGBlendModeScreen);
+
+    UIBezierPath *cyan = [UIBezierPath bezierPath];
+    [cyan moveToPoint:CGPointMake(-size.width * 0.1, size.height * 0.56)];
+    [cyan addCurveToPoint:CGPointMake(size.width * 0.77, size.height * 0.43)
+            controlPoint1:CGPointMake(size.width * 0.26, size.height * 0.20)
+            controlPoint2:CGPointMake(size.width * 0.50, size.height * 0.79)];
+    cyan.lineWidth = size.width * 0.17;
+    cyan.lineCapStyle = kCGLineCapRound;
+    [[UIColor colorWithRed:0.04 green:0.62 blue:0.92 alpha:0.48] setStroke];
+    [cyan stroke];
+
+    UIBezierPath *rose = [UIBezierPath bezierPath];
+    [rose moveToPoint:CGPointMake(size.width * 0.16, size.height * 0.91)];
+    [rose addCurveToPoint:CGPointMake(size.width * 0.94, size.height * 0.27)
+            controlPoint1:CGPointMake(size.width * 0.30, size.height * 0.56)
+            controlPoint2:CGPointMake(size.width * 0.72, size.height * 0.71)];
+    rose.lineWidth = size.width * 0.12;
+    rose.lineCapStyle = kCGLineCapRound;
+    [[UIColor colorWithRed:0.86 green:0.12 blue:0.48 alpha:0.42] setStroke];
+    [rose stroke];
+
+    UIBezierPath *amber = [UIBezierPath bezierPath];
+    [amber moveToPoint:CGPointMake(size.width * 0.05, size.height * 0.30)];
+    [amber addCurveToPoint:CGPointMake(size.width * 0.84, size.height * 0.78)
+            controlPoint1:CGPointMake(size.width * 0.38, size.height * 0.15)
+            controlPoint2:CGPointMake(size.width * 0.48, size.height * 0.92)];
+    amber.lineWidth = size.width * 0.075;
+    amber.lineCapStyle = kCGLineCapRound;
+    [[UIColor colorWithRed:1.0 green:0.48 blue:0.12 alpha:0.35] setStroke];
+    [amber stroke];
+    CGContextRestoreGState(context);
+}
+
+- (void)drawOpticalDarkroomPreview:(CGContextRef)context size:(CGSize)size {
+    CGContextSaveGState(context);
+    CGContextSetRGBFillColor(context, 0.008, 0.015, 0.028, 1);
+    CGContextFillRect(context, (CGRect){CGPointZero, size});
+    NSArray<UIColor *> *colors = @[
+        [UIColor colorWithRed:0.05 green:0.77 blue:0.82 alpha:1],
+        [UIColor colorWithRed:0.45 green:0.38 blue:0.88 alpha:1],
+        [UIColor colorWithRed:1.0 green:0.36 blue:0.12 alpha:1]];
+    for (NSInteger i = 0; i < 3; ++i) {
+        CGFloat x = size.width * (0.20 + i * 0.28);
+        UIBezierPath *ribbon = [UIBezierPath bezierPath];
+        [ribbon moveToPoint:CGPointMake(x + size.width * 0.13, -4)];
+        [ribbon addCurveToPoint:CGPointMake(x - size.width * 0.10, size.height * 0.86)
+                 controlPoint1:CGPointMake(x - size.width * 0.40, size.height * 0.32)
+                 controlPoint2:CGPointMake(x + size.width * 0.36, size.height * 0.46)];
+        CGContextSetShadowWithColor(context, CGSizeZero, 8, colors[i].CGColor);
+        [[colors[i] colorWithAlphaComponent:0.45] setStroke];
+        ribbon.lineWidth = size.width * 0.16;
+        [ribbon stroke];
+        CGContextSetShadowWithColor(context, CGSizeZero, 3, colors[i].CGColor);
+        [[colors[i] colorWithAlphaComponent:0.90] setStroke];
+        ribbon.lineWidth = 1.0;
+        [ribbon stroke];
+    }
+    CGContextSetShadowWithColor(context, CGSizeZero, 4, UIColor.whiteColor.CGColor);
+    CGContextSetRGBFillColor(context, 0.85, 0.93, 1, 0.88);
+    CGContextFillEllipseInRect(context, CGRectMake(size.width * 0.31, size.height * 0.29, 2, 2));
+    CGContextFillEllipseInRect(context, CGRectMake(size.width * 0.60, size.height * 0.48, 2, 2));
+    CGContextRestoreGState(context);
 }
 
 - (void)drawGlassResonancePreview:(CGContextRef)context size:(CGSize)size {

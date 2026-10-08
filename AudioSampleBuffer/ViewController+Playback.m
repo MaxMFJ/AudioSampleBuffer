@@ -199,20 +199,36 @@ static NSDictionary<NSString *, NSNumber *> *ASBPhoneDemucsVisualControl(MusicIt
                                                                          NSTimeInterval playbackTime,
                                                                          NSDictionary *analysis) {
     if (!item || ![analysis[@"frames"] isKindOfClass:NSArray.class]) return nil;
-    NSArray<NSNumber *> *frames = analysis[@"frames"];
     BOOL matchingDuration = isfinite(duration) && fabs(duration - [analysis[@"duration_sec"] doubleValue]) < 2.0;
-    if (!matchingDuration || frames.count == 0) return nil;
-    float level = 0.0f;
-    if (playbackTime >= 0.0 && playbackTime < duration) {
-        double position = playbackTime / MAX(0.001, [analysis[@"frame_hop_sec"] doubleValue]);
+    if (!matchingDuration) return nil;
+    double hop = [analysis[@"frame_hop_sec"] doubleValue];
+    if (!isfinite(hop) || hop <= 0.0) hop = 0.05;
+    NSDictionary *stems = [analysis[@"stems"] isKindOfClass:NSDictionary.class] ? analysis[@"stems"] : @{};
+    float (^sampleCurve)(NSArray<NSNumber *> *) = ^float(NSArray<NSNumber *> *frames) {
+        if (frames.count == 0 || playbackTime < 0.0 || playbackTime >= duration) return 0.0f;
+        double position = playbackTime / hop;
         NSUInteger index = MIN((NSUInteger)position, frames.count - 1);
         NSUInteger next = MIN(index + 1, frames.count - 1);
-        level = frames[index].floatValue + (frames[next].floatValue - frames[index].floatValue) *
-                (float)(position - floor(position));
-    }
-    return @{@"guitarStemControlEnabled": @YES,
-             @"guitarStemControl": @(ASBClamp01(level)),
-             @"guitarStemControlSource": @3};
+        return ASBClamp01(frames[index].floatValue +
+            (frames[next].floatValue - frames[index].floatValue) * (float)(position - floor(position)));
+    };
+    NSDictionary *guitarStem = [stems[@"guitar"] isKindOfClass:NSDictionary.class] ? stems[@"guitar"] : nil;
+    NSDictionary *pianoStem = [stems[@"piano"] isKindOfClass:NSDictionary.class] ? stems[@"piano"] : nil;
+    NSDictionary *drumsStem = [stems[@"drums"] isKindOfClass:NSDictionary.class] ? stems[@"drums"] : nil;
+    NSArray<NSNumber *> *guitarFrames = [guitarStem[@"frames"] isKindOfClass:NSArray.class] ? guitarStem[@"frames"] : analysis[@"frames"];
+    NSArray<NSNumber *> *pianoFrames = [pianoStem[@"frames"] isKindOfClass:NSArray.class] ? pianoStem[@"frames"] : analysis[@"piano_frames"];
+    NSArray<NSNumber *> *drumsFrames = [drumsStem[@"frames"] isKindOfClass:NSArray.class] ? drumsStem[@"frames"] : analysis[@"drums_frames"];
+    BOOL hasGuitar = guitarFrames.count > 0;
+    BOOL hasPiano = pianoFrames.count > 0;
+    BOOL hasDrums = drumsFrames.count > 0;
+    if (!hasGuitar && !hasPiano && !hasDrums) return nil;
+    return @{@"guitarStemControlEnabled": @(hasGuitar),
+             @"guitarStemControl": @(sampleCurve(guitarFrames ?: @[])),
+             @"guitarStemControlSource": @3,
+             @"pianoStemControlEnabled": @(hasPiano),
+             @"pianoStemControl": @(sampleCurve(pianoFrames ?: @[])),
+             @"drumsStemControlEnabled": @(hasDrums),
+             @"drumsStemControl": @(sampleCurve(drumsFrames ?: @[]))};
 }
 
 static NSDictionary<NSString *, NSNumber *> *ASBMusicFeatureScopeValues(AudioFeatures *features) {
@@ -515,17 +531,24 @@ static void ASBRunImpactAnimation(CAShapeLayer *layer,
     NSDictionary *analysis = self.player.lastYAMNetAnalysis;
     MusicItem *item = self.currentIndex >= 0 && self.currentIndex < (NSInteger)self.displayedMusicItems.count ?
                       self.displayedMusicItems[self.currentIndex] : nil;
-    NSDictionary *phoneDemucsControl = (self.guitarDemucsOnDeviceExperimentEnabled && analysis[@"patches"] != nil) ?
+    NSDictionary *phoneDemucsControl = self.guitarDemucsOnDeviceExperimentEnabled ?
         ASBPhoneDemucsVisualControl(item, self.player.duration, playbackTime,
-                                    self.player.lastHTDemucsGuitarAnalysis) : nil;
+                                    self.player.lastHTDemucsStemAnalysis) : nil;
     NSDictionary *demucsControl = self.guitarDemucsExperimentEnabled ?
         ASBMingZiDemucsVisualControl(item, self.player.duration, playbackTime) : nil;
-    NSDictionary *control = phoneDemucsControl ?: (self.guitarDemucsOnDeviceExperimentEnabled ?
-        ASBGuitarVisualControl(playbackTime, analysis) : (demucsControl ?: ASBGuitarVisualControl(playbackTime, analysis)));
+    NSMutableDictionary<NSString *, NSNumber *> *control = [(phoneDemucsControl ?: (self.guitarDemucsOnDeviceExperimentEnabled ?
+        ASBGuitarVisualControl(playbackTime, analysis) : (demucsControl ?: ASBGuitarVisualControl(playbackTime, analysis))) ?: @{}) mutableCopy];
+    control[@"songPlaybackTime"] = @(playbackTime);
+    control[@"songDuration"] = @(self.player.duration);
+    NSString *songKey = item.fileName.length > 0 ? item.fileName : (item.displayName ?: @"");
+    control[@"songIdentity"] = @((NSUInteger)(songKey.length > 0 ? songKey.hash : (NSUInteger)self.currentIndex + 1));
     BOOL usingDemucs = phoneDemucsControl != nil || (!self.guitarDemucsOnDeviceExperimentEnabled && demucsControl != nil);
     BOOL hiveSelected = self.visualEffectManager.currentEffectType == VisualEffectTypeCellularWormhole;
     BOOL hasYAMNetTimeline = analysis[@"patches"] != nil;
     BOOL hasGuitarTimeline = usingDemucs || hasYAMNetTimeline;
+    BOOL targetStemEffectSelected = hiveSelected ||
+        self.visualEffectManager.currentEffectType == VisualEffectTypeGlassResonance ||
+        self.visualEffectManager.currentEffectType == VisualEffectTypeMirrorStrata;
     BOOL active = hiveSelected && hasGuitarTimeline &&
                   [control[@"guitarStemControl"] floatValue] > 0.12f;
     if (active != self.dedicatedGuitarVisualActive) {
@@ -547,12 +570,39 @@ static void ASBRunImpactAnimation(CAShapeLayer *layer,
         }
     }
     NSInteger playbackLogBucket = (NSInteger)floor(playbackTime / 2.0);
+    if (targetStemEffectSelected && playbackLogBucket != self.separatedStemLastLogBucket) {
+        self.separatedStemLastLogBucket = playbackLogBucket;
+        NSInteger playbackSecond = (NSInteger)floor(playbackTime);
+        NSString *effectName = hiveSelected ? @"深空蜂巢" :
+            (self.visualEffectManager.currentEffectType == VisualEffectTypeGlassResonance ? @"玻璃回旋" : @"镜层回廊");
+        NSString *source = phoneDemucsControl ? @"PhoneDemucs" :
+            (usingDemucs ? @"DesktopDemucs" : (hasYAMNetTimeline ? @"YAMNet(fallback)" : @"pending"));
+        NSDictionary *stemAnalysis = self.player.lastHTDemucsStemAnalysis;
+        NSDictionary *stems = [stemAnalysis[@"stems"] isKindOfClass:NSDictionary.class] ? stemAnalysis[@"stems"] : @{};
+        NSDictionary *guitarEntry = [stems[@"guitar"] isKindOfClass:NSDictionary.class] ? stems[@"guitar"] : @{};
+        NSDictionary *pianoEntry = [stems[@"piano"] isKindOfClass:NSDictionary.class] ? stems[@"piano"] : @{};
+        NSDictionary *drumsEntry = [stems[@"drums"] isKindOfClass:NSDictionary.class] ? stems[@"drums"] : @{};
+        NSUInteger guitarFrames = [guitarEntry[@"frames"] isKindOfClass:NSArray.class] ? [guitarEntry[@"frames"] count] : 0;
+        NSUInteger pianoFrames = [pianoEntry[@"frames"] isKindOfClass:NSArray.class] ? [pianoEntry[@"frames"] count] : 0;
+        NSUInteger drumsFrames = [drumsEntry[@"frames"] isKindOfClass:NSArray.class] ? [drumsEntry[@"frames"] count] : 0;
+        NSLog(@"[StemVisual] effect=%@ source=%@ time=%02ld:%02ld guitar=%.3f piano=%.3f drums=%.3f phoneDemucsEnabled=%@ cachedFrames(g=%lu,p=%lu,d=%lu) duration=%.2f analysisDuration=%.2f",
+              effectName, source, (long)(playbackSecond / 60), (long)(playbackSecond % 60),
+              [control[@"guitarStemControl"] floatValue], [control[@"pianoStemControl"] floatValue],
+              [control[@"drumsStemControl"] floatValue], self.guitarDemucsOnDeviceExperimentEnabled ? @"YES" : @"NO",
+              (unsigned long)guitarFrames, (unsigned long)pianoFrames, (unsigned long)drumsFrames,
+              self.player.duration, [stemAnalysis[@"duration_sec"] doubleValue]);
+    }
     if (hiveSelected && hasGuitarTimeline && playbackLogBucket != self.dedicatedGuitarLastScoreLogSecond) {
         self.dedicatedGuitarLastScoreLogSecond = playbackLogBucket;
         NSInteger playbackSecond = (NSInteger)floor(playbackTime);
-        if (usingDemucs) {
-            NSLog(@"[GuitarVisual] %@ full-song check: time=%02ld:%02ld control=%.3f triggerThreshold=0.12",
-                  phoneDemucsControl ? @"Phone Demucs" : @"Desktop Demucs",
+        if (phoneDemucsControl) {
+            NSLog(@"[DemucsStems] time=%02ld:%02ld guitar=%.3f piano=%.3f drums=%.3f",
+                  (long)(playbackSecond / 60), (long)(playbackSecond % 60),
+                  [control[@"guitarStemControl"] floatValue],
+                  [control[@"pianoStemControl"] floatValue],
+                  [control[@"drumsStemControl"] floatValue]);
+        } else if (usingDemucs) {
+            NSLog(@"[GuitarVisual] Desktop Demucs full-song check: time=%02ld:%02ld control=%.3f triggerThreshold=0.12",
                   (long)(playbackSecond / 60), (long)(playbackSecond % 60),
                   [control[@"guitarStemControl"] floatValue]);
         } else {

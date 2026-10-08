@@ -23,6 +23,19 @@
 - 支持可视化参数调节与特效切换
 - 面向性能的渲染结构与特效管理器
 
+### 动态特效精选
+
+从深空蜂巢、玻璃折射、镜面纵深到液态胶片，项目提供多类音乐响应式视觉效果。
+
+<p align="center">
+  <img src="docs/assets/cellular-hive.gif" width="150" alt="深空蜂巢" />
+  <img src="docs/assets/glass-resonance.gif" width="150" alt="玻璃回旋" />
+  <img src="docs/assets/mirror-strata.gif" width="150" alt="镜层回廊" />
+  <img src="docs/assets/optical-darkroom-preview.gif" width="150" alt="光学暗房" />
+</p>
+
+[浏览全部精选动效与已注册特效目录](docs/VISUAL_EFFECTS.md) · [光学暗房说明](docs/OPTICAL_DARKROOM.md)
+
 ### 3) 歌词系统
 - LRC 解析、歌词行同步、UI 展示
 - QQ 音乐歌词接口封装（基于项目内实现）

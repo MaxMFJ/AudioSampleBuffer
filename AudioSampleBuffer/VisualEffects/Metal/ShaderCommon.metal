@@ -45,6 +45,10 @@ struct Uniforms {
     float4 activityMeter4; // (flatness, electricBassLine, electricGuitarTexture, distortedGuitar)
     float4 activityMeter5; // (pluckGrain, soundWall, reserved, reserved)
     float4 guitarWaves[8]; // Cellular Wormhole independent guitar waves: (age, strength, palette index, reserved)
+    float4 guitarPalette[4]; // Cellular Wormhole per-song LLM colors, RGB + reserved
+    float4 instrumentStems; // (guitar, piano, drums, any separated stem)
+    float4 stemPalette[3]; // LLM-mapped instrument accents: guitar, piano, drums
+    float4 pigmentEvents[16]; // (age, signed strength: piano + / drums -, x, y)
 };
 
 // AI 增强的 Uniforms（用于丁达尔效应等需要动态颜色的效果）

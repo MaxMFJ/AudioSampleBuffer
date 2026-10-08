@@ -75,9 +75,12 @@ extern NSString *const kAudioPlayerDidFinishYAMNetAnalysisNotification;
 @property (nonatomic, assign) BOOL yamnetAnalysisEnabled;
 @property (nonatomic, strong, nullable, readonly) NSDictionary *lastYAMNetAnalysis;
 
-/// Experimental on-device Demucs guitar analysis. Playback stays on YAMNet
-/// until the full-track Demucs curve has completed and been cached.
+/// Experimental on-device Demucs guitar/piano/drums analysis. Playback stays
+/// on YAMNet until all available full-track stem curves have been cached.
 @property (nonatomic, assign) BOOL htDemucsGuitarAnalysisEnabled;
+/// Timeline object with `stems.guitar`, `stems.piano`, and `stems.drums` curves.
+@property (nonatomic, strong, nullable, readonly) NSDictionary *lastHTDemucsStemAnalysis;
+/// Backward-compatible alias retained for existing guitar-only callers.
 @property (nonatomic, strong, nullable, readonly) NSDictionary *lastHTDemucsGuitarAnalysis;
 
 - (void)playWithFileName:(NSString *)fileName;

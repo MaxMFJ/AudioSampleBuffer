@@ -96,16 +96,25 @@ static float mirrorIdle(float farness, constant Uniforms &u) {
     float spec = saturate(u.audioData[clamp(int(farness * 79.99), 0, 79)].y);
     float low = u.galaxyParams1.x, mid = u.galaxyParams1.y, high = u.galaxyParams1.z;
     float energy = u.galaxyParams2.w, climax = u.galaxyParams2.z;
+    float piano = saturate(u.instrumentStems.y);
+    float guitar = saturate(u.instrumentStems.x);
     return saturate(spec * 0.22 + low * (1.0 - farness) * 0.14 + high * farness * 0.16
-                    + mid * 0.07 + energy * 0.05 + climax * 0.05);
+                    + mid * 0.07 + energy * 0.05 + climax * 0.05
+                    + piano * (0.10 + farness * 0.10) + guitar * (1.0 - farness) * 0.08);
 }
 
 static float3 mirrorNeon(float farness, float facing, constant Uniforms &u) {
     float wave = mirrorWave(farness, u);
     float idle = mirrorIdle(farness, u);
-    float punch = wave * 0.82 + idle * 0.28;
+    float drums = saturate(u.instrumentStems.z);
+    float punch = wave * 0.82 + idle * 0.28 + drums * (0.46 - farness * 0.20);
     float climax = u.galaxyParams2.z;
+    float guitar = saturate(u.instrumentStems.x);
+    float piano = saturate(u.instrumentStems.y);
     float3 neon = mix(mirrorAccent(u), mirrorPrimary(u), 0.34 + climax * 0.18);
+    neon = mix(neon, u.stemPalette[0].rgb, guitar * 0.62);
+    neon = mix(neon, u.stemPalette[1].rgb, piano * 0.42);
+    neon = mix(neon, u.stemPalette[2].rgb, drums * 0.52);
     neon *= 0.98 + climax * 0.12;
     float filament = exp(-pow(facing - 0.22, 2.0) / 0.08) + pow(max(1.0 - facing, 0.0), 1.8);
     return neon * punch * (1.18 + 1.85 * filament);

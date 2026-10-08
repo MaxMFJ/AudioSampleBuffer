@@ -40,6 +40,10 @@ typedef struct {
     vector_float4 activityMeter4; // (flatness, electricBassLine, electricGuitarTexture, distortedGuitar)
     vector_float4 activityMeter5; // (pluckGrain, soundWall, reserved, reserved)
     vector_float4 guitarWaves[8]; // Cellular Wormhole independent guitar waves: (age, strength, palette index, reserved)
+    vector_float4 guitarPalette[4]; // Cellular Wormhole per-song LLM colors, RGB + reserved
+    vector_float4 instrumentStems; // (guitar, piano, drums, any separated stem)
+    vector_float4 stemPalette[3]; // LLM-mapped instrument accents: guitar, piano, drums
+    vector_float4 pigmentEvents[16]; // (age, signed strength: piano + / drums -, x, y)
 } Uniforms;
 
 #define GlassTrailPointCount 28
@@ -388,6 +392,29 @@ typedef struct {
         [params[@"activityHarmonic"] floatValue],
         [params[@"activityNoise"] floatValue]
     };
+    BOOL hasGuitarStem = [params[@"guitarStemControlEnabled"] boolValue];
+    BOOL hasPianoStem = [params[@"pianoStemControlEnabled"] boolValue];
+    BOOL hasDrumsStem = [params[@"drumsStemControlEnabled"] boolValue];
+    float guitarStem = hasGuitarStem ? fmaxf(0.0f, fminf(1.0f, [params[@"guitarStemControl"] floatValue])) : 0.0f;
+    float pianoStem = hasPianoStem ? fmaxf(0.0f, fminf(1.0f, [params[@"pianoStemControl"] floatValue])) : 0.0f;
+    float drumsStem = hasDrumsStem ? fmaxf(0.0f, fminf(1.0f, [params[@"drumsStemControl"] floatValue])) : 0.0f;
+    uniforms->instrumentStems = (vector_float4){guitarStem, pianoStem, drumsStem,
+                                                 (hasGuitarStem || hasPianoStem || hasDrumsStem) ? 1.0f : 0.0f};
+    AIColorConfiguration *stemConfig = [MusicAIAnalyzer sharedAnalyzer].currentConfiguration;
+    vector_float3 stemColors[3] = {
+        (vector_float3){0.18f, 0.78f, 1.0f},
+        (vector_float3){0.90f, 0.76f, 1.0f},
+        (vector_float3){1.0f, 0.42f, 0.20f}
+    };
+    if (stemConfig && stemConfig.isLLMGenerated) {
+        stemColors[0] = stemConfig.coronaFilamentsColor * 0.55f + stemConfig.pulseRingColor * 0.45f;
+        stemColors[1] = stemConfig.volumetricBeamColor * 0.55f + stemConfig.topLightArrayColor * 0.45f;
+        stemColors[2] = stemConfig.rotatingBeamColor * 0.55f + stemConfig.edgeLightColor * 0.45f;
+    }
+    for (NSUInteger i = 0; i < 3; i++) {
+        uniforms->stemPalette[i] = (vector_float4){stemColors[i].x, stemColors[i].y,
+                                                    stemColors[i].z, 1.0f};
+    }
     uniforms->activityMeter2 = (vector_float4){
         [params[@"activityHigh"] floatValue],
         [params[@"activityElectric"] floatValue],
@@ -931,6 +958,350 @@ typedef struct {
     [encoder setFragmentBuffer:self.uniformBuffer offset:0 atIndex:0];
     
     // 绘制全屏四边形
+    [encoder drawPrimitives:MTLPrimitiveTypeTriangleStrip vertexStart:0 vertexCount:4];
+}
+
+@end
+
+@interface LiquidPigmentRenderer ()
+@property (nonatomic, assign) NSTimeInterval lastPigmentTime;
+@property (nonatomic, assign) float previousDrumLevel;
+@property (nonatomic, assign) float previousBassLevel;
+@property (nonatomic, assign) float hitSeed;
+@property (nonatomic, assign) BOOL hitArmed;
+@property (nonatomic, assign) float previousPianoLevel;
+@property (nonatomic, assign) BOOL pianoArmed;
+@property (nonatomic, assign) float rotationPhase;
+@property (nonatomic, strong) NSMutableArray<NSMutableDictionary<NSString *, NSNumber *> *> *pigmentEvents;
+@end
+
+@implementation LiquidPigmentRenderer
+
+- (void)updateUniforms:(NSTimeInterval)time {
+    [super updateUniforms:time];
+    Uniforms *uniforms = (Uniforms *)[self.uniformBuffer contents];
+    NSDictionary *parameters = self.renderParameters ?: @{};
+    float deltaTime = self.lastPigmentTime > 0.0 ?
+        (float)fminf(fmax(time - self.lastPigmentTime, 0.0), 0.10) : 0.0f;
+    self.lastPigmentTime = time;
+
+    if (!self.pigmentEvents) self.pigmentEvents = [NSMutableArray array];
+    for (NSInteger i = (NSInteger)self.pigmentEvents.count - 1; i >= 0; --i) {
+        NSMutableDictionary<NSString *, NSNumber *> *event = self.pigmentEvents[(NSUInteger)i];
+        float age = event[@"age"].floatValue + deltaTime;
+        event[@"age"] = @(age);
+        if (age > 6.0f) [self.pigmentEvents removeObjectAtIndex:(NSUInteger)i];
+    }
+
+    float drumLevel = fminf(fmaxf(uniforms->instrumentStems.z, 0.0f), 1.0f);
+    float guitarLevel = fminf(fmaxf(uniforms->instrumentStems.x, 0.0f), 1.0f);
+    float pianoLevel = fminf(fmaxf(uniforms->instrumentStems.y, 0.0f), 1.0f);
+    BOOL hasDrumStem = [parameters[@"drumsStemControlEnabled"] boolValue];
+    BOOL hasGuitarStem = [parameters[@"guitarStemControlEnabled"] boolValue];
+    BOOL hasPianoStem = [parameters[@"pianoStemControlEnabled"] boolValue];
+    float bassLevel = 0.0f;
+    float bassTransient = 0.0f;
+    for (NSUInteger i = 0; i < 12; ++i) {
+        bassLevel += uniforms->audioData[i].y;
+        bassTransient += uniforms->audioData[i].w;
+    }
+    bassLevel /= 12.0f;
+    bassTransient /= 12.0f;
+
+    float drumRise = drumLevel - self.previousDrumLevel;
+    float bassRise = bassLevel - self.previousBassLevel;
+    float pianoRise = pianoLevel - self.previousPianoLevel;
+    if ((hasDrumStem && drumLevel < 0.10f) || (!hasDrumStem && bassLevel < 0.025f)) {
+        self.hitArmed = YES;
+    }
+    BOOL stemKick = hasDrumStem && self.hitArmed && drumLevel > 0.16f && drumRise > 0.075f;
+    BOOL spectralKick = !hasDrumStem && self.hitArmed && bassLevel > 0.045f &&
+        (bassTransient > 0.012f || bassRise > 0.025f);
+    if (stemKick || spectralKick) {
+        float strength = fminf(1.0f, fmaxf(0.42f, hasDrumStem ? drumLevel : bassLevel * 9.0f));
+        self.hitSeed += 0.618034f;
+        if (self.hitSeed >= 1.0f) self.hitSeed -= 1.0f;
+        self.hitArmed = NO;
+        float x = ((float)fmod(self.hitSeed * 1.73f + 0.19f, 1.0f) - 0.5f) * 1.40f;
+        float y = ((float)fmod(self.hitSeed * 2.31f + 0.57f, 1.0f) - 0.5f) * 1.15f;
+        [self.pigmentEvents addObject:[@{@"age": @0.0f, @"strength": @(-strength),
+                                             @"x": @(x), @"y": @(y)} mutableCopy]];
+    }
+    if ((hasPianoStem && pianoLevel < 0.055f) || (!hasPianoStem && pianoLevel < 0.02f)) {
+        self.pianoArmed = YES;
+    }
+    if (hasPianoStem && self.pianoArmed && pianoLevel > 0.11f && pianoRise > 0.035f) {
+        self.hitSeed = fmodf(self.hitSeed + 0.381966f, 1.0f);
+        float x = ((float)fmod(self.hitSeed * 2.17f + 0.13f, 1.0f) - 0.5f) * 1.35f;
+        float y = ((float)fmod(self.hitSeed * 3.11f + 0.41f, 1.0f) - 0.5f) * 1.28f;
+        float strength = fminf(1.0f, fmaxf(0.38f, pianoLevel));
+        [self.pigmentEvents addObject:[@{@"age": @0.0f, @"strength": @(strength),
+                                             @"x": @(x), @"y": @(y)} mutableCopy]];
+        self.pianoArmed = NO;
+    }
+    while (self.pigmentEvents.count > 16) [self.pigmentEvents removeObjectAtIndex:0];
+    self.previousDrumLevel = drumLevel;
+    self.previousBassLevel = bassLevel;
+    self.previousPianoLevel = pianoLevel;
+
+    float flowSpeed = [parameters[@"pigmentFlowSpeed"] respondsToSelector:@selector(floatValue)] ?
+        [parameters[@"pigmentFlowSpeed"] floatValue] : 0.58f;
+    float opacity = [parameters[@"pigmentOpacity"] respondsToSelector:@selector(floatValue)] ?
+        [parameters[@"pigmentOpacity"] floatValue] : 0.72f;
+    float sensitivity = [parameters[@"audioSensitivity"] respondsToSelector:@selector(floatValue)] ?
+        [parameters[@"audioSensitivity"] floatValue] : 1.0f;
+    float midEnergy = 0.0f;
+    for (NSUInteger i = 18; i < 48; ++i) midEnergy += uniforms->audioData[i].y;
+    midEnergy = fminf(fmaxf(midEnergy / 30.0f, 0.0f), 1.0f);
+    float rotationRate = 0.055f + 0.075f * flowSpeed + 0.045f * midEnergy;
+    self.rotationPhase = fmodf(self.rotationPhase + deltaTime * rotationRate, 6.2831853f);
+    uniforms->galaxyParams1 = (vector_float4){flowSpeed, opacity, sensitivity, self.rotationPhase};
+    uniforms->galaxyParams2 = (vector_float4){0.0f, 0.0f, self.hitSeed, 0.0f};
+    uniforms->galaxyParams3 = (vector_float4){guitarLevel, hasGuitarStem ? 1.0f : 0.0f,
+                                               hasPianoStem ? 1.0f : 0.0f, 0.0f};
+    for (NSUInteger i = 0; i < 16; ++i) {
+        vector_float4 encoded = {0.0f, 0.0f, 0.0f, 0.0f};
+        if (i < self.pigmentEvents.count) {
+            NSDictionary<NSString *, NSNumber *> *event = self.pigmentEvents[i];
+            encoded = (vector_float4){event[@"age"].floatValue, event[@"strength"].floatValue,
+                                      event[@"x"].floatValue, event[@"y"].floatValue};
+        }
+        uniforms->pigmentEvents[i] = encoded;
+    }
+}
+
+- (void)setupPipeline {
+    MTLRenderPipelineDescriptor *descriptor = [[MTLRenderPipelineDescriptor alloc] init];
+    descriptor.label = @"LiquidPigment";
+    descriptor.vertexFunction = [self.defaultLibrary newFunctionWithName:@"neon_vertex"];
+    descriptor.fragmentFunction = [self.defaultLibrary newFunctionWithName:@"liquidPigmentFragment"];
+    descriptor.colorAttachments[0].pixelFormat = self.metalView.colorPixelFormat;
+    descriptor.sampleCount = self.metalView.sampleCount;
+    descriptor.depthAttachmentPixelFormat = self.metalView.depthStencilPixelFormat;
+    NSError *error = nil;
+    self.pipelineState = [self.device newRenderPipelineStateWithDescriptor:descriptor error:&error];
+    if (!self.pipelineState) NSLog(@"LiquidPigment pipeline creation failed: %@", error);
+}
+
+- (void)encodeRenderCommands:(id<MTLRenderCommandEncoder>)encoder {
+    if (!self.pipelineState) return;
+    [encoder setRenderPipelineState:self.pipelineState];
+    [encoder setVertexBuffer:self.uniformBuffer offset:0 atIndex:0];
+    [encoder setFragmentBuffer:self.uniformBuffer offset:0 atIndex:0];
+    [encoder drawPrimitives:MTLPrimitiveTypeTriangleStrip vertexStart:0 vertexCount:4];
+}
+
+@end
+
+@interface OpticalDarkroomRenderer ()
+@property (nonatomic, assign) NSTimeInterval previousPlaybackTime;
+@property (nonatomic, assign) BOOL hasPlaybackSample;
+@property (nonatomic, assign) NSUInteger previousSongIdentity;
+@property (nonatomic, assign) float guitarExposure;
+@property (nonatomic, assign) float pianoExposure;
+@property (nonatomic, assign) float drumsExposure;
+@property (nonatomic, assign) float dspExposure;
+@property (nonatomic, assign) float filmFlow;
+@property (nonatomic, assign) NSTimeInterval lastFilmFrameTime;
+@property (nonatomic, assign) NSTimeInterval lastPlaybackTickTime;
+@property (nonatomic, assign) BOOL hasFilmFrame;
+@property (nonatomic, assign) float smoothFilmGuitar;
+@property (nonatomic, assign) float smoothFilmHarmonic;
+@property (nonatomic, assign) float lastPianoLevel;
+@property (nonatomic, assign) float lastDrumLevel;
+@property (nonatomic, assign) float lastPianoBirth;
+@property (nonatomic, assign) float lastDrumBirth;
+@property (nonatomic, assign) NSUInteger exposureSequence;
+@property (nonatomic, strong) NSMutableArray<NSDictionary *> *filmEvents;
+@property (nonatomic, strong) NSMutableArray<NSDictionary *> *filmMarks;
+@end
+
+@implementation OpticalDarkroomRenderer
+
+- (void)updateUniforms:(NSTimeInterval)time {
+    [super updateUniforms:time];
+    Uniforms *uniforms = (Uniforms *)[self.uniformBuffer contents];
+    NSDictionary *parameters = self.renderParameters ?: @{};
+    NSTimeInterval frameGap = self.hasFilmFrame ? time - self.lastFilmFrameTime : 0.0;
+    // Do not advance the composition by a background/resume gap.
+    float frameDelta = frameGap > 0.0 && frameGap < 0.25 ? (float)fmin(frameGap, 1.0 / 15.0) : 0.0f;
+    if (!self.hasFilmFrame || frameGap < 0.0) self.lastPlaybackTickTime = time;
+    self.lastFilmFrameTime = time;
+    self.hasFilmFrame = YES;
+    float playbackTime = [parameters[@"songPlaybackTime"] respondsToSelector:@selector(floatValue)] ?
+        fmaxf(0.0f, [parameters[@"songPlaybackTime"] floatValue]) : (float)time;
+    float duration = [parameters[@"songDuration"] respondsToSelector:@selector(floatValue)] ?
+        [parameters[@"songDuration"] floatValue] : 0.0f;
+    if (!isfinite(duration) || duration < 20.0f) duration = 180.0f;
+    float progress = fminf(fmaxf(playbackTime / duration, 0.0f), 1.0f);
+    NSUInteger songIdentity = [parameters[@"songIdentity"] respondsToSelector:@selector(unsignedIntegerValue)] ?
+        [parameters[@"songIdentity"] unsignedIntegerValue] : 0;
+
+    float guitarBand = 0.0f, pianoBand = 0.0f, drumBand = 0.0f, highBand = 0.0f;
+    for (NSUInteger i = 0; i < 12; ++i) drumBand += uniforms->audioData[i].y;
+    for (NSUInteger i = 18; i < 48; ++i) pianoBand += uniforms->audioData[i].y;
+    for (NSUInteger i = 48; i < 76; ++i) guitarBand += uniforms->audioData[i].y;
+    for (NSUInteger i = 64; i < 80; ++i) highBand += uniforms->audioData[i].w;
+    drumBand = fminf(1.0f, drumBand / 12.0f * 2.2f);
+    pianoBand = fminf(1.0f, pianoBand / 30.0f * 2.4f);
+    guitarBand = fminf(1.0f, guitarBand / 28.0f * 2.8f);
+    highBand = fminf(1.0f, highBand / 16.0f * 4.0f);
+
+    BOOL hasGuitarStem = [parameters[@"guitarStemControlEnabled"] boolValue];
+    BOOL hasPianoStem = [parameters[@"pianoStemControlEnabled"] boolValue];
+    BOOL hasDrumsStem = [parameters[@"drumsStemControlEnabled"] boolValue];
+    float guitar = hasGuitarStem ? uniforms->instrumentStems.x : guitarBand;
+    float piano = hasPianoStem ? uniforms->instrumentStems.y : pianoBand;
+    float drums = hasDrumsStem ? uniforms->instrumentStems.z : drumBand;
+
+    if (!self.filmEvents) self.filmEvents = [NSMutableArray array];
+    if (!self.filmMarks) self.filmMarks = [NSMutableArray array];
+    float deltaPlayback = 0.0f;
+    BOOL changedSong = self.hasPlaybackSample && songIdentity != 0 &&
+                       self.previousSongIdentity != 0 && songIdentity != self.previousSongIdentity;
+    if (self.hasPlaybackSample && (changedSong || playbackTime + 1.5f < self.previousPlaybackTime)) {
+        self.guitarExposure = self.pianoExposure = self.drumsExposure = self.dspExposure = 0.0f;
+        [self.filmEvents removeAllObjects];
+        [self.filmMarks removeAllObjects];
+        self.filmFlow = 0.0f;
+        self.smoothFilmGuitar = self.smoothFilmHarmonic = 0.0f;
+        self.lastPlaybackTickTime = time;
+        self.lastPianoLevel = self.lastDrumLevel = 0.0f;
+        self.lastPianoBirth = self.lastDrumBirth = -20.0f;
+        self.exposureSequence = 0;
+    } else if (self.hasPlaybackSample) {
+        deltaPlayback = fminf(fmaxf(playbackTime - self.previousPlaybackTime, 0.0f), 0.35f);
+    } else {
+        // Begin with a faintly exposed base if the effect is selected mid-song.
+        self.guitarExposure = self.pianoExposure = self.drumsExposure = progress * 0.25f;
+        self.dspExposure = progress * 0.30f;
+        self.lastPianoBirth = self.lastDrumBirth = -20.0f;
+        self.hasPlaybackSample = YES;
+    }
+    self.previousPlaybackTime = playbackTime;
+    if (songIdentity != 0) self.previousSongIdentity = songIdentity;
+
+    float sensitivity = [parameters[@"audioSensitivity"] respondsToSelector:@selector(floatValue)] ?
+        fminf(fmaxf([parameters[@"audioSensitivity"] floatValue], 0.25f), 2.0f) : 1.0f;
+    float rate = [parameters[@"darkroomExposure"] respondsToSelector:@selector(floatValue)] ?
+        fminf(fmaxf([parameters[@"darkroomExposure"] floatValue], 0.25f), 2.0f) : 1.0f;
+    float normalizedDelta = deltaPlayback / duration * rate * sensitivity;
+    self.guitarExposure = fminf(1.0f, self.guitarExposure + normalizedDelta * guitar * 7.2f);
+    self.pianoExposure = fminf(1.0f, self.pianoExposure + normalizedDelta * piano * 6.8f);
+    self.drumsExposure = fminf(1.0f, self.drumsExposure + normalizedDelta * drums * 7.4f);
+
+    float transient = fminf(fmaxf(uniforms->categoryFeatures.y, 0.0f), 1.0f);
+    float harmonic = fminf(fmaxf(uniforms->categoryFeatures.z, 0.0f), 1.0f);
+    float noise = fminf(fmaxf(uniforms->categoryFeatures.w, 0.0f), 1.0f);
+    float energy = fminf(1.0f, (guitar + piano + drums + highBand) * 0.25f);
+    self.dspExposure = fminf(1.0f, self.dspExposure + normalizedDelta *
+        (0.20f + transient * 0.30f + harmonic * 0.32f + noise * 0.18f) * 4.5f);
+
+    if (deltaPlayback > 0.0f) self.lastPlaybackTickTime = time;
+    float guitarBlend = 1.0f - expf(-frameDelta / (guitar > self.smoothFilmGuitar ? 0.20f : 0.45f));
+    float previousGuitar = self.smoothFilmGuitar;
+    self.smoothFilmGuitar += (guitar - self.smoothFilmGuitar) * guitarBlend;
+    self.smoothFilmHarmonic += (harmonic - self.smoothFilmHarmonic) * (1.0f - expf(-frameDelta / 0.35f));
+    // Interpolate between audio callbacks on the display clock; stop when playback stops advancing.
+    if (time - self.lastPlaybackTickTime < 0.30) {
+        self.filmFlow += frameDelta * (0.055f + (previousGuitar + self.smoothFilmGuitar) * 0.20f +
+                                       self.smoothFilmHarmonic * 0.04f);
+    }
+    for (NSInteger i = (NSInteger)self.filmEvents.count - 1; i >= 0; --i) {
+        NSDictionary *event = self.filmEvents[(NSUInteger)i];
+        float lifetime = [event[@"strength"] floatValue] > 0.0f ? 10.0f : 16.0f;
+        if (playbackTime - [event[@"birth"] floatValue] >= lifetime) {
+            [self.filmEvents removeObjectAtIndex:(NSUInteger)i];
+        }
+    }
+    BOOL pianoOnset = piano > 0.10f && piano - self.lastPianoLevel > 0.018f &&
+                      playbackTime - self.lastPianoBirth > 0.85f;
+    BOOL drumOnset = drums > 0.12f && drums - self.lastDrumLevel > 0.028f &&
+                     playbackTime - self.lastDrumBirth > 1.8f;
+    for (NSUInteger kind = 0; kind < 2; ++kind) {
+        if (!(kind == 0 ? pianoOnset : drumOnset)) continue;
+        // Reserve eight slots per instrument and never evict a live exposure.
+        NSUInteger sameKindCount = 0;
+        for (NSDictionary *event in self.filmEvents) {
+            if (([event[@"strength"] floatValue] > 0.0f) == (kind == 0)) ++sameKindCount;
+        }
+        if (sameKindCount >= 8) continue;
+        float seed = fmodf((float)(++self.exposureSequence) * 0.618034f, 1.0f);
+        float x = (seed - 0.5f) * 0.78f;
+        float y = -0.88f + fmodf(seed * 2.73f + 0.17f, 1.0f) * 1.06f;
+        float strength = fmaxf(0.45f, kind == 0 ? piano : drums);
+        NSDictionary *event = @{@"birth": @(playbackTime), @"strength": @(kind == 0 ? strength : -strength),
+                                @"x": @(x), @"y": @(y)};
+        [self.filmEvents addObject:event];
+        if (self.filmMarks.count < 8) {
+            [self.filmMarks addObject:event];
+        } else {
+            // Further notes deepen the nearest developed patch without moving or recoloring it.
+            NSUInteger nearest = NSNotFound;
+            float nearestDistance = FLT_MAX;
+            for (NSUInteger j = 0; j < self.filmMarks.count; ++j) {
+                NSDictionary *mark = self.filmMarks[j];
+                if (([mark[@"strength"] floatValue] > 0.0f) != (kind == 0)) continue;
+                float dx = x - [mark[@"x"] floatValue], dy = y - [mark[@"y"] floatValue];
+                if (dx * dx + dy * dy < nearestDistance) {
+                    nearest = j;
+                    nearestDistance = dx * dx + dy * dy;
+                }
+            }
+            if (nearest != NSNotFound) {
+                NSMutableDictionary *mark = [self.filmMarks[nearest] mutableCopy];
+                float density = fminf(2.0f, fabsf([mark[@"strength"] floatValue]) + strength * 0.06f);
+                mark[@"strength"] = @(kind == 0 ? density : -density);
+                self.filmMarks[nearest] = mark;
+            }
+        }
+        if (kind == 0) self.lastPianoBirth = playbackTime;
+        else self.lastDrumBirth = playbackTime;
+    }
+    self.lastPianoLevel = piano;
+    self.lastDrumLevel = drums;
+    for (NSUInteger i = 0; i < 16; ++i) {
+        uniforms->pigmentEvents[i] = (vector_float4){0, 0, 0, 0};
+        if (i < self.filmEvents.count) {
+            NSDictionary *event = self.filmEvents[i];
+            uniforms->pigmentEvents[i] = (vector_float4){playbackTime - [event[@"birth"] floatValue],
+                [event[@"strength"] floatValue], [event[@"x"] floatValue], [event[@"y"] floatValue]};
+        }
+    }
+    for (NSUInteger i = 0; i < 8; ++i) {
+        uniforms->guitarWaves[i] = (vector_float4){0, 0, 0, 0};
+        if (i < self.filmMarks.count) {
+            NSDictionary *mark = self.filmMarks[i];
+            uniforms->guitarWaves[i] = (vector_float4){[mark[@"x"] floatValue], [mark[@"y"] floatValue],
+                [mark[@"strength"] floatValue], 0.20f + (float)i * 0.015f};
+        }
+    }
+    float grain = parameters[@"darkroomGrain"] ? [parameters[@"darkroomGrain"] floatValue] : 0.42f;
+    uniforms->cyberpunkControls = (vector_float4){playbackTime, self.filmFlow, fminf(fmaxf(grain, 0), 1), 0};
+
+    uniforms->galaxyParams1 = (vector_float4){self.guitarExposure, self.pianoExposure,
+                                               self.drumsExposure, progress};
+    uniforms->galaxyParams2 = (vector_float4){transient, harmonic, noise, energy};
+    uniforms->galaxyParams3 = (vector_float4){self.smoothFilmGuitar, piano, drums, self.dspExposure};
+}
+
+- (void)setupPipeline {
+    MTLRenderPipelineDescriptor *descriptor = [MTLRenderPipelineDescriptor new];
+    descriptor.label = @"OpticalDarkroom";
+    descriptor.vertexFunction = [self.defaultLibrary newFunctionWithName:@"neon_vertex"];
+    descriptor.fragmentFunction = [self.defaultLibrary newFunctionWithName:@"opticalDarkroomFragment"];
+    descriptor.colorAttachments[0].pixelFormat = self.metalView.colorPixelFormat;
+    descriptor.depthAttachmentPixelFormat = self.metalView.depthStencilPixelFormat;
+    NSError *error = nil;
+    self.pipelineState = [self.device newRenderPipelineStateWithDescriptor:descriptor error:&error];
+    if (!self.pipelineState) NSLog(@"OpticalDarkroom pipeline creation failed: %@", error);
+}
+
+- (void)encodeRenderCommands:(id<MTLRenderCommandEncoder>)encoder {
+    if (!self.pipelineState) return;
+    [encoder setRenderPipelineState:self.pipelineState];
+    [encoder setVertexBuffer:self.uniformBuffer offset:0 atIndex:0];
+    [encoder setFragmentBuffer:self.uniformBuffer offset:0 atIndex:0];
     [encoder drawPrimitives:MTLPrimitiveTypeTriangleStrip vertexStart:0 vertexCount:4];
 }
 
@@ -2827,6 +3198,9 @@ static inline float MirrorStrataFollow(float current, float target, float dt,
     NSUInteger _nextGuitarWaveSlot;
     NSUInteger _nextGuitarWavePalette;
 }
+@property (nonatomic, strong, nullable) AIColorConfiguration *currentAIConfig;
+@property (nonatomic, copy, nullable) NSString *currentSongName;
+@property (nonatomic, copy, nullable) NSString *currentSongArtist;
 @property (nonatomic, assign) float impactAge;
 @property (nonatomic, assign) float impactStrength;
 @property (nonatomic, assign) float previousImpact;
@@ -2838,6 +3212,55 @@ static inline float MirrorStrataFollow(float current, float target, float dt,
 @end
 
 @implementation CellularWormholeRenderer
+
+- (instancetype)initWithMetalView:(MTKView *)metalView {
+    self = [super initWithMetalView:metalView];
+    if (self) {
+        NSNotificationCenter *center = NSNotificationCenter.defaultCenter;
+        [center addObserver:self selector:@selector(cellularSongDidStart:)
+                       name:@"AudioSpectrumPlayerDidStartSongNotification" object:nil];
+        [center addObserver:self selector:@selector(cellularAIConfigurationDidChange:)
+                       name:kAIConfigurationDidChangeNotification object:nil];
+        AIColorConfiguration *configuration = [MusicAIAnalyzer sharedAnalyzer].currentConfiguration;
+        if (configuration.songName.length > 0) {
+            self.currentSongName = configuration.songName;
+            self.currentSongArtist = configuration.artist ?: @"";
+            self.currentAIConfig = configuration;
+        }
+    }
+    return self;
+}
+
+- (void)dealloc {
+    [NSNotificationCenter.defaultCenter removeObserver:self];
+}
+
+- (void)cellularSongDidStart:(NSNotification *)notification {
+    NSString *songName = notification.userInfo[@"songName"];
+    NSString *artist = notification.userInfo[@"artist"] ?: @"";
+    self.currentSongName = songName;
+    self.currentSongArtist = artist;
+    AIColorConfiguration *configuration = [MusicAIAnalyzer sharedAnalyzer].currentConfiguration;
+    BOOL matchesSong = [configuration.songName isEqualToString:songName] &&
+                       [configuration.artist isEqualToString:artist];
+    self.currentAIConfig = matchesSong ? configuration : nil;
+}
+
+- (void)cellularAIConfigurationDidChange:(NSNotification *)notification {
+    AIColorConfiguration *configuration = notification.userInfo[kAIConfigurationKey];
+    if (!configuration || self.currentSongName.length == 0) return;
+    BOOL matchesSong = [configuration.songName isEqualToString:self.currentSongName] &&
+                       [configuration.artist isEqualToString:self.currentSongArtist ?: @""];
+    if (!matchesSong) return;
+    self.currentAIConfig = configuration;
+    NSLog(@"🐝 深空蜂巢吉他情绪色已更新: %@ - %@ | LLM=%@ | pulse=(%.2f,%.2f,%.2f) corona=(%.2f,%.2f,%.2f) beam=(%.2f,%.2f,%.2f) rotating=(%.2f,%.2f,%.2f)",
+          configuration.songName, configuration.artist ?: @"",
+          configuration.isLLMGenerated ? @"YES" : @"NO",
+          configuration.pulseRingColor.x, configuration.pulseRingColor.y, configuration.pulseRingColor.z,
+          configuration.coronaFilamentsColor.x, configuration.coronaFilamentsColor.y, configuration.coronaFilamentsColor.z,
+          configuration.volumetricBeamColor.x, configuration.volumetricBeamColor.y, configuration.volumetricBeamColor.z,
+          configuration.rotatingBeamColor.x, configuration.rotatingBeamColor.y, configuration.rotatingBeamColor.z);
+}
 
 - (void)encodeRenderCommands:(id<MTLRenderCommandEncoder>)encoder {
     if (!self.pipelineState) return;
@@ -2945,6 +3368,24 @@ static inline float MirrorStrataFollow(float current, float target, float dt,
     u->galaxyParams2.x = 0.0f;
     u->galaxyParams2.y = self.guitarEnvelope;
     u->galaxyParams3.z = 0.0f;
+    vector_float3 guitarColors[4] = {
+        (vector_float3){0.04f, 0.88f, 1.0f},
+        (vector_float3){1.0f, 0.66f, 0.08f},
+        (vector_float3){0.45f, 1.0f, 0.18f},
+        (vector_float3){0.20f, 0.45f, 1.0f}
+    };
+    if (self.currentAIConfig) {
+        AIColorConfiguration *config = self.currentAIConfig;
+        guitarColors[0] = (vector_float3){config.pulseRingColor.x, config.pulseRingColor.y, config.pulseRingColor.z};
+        guitarColors[1] = (vector_float3){config.coronaFilamentsColor.x, config.coronaFilamentsColor.y, config.coronaFilamentsColor.z};
+        guitarColors[2] = (vector_float3){config.volumetricBeamColor.x, config.volumetricBeamColor.y, config.volumetricBeamColor.z};
+        guitarColors[3] = (vector_float3){config.rotatingBeamColor.x, config.rotatingBeamColor.y, config.rotatingBeamColor.z};
+    }
+    for (NSUInteger i = 0; i < 4; i++) {
+        u->guitarPalette[i] = (vector_float4){fmaxf(0.0f, fminf(guitarColors[i].x, 1.0f)),
+                                               fmaxf(0.0f, fminf(guitarColors[i].y, 1.0f)),
+                                               fmaxf(0.0f, fminf(guitarColors[i].z, 1.0f)), 1.0f};
+    }
     for (NSUInteger i = 0; i < 8; i++) {
         u->guitarWaves[i] = (vector_float4){_guitarWaveAges[i], _guitarWaveStrengths[i],
                                            _guitarWavePaletteIndices[i], 0.0f};
@@ -3454,6 +3895,161 @@ static inline float MirrorStrataFollow(float current, float target, float dt,
 
 @end
 
+#pragma mark - 封面点阵 · album-cover halftone
+
+@interface CoverDotMatrixRenderer ()
+@property (nonatomic, strong) id<MTLRenderPipelineState> coverDotPipeline;
+@property (nonatomic, strong) id<MTLRenderPipelineState> coverDotPointPipeline;
+@property (nonatomic, strong) id<MTLTexture> coverTexture;
+@property (nonatomic, strong) id<MTLTexture> coverPlaceholder;
+@property (nonatomic, assign) NSUInteger coverGeneration;
+@property (nonatomic, assign) float dotBeatEnvelope;
+@property (nonatomic, assign) float dotBeatAge;
+@property (nonatomic, assign) float previousDotDrums;
+@property (nonatomic, assign) float previousDotTransient;
+@property (nonatomic, assign) float previousDotLow;
+@property (nonatomic, assign) float dotLastTime;
+@end
+
+@implementation CoverDotMatrixRenderer
+
+- (void)setupPipeline {
+    MTLRenderPipelineDescriptor *descriptor = [MTLRenderPipelineDescriptor new];
+    descriptor.label = @"CoverDotMatrix";
+    descriptor.vertexFunction = [self.defaultLibrary newFunctionWithName:@"coverDotMatrixVertex"];
+    descriptor.fragmentFunction = [self.defaultLibrary newFunctionWithName:@"coverDotMatrixFragment"];
+    descriptor.colorAttachments[0].pixelFormat = self.metalView.colorPixelFormat;
+    descriptor.depthAttachmentPixelFormat = self.metalView.depthStencilPixelFormat;
+    NSError *error = nil;
+    self.coverDotPipeline = [self.device newRenderPipelineStateWithDescriptor:descriptor error:&error];
+    if (!self.coverDotPipeline) NSLog(@"封面点阵 Metal 管线创建失败: %@", error);
+
+    MTLRenderPipelineDescriptor *pointDescriptor = [MTLRenderPipelineDescriptor new];
+    pointDescriptor.label = @"CoverDotMatrixParticles";
+    pointDescriptor.vertexFunction = [self.defaultLibrary newFunctionWithName:@"coverDotParticleVertex"];
+    pointDescriptor.fragmentFunction = [self.defaultLibrary newFunctionWithName:@"coverDotParticleFragment"];
+    pointDescriptor.colorAttachments[0].pixelFormat = self.metalView.colorPixelFormat;
+    pointDescriptor.depthAttachmentPixelFormat = self.metalView.depthStencilPixelFormat;
+    pointDescriptor.colorAttachments[0].blendingEnabled = YES;
+    pointDescriptor.colorAttachments[0].rgbBlendOperation = MTLBlendOperationAdd;
+    pointDescriptor.colorAttachments[0].alphaBlendOperation = MTLBlendOperationAdd;
+    pointDescriptor.colorAttachments[0].sourceRGBBlendFactor = MTLBlendFactorSourceAlpha;
+    pointDescriptor.colorAttachments[0].destinationRGBBlendFactor = MTLBlendFactorOneMinusSourceAlpha;
+    pointDescriptor.colorAttachments[0].sourceAlphaBlendFactor = MTLBlendFactorOne;
+    pointDescriptor.colorAttachments[0].destinationAlphaBlendFactor = MTLBlendFactorOneMinusSourceAlpha;
+    error = nil;
+    self.coverDotPointPipeline = [self.device newRenderPipelineStateWithDescriptor:pointDescriptor error:&error];
+    if (!self.coverDotPointPipeline) NSLog(@"封面点阵粒子管线创建失败: %@", error);
+
+    MTLTextureDescriptor *textureDescriptor = [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatRGBA8Unorm_sRGB
+                                                                                                  width:1 height:1 mipmapped:NO];
+    textureDescriptor.usage = MTLTextureUsageShaderRead;
+    textureDescriptor.storageMode = MTLStorageModeShared;
+    self.coverPlaceholder = [self.device newTextureWithDescriptor:textureDescriptor];
+    uint8_t pixel[4] = {18, 22, 34, 255};
+    [self.coverPlaceholder replaceRegion:MTLRegionMake2D(0, 0, 1, 1) mipmapLevel:0 withBytes:pixel bytesPerRow:4];
+}
+
+- (void)updateAlbumArtwork:(UIImage *)image {
+    if (![NSThread isMainThread]) {
+        dispatch_async(dispatch_get_main_queue(), ^{ [self updateAlbumArtwork:image]; });
+        return;
+    }
+    NSUInteger generation = ++self.coverGeneration;
+    if (!image || image.size.width < 2.0 || image.size.height < 2.0) {
+        self.coverTexture = nil;
+        return;
+    }
+
+    id<MTLDevice> device = self.device;
+    UIImage *source = image;
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+        CGSize size = CGSizeMake(768.0, 768.0);
+        UIGraphicsImageRendererFormat *format = [UIGraphicsImageRendererFormat new];
+        format.scale = 1.0;
+        format.opaque = YES;
+        UIGraphicsImageRenderer *renderer = [[UIGraphicsImageRenderer alloc] initWithSize:size format:format];
+        UIImage *square = [renderer imageWithActions:^(UIGraphicsImageRendererContext *context) {
+            CGFloat scale = MAX(size.width / source.size.width, size.height / source.size.height);
+            CGSize fitted = CGSizeMake(source.size.width * scale, source.size.height * scale);
+            CGRect rect = CGRectMake((size.width - fitted.width) * 0.5, (size.height - fitted.height) * 0.5,
+                                     fitted.width, fitted.height);
+            CGContextSetInterpolationQuality(context.CGContext, kCGInterpolationHigh);
+            [source drawInRect:rect];
+        }];
+        if (!square.CGImage) return;
+        MTKTextureLoader *loader = [[MTKTextureLoader alloc] initWithDevice:device];
+        NSError *error = nil;
+        id<MTLTexture> texture = [loader newTextureWithCGImage:square.CGImage options:@{
+            MTKTextureLoaderOptionSRGB: @YES,
+            MTKTextureLoaderOptionOrigin: MTKTextureLoaderOriginTopLeft,
+            MTKTextureLoaderOptionTextureUsage: @(MTLTextureUsageShaderRead),
+            MTKTextureLoaderOptionTextureStorageMode: @(MTLStorageModePrivate)
+        } error:&error];
+        if (!texture) {
+            NSLog(@"封面点阵纹理创建失败: %@", error);
+            return;
+        }
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (generation == self.coverGeneration) self.coverTexture = texture;
+        });
+    });
+}
+
+- (void)encodeRenderCommands:(id<MTLRenderCommandEncoder>)encoder {
+    Uniforms uniforms = *(Uniforms *)self.uniformBuffer.contents;
+    NSDictionary *parameters = self.renderParameters ?: @{};
+    float dt = self.dotLastTime > 0.0f ? fmaxf(0.0f, fminf(uniforms.time.x - self.dotLastTime, 0.1f)) : 0.0f;
+    self.dotLastTime = uniforms.time.x;
+    float low = fmaxf(uniforms.audioData[2].x, fmaxf(uniforms.audioData[4].x, uniforms.audioData[7].x));
+    float drums = fmaxf(uniforms.instrumentStems.z, fmaxf(low * 2.2f, uniforms.categoryFeatures.x));
+    float transient = fmaxf(uniforms.categoryFeatures.y, uniforms.activityMeter1.y);
+    float onset = fmaxf(0.0f, drums - self.previousDotDrums) * 3.8f;
+    onset = fmaxf(onset, fmaxf(0.0f, transient - self.previousDotTransient) * 2.8f);
+    onset = fmaxf(onset, fmaxf(0.0f, low - self.previousDotLow) * 7.0f);
+    float trigger = fmaxf(0.0f, [parameters[@"beatTrigger"] floatValue]);
+    float impact = fminf(1.0f, fmaxf(trigger, onset));
+    self.dotBeatEnvelope *= expf(-5.0f * dt);
+    self.dotBeatAge += dt;
+    if (impact > 0.16f && self.dotBeatAge > 0.14f) {
+        self.dotBeatEnvelope = fmaxf(self.dotBeatEnvelope, fmaxf(0.38f, impact));
+        self.dotBeatAge = 0.0f;
+    }
+    self.previousDotDrums = drums;
+    self.previousDotTransient = transient;
+    self.previousDotLow = low;
+    if (trigger > 0.0f) self.renderParameters[@"beatTrigger"] = @0;
+    vector_float4 controls = {
+        parameters[@"dotCount"] ? [parameters[@"dotCount"] floatValue] : 112.0f,
+        parameters[@"dotSize"] ? [parameters[@"dotSize"] floatValue] : 0.50f,
+        parameters[@"audioSensitivity"] ? [parameters[@"audioSensitivity"] floatValue] : 1.0f,
+        parameters[@"dotGlow"] ? [parameters[@"dotGlow"] floatValue] : 0.22f
+    };
+    vector_float4 styleControls = {
+        parameters[@"dotStyle"] ? [parameters[@"dotStyle"] floatValue] : 0.0f,
+        self.dotBeatEnvelope, self.dotBeatAge, drums
+    };
+    if (self.coverDotPointPipeline) {
+        [encoder setRenderPipelineState:self.coverDotPointPipeline];
+        [encoder setVertexBytes:&uniforms length:sizeof(uniforms) atIndex:0];
+        [encoder setVertexBytes:&controls length:sizeof(controls) atIndex:1];
+        [encoder setVertexBytes:&styleControls length:sizeof(styleControls) atIndex:2];
+        [encoder setVertexTexture:self.coverTexture ?: self.coverPlaceholder atIndex:0];
+        NSUInteger grid = (NSUInteger)fmaxf(72.0f, fminf(144.0f, roundf(controls.x)));
+        [encoder drawPrimitives:MTLPrimitiveTypePoint vertexStart:0 vertexCount:grid * grid];
+        return;
+    }
+    if (!self.coverDotPipeline) return;
+    [encoder setRenderPipelineState:self.coverDotPipeline];
+    [encoder setFragmentBytes:&uniforms length:sizeof(uniforms) atIndex:0];
+    [encoder setFragmentBytes:&controls length:sizeof(controls) atIndex:1];
+    [encoder setFragmentBytes:&styleControls length:sizeof(styleControls) atIndex:2];
+    [encoder setFragmentTexture:self.coverTexture ?: self.coverPlaceholder atIndex:0];
+    [encoder drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:3];
+}
+
+@end
+
 #pragma mark - 渲染器工厂
 
 #pragma mark - 玻璃回旋 · Native indexed glass sculpture
@@ -3793,11 +4389,19 @@ static inline float MirrorStrataFollow(float current, float target, float dt,
     self.glassLastFrame = now;
     float bands[80] = {0};
     BOOL fresh = self.glassLastAudio > 0 && now-self.glassLastAudio < 0.25;
-    if (fresh) for (int i=0;i<80;i++) bands[i]=u->audioData[i].x;
+    if (fresh) {
+        float guitar = fminf(fmaxf(u->instrumentStems.x, 0.0f), 1.0f);
+        float piano = fminf(fmaxf(u->instrumentStems.y, 0.0f), 1.0f);
+        for (int i=0;i<80;i++) {
+            float stemAccent = i < 22 ? 0.0f : (i < 53 ? piano * 0.24f : guitar * 0.28f);
+            bands[i] = fmaxf(u->audioData[i].x, stemAccent);
+        }
+    }
     NSDictionary *params = self.renderParameters;
     float sensitivity = params[@"audioSensitivity"] ? [params[@"audioSensitivity"] floatValue] : 1.15f;
     float beatTrigger = [params[@"beatTrigger"] floatValue];
-    glassAudioStep(&_glassAudio, bands, fresh ? u->activityMeter1.y : 0,
+    glassAudioStep(&_glassAudio, bands, fmaxf(fresh ? u->activityMeter1.y : 0,
+                                               fminf(fmaxf(u->instrumentStems.z, 0.0f), 1.0f)),
                    fresh ? u->categoryFeatures.x : 0, fresh ? u->activityMeter5.z : 0,
                    beatTrigger, sensitivity, dt);
     if (beatTrigger != 0.0f) self.renderParameters[@"beatTrigger"] = @0;
@@ -4059,7 +4663,13 @@ static inline float MirrorStrataFollow(float current, float target, float dt,
             
         case VisualEffectTypeLiquidMetal:
             return [[LiquidMetalRenderer alloc] initWithMetalView:metalView];
-            
+
+        case VisualEffectTypeLiquidPigment:
+            return [[LiquidPigmentRenderer alloc] initWithMetalView:metalView];
+
+        case VisualEffectTypeOpticalDarkroom:
+            return [[OpticalDarkroomRenderer alloc] initWithMetalView:metalView];
+
         case VisualEffectTypeGeometricMorph:
             return [[GeometricMorphRenderer alloc] initWithMetalView:metalView];
             
@@ -4093,6 +4703,8 @@ static inline float MirrorStrataFollow(float current, float target, float dt,
 
         case VisualEffectTypeMirrorStrata:
             return [[MirrorStrataRenderer alloc] initWithMetalView:metalView];
+        case VisualEffectTypeCoverDotMatrix:
+            return [[CoverDotMatrixRenderer alloc] initWithMetalView:metalView];
 
         case VisualEffectTypeCellularWormhole:
             return [[CellularWormholeRenderer alloc] initWithMetalView:metalView];

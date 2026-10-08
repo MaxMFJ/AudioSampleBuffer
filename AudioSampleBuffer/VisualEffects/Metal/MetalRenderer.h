@@ -149,6 +149,13 @@ NS_ASSUME_NONNULL_BEGIN
 @interface LiquidMetalRenderer : BaseMetalRenderer
 @end
 
+/** 半透明彩色流体颜料渲染器 */
+@interface LiquidPigmentRenderer : BaseMetalRenderer
+@end
+
+@interface OpticalDarkroomRenderer : BaseMetalRenderer
+@end
+
 /**
  * 闪电雷暴渲染器
  */
@@ -255,6 +262,10 @@ NS_ASSUME_NONNULL_BEGIN
  * 镜层回廊渲染器 - 3D 半透明玻璃边框回廊，参照玻璃回旋
  */
 @interface MirrorStrataRenderer : BaseMetalRenderer
+@end
+
+/** 专辑封面点阵渲染器 */
+@interface CoverDotMatrixRenderer : BaseMetalRenderer
 @end
 
 @interface CellularWormholeRenderer : WormholeDriveRenderer

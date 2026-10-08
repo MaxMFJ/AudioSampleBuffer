@@ -593,15 +593,24 @@ static UIEdgeInsets RhythmEffectiveSafeAreaInsets(UIView *view) {
 }
 
 - (void)displayAlbumArtwork:(UIImage *)image songName:(NSString *)songName {
+    self.artworkAtmosphereView.image = image;
+    self.nowPlayingTitleLabel.text = songName.length > 0 ? songName : @"未选择歌曲";
+    if (self.currentIndex < self.displayedMusicItems.count) {
+        MusicItem *currentItem = self.displayedMusicItems[self.currentIndex];
+        self.nowPlayingArtistLabel.text = currentItem.artist.length > 0 ? currentItem.artist : currentItem.album;
+    }
     [self.visualEffectManager updateAlbumArtwork:image];
 
-    BOOL glassActive = self.visualEffectManager.currentEffectType == VisualEffectTypeGlassResonance;
-    if (glassActive) {
+    BOOL coverRenderedByMetal = self.visualEffectManager.currentEffectType == VisualEffectTypeGlassResonance ||
+                                self.visualEffectManager.currentEffectType == VisualEffectTypeCoverDotMatrix;
+    if (coverRenderedByMetal) {
         if (image) {
             self.coverImageView.image = image;
         }
         self.coverImageView.hidden = YES;
         self.vinylRecordView.hidden = YES;
+        self.isShowingVinylRecord = NO;
+        [self.vinylRecordView stopSpinning];
         return;
     }
 

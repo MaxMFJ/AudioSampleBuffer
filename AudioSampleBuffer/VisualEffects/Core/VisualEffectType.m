@@ -133,6 +133,22 @@
                                             description:@"流动的液态金属质感"
                                                category:EffectCategoryCreative
                                        performanceLevel:PerformanceLevelExtreme]];
+
+    VisualEffectInfo *liquidPigment = [VisualEffectInfo effectWithType:VisualEffectTypeLiquidPigment
+                                                                   name:@"液态颜料"
+                                                            description:@"半透明颜料在黑底上缓慢交汇，旋律牵引流向，鼓点推动局部扩散"
+                                                               category:EffectCategoryCreative
+                                                       performanceLevel:PerformanceLevelMedium];
+    liquidPigment.requiresMetal = YES;
+    [effects addObject:liquidPigment];
+
+    VisualEffectInfo *opticalDarkroom = [VisualEffectInfo effectWithType:VisualEffectTypeOpticalDarkroom
+                                                                    name:@"光学暗房"
+                                                             description:@"吉他、钢琴与鼓的能量逐步曝光成一张胶片抽象照片"
+                                                                category:EffectCategoryCreative
+                                                        performanceLevel:PerformanceLevelMedium];
+    opticalDarkroom.requiresMetal = YES;
+    [effects addObject:opticalDarkroom];
     
     [effects addObject:[VisualEffectInfo effectWithType:VisualEffectTypeGeometricMorph
                                                    name:@"几何变形"
@@ -252,6 +268,14 @@
                                                      performanceLevel:PerformanceLevelMedium];
     mirrorStrata.requiresMetal = YES;
     [effects addObject:mirrorStrata];
+
+    VisualEffectInfo *coverDotMatrix = [VisualEffectInfo effectWithType:VisualEffectTypeCoverDotMatrix
+                                                                    name:@"封面点阵"
+                                                             description:@"专辑封面化为彩色点粒子，吉他、钢琴与鼓点分别驱动粒子起伏和脉冲"
+                                                                category:EffectCategoryExperimental
+                                                        performanceLevel:PerformanceLevelLow];
+    coverDotMatrix.requiresMetal = YES;
+    [effects addObject:coverDotMatrix];
 
     self.effects = [effects copy];
 }

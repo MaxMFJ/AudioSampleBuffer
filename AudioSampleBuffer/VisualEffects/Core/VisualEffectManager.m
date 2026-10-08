@@ -216,6 +216,18 @@ static const CGFloat kDefaultEffectRenderScale = 0.85f;
             settings[@"densityIterations"] = @(6);
             settings[@"enableSafetyLimits"] = @(YES);
             break;
+
+        case VisualEffectTypeLiquidPigment:
+            settings[@"pigmentFlowSpeed"] = @(0.58);
+            settings[@"pigmentOpacity"] = @(0.72);
+            settings[@"audioSensitivity"] = @(1.0);
+            break;
+
+        case VisualEffectTypeOpticalDarkroom:
+            settings[@"darkroomGrain"] = @(0.42);
+            settings[@"darkroomExposure"] = @(1.0);
+            settings[@"audioSensitivity"] = @(1.0);
+            break;
             
         case VisualEffectTypeQuantumField:
             settings[@"particleCount"] = @(10);
@@ -337,6 +349,14 @@ static const CGFloat kDefaultEffectRenderScale = 0.85f;
             settings[@"mirrorDepth"] = @(1.08);
             break;
 
+        case VisualEffectTypeCoverDotMatrix:
+            settings[@"dotCount"] = @(112);
+            settings[@"dotSize"] = @(0.50);
+            settings[@"audioSensitivity"] = @(1.0);
+            settings[@"dotGlow"] = @(0.22);
+            settings[@"dotStyle"] = @([[NSUserDefaults standardUserDefaults] integerForKey:@"coverDotMatrixStyle"]);
+            break;
+
         case VisualEffectTypeCellularWormhole:
             settings[@"coreRadius"] = @(0.32);
             settings[@"poreCount"] = @(18);
@@ -412,7 +432,9 @@ static const CGFloat kDefaultEffectRenderScale = 0.85f;
     // layout resize must not briefly replace it with a full-resolution surface.
     _metalView.autoResizeDrawable = (effectType != VisualEffectTypeCellularWormhole &&
                                      effectType != VisualEffectTypeGlassResonance &&
-                                     effectType != VisualEffectTypeMirrorStrata);
+                                     effectType != VisualEffectTypeMirrorStrata &&
+                                     effectType != VisualEffectTypeLiquidPigment &&
+                                     effectType != VisualEffectTypeOpticalDarkroom);
     if (effectType == VisualEffectTypeGlassResonance) {
         if (squareSize <= 0.0 || !isfinite(squareSize)) return;
         // Square logical camera; cap HDR allocation and fill cost on large devices.
@@ -430,6 +452,14 @@ static const CGFloat kDefaultEffectRenderScale = 0.85f;
     } else if (effectType == VisualEffectTypeMirrorStrata) {
         if (squareSize <= 0.0 || !isfinite(squareSize)) return;
         CGFloat side = MAX(1.0, round(MIN(1440.0, squareSize * screenScale * 0.62)));
+        _metalView.drawableSize = CGSizeMake(side, side);
+    } else if (effectType == VisualEffectTypeLiquidPigment) {
+        if (squareSize <= 0.0 || !isfinite(squareSize)) return;
+        CGFloat side = MAX(1.0, round(MIN(1200.0, squareSize * screenScale * 0.60)));
+        _metalView.drawableSize = CGSizeMake(side, side);
+    } else if (effectType == VisualEffectTypeOpticalDarkroom) {
+        if (squareSize <= 0.0 || !isfinite(squareSize)) return;
+        CGFloat side = MAX(1.0, round(MIN(960.0, squareSize * screenScale * 0.48)));
         _metalView.drawableSize = CGSizeMake(side, side);
     } else if (effectType == VisualEffectTypeWormholeDrive) {
         // 虫洞特效本身已针对宽屏做过专门调优，保留原有低功耗缩放。
@@ -580,6 +610,10 @@ static const CGFloat kDefaultEffectRenderScale = 0.85f;
                 } else if (effectType == VisualEffectTypeCellularWormhole) {
                     _metalView.preferredFramesPerSecond = 24;
                 } else if (effectType == VisualEffectTypeMirrorStrata) {
+                    _metalView.preferredFramesPerSecond = 30;
+                } else if (effectType == VisualEffectTypeLiquidPigment) {
+                    _metalView.preferredFramesPerSecond = 30;
+                } else if (effectType == VisualEffectTypeOpticalDarkroom) {
                     _metalView.preferredFramesPerSecond = 30;
                 } else if (effectType == VisualEffectTypeWormholeDrive) {
                     NSInteger targetFPS = 18;
@@ -892,6 +926,9 @@ static const CGFloat kDefaultEffectRenderScale = 0.85f;
         case VisualEffectTypeGlassResonance:
         case VisualEffectTypeCellularWormhole:
         case VisualEffectTypeMirrorStrata:
+        case VisualEffectTypeCoverDotMatrix:
+        case VisualEffectTypeLiquidPigment:
+        case VisualEffectTypeOpticalDarkroom:
         case VisualEffectTypePrismResonance:
         case VisualEffectTypeVisualLyricsTunnel:
         case VisualEffectTypeAudioActivityMeter:
@@ -1019,6 +1056,7 @@ static const CGFloat kDefaultEffectRenderScale = 0.85f;
     if ((_currentEffectType == VisualEffectTypeWormholeDrive ||
          _currentEffectType == VisualEffectTypeCellularWormhole ||
          _currentEffectType == VisualEffectTypeGlassResonance ||
+         _currentEffectType == VisualEffectTypeCoverDotMatrix ||
          _currentEffectType == VisualEffectTypeMirrorStrata) && _currentRenderer) {
         float clamped = fmaxf(0.0f, fminf(intensity, 0.9f));
         [_currentRenderer setRenderParameters:@{@"beatTrigger": @(clamped)}];

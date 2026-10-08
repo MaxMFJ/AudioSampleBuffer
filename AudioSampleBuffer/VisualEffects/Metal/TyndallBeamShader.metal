@@ -620,7 +620,7 @@ fragment float4 tyndallBeamFragment(VertexOut in [[stage_in]],
     mid  /= 15.0;
     for (int i = 50; i < 80; i += 2) high += uniforms.audioData[i].x;
     high /= 15.0;
-    
+
     // AI 触发灵敏度：放大或缩小音频数据的有效范围
     bass *= aiTrigSens;
     mid  *= aiTrigSens;

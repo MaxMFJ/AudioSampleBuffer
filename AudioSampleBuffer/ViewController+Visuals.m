@@ -381,7 +381,7 @@ static UIEdgeInsets RhythmEffectiveSafeAreaInsets(UIView *view) {
 
 - (void)setupEffectControls {
     self.controlButtons = [NSMutableArray array];
-    self.isUIHidden = NO;
+    self.areUtilityControlsCollapsed = YES;
 
     CGFloat safeTop = 0;
     if (@available(iOS 11.0, *)) {
@@ -517,6 +517,12 @@ static UIEdgeInsets RhythmEffectiveSafeAreaInsets(UIView *view) {
     [self updateAIModeButtonState];
     [self updateHPSSModeButtonState];
     [self createKaraokeButton];
+    for (UIView *controlView in self.controlButtons) {
+        controlView.alpha = self.areUtilityControlsCollapsed ? 0.0 : 1.0;
+        controlView.userInteractionEnabled = !self.areUtilityControlsCollapsed;
+    }
+    self.leftFunctionScrollView.alpha = self.areUtilityControlsCollapsed ? 0.0 : 1.0;
+    self.leftFunctionScrollView.userInteractionEnabled = !self.areUtilityControlsCollapsed;
     [self bringControlButtonsToFront];
 }
 
@@ -680,12 +686,12 @@ static UIEdgeInsets RhythmEffectiveSafeAreaInsets(UIView *view) {
 - (void)createToggleUIButton:(CGFloat)topOffset {
     CGFloat btnSize = 36;
     self.toggleUIButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    UIImage *eyeImage = nil;
+    UIImage *toggleImage = nil;
     if (@available(iOS 13.0, *)) {
         UIImageSymbolConfiguration *config = [UIImageSymbolConfiguration configurationWithPointSize:16 weight:UIImageSymbolWeightMedium];
-        eyeImage = [UIImage systemImageNamed:@"eye.fill" withConfiguration:config];
+        toggleImage = [UIImage systemImageNamed:@"slider.horizontal.3" withConfiguration:config];
     }
-    [self.toggleUIButton setImage:eyeImage forState:UIControlStateNormal];
+    [self.toggleUIButton setImage:toggleImage forState:UIControlStateNormal];
     [self.toggleUIButton setTitle:@"" forState:UIControlStateNormal];
     self.toggleUIButton.tintColor = [UIColor colorWithWhite:1.0 alpha:0.8];
     self.toggleUIButton.backgroundColor = [UIColor colorWithWhite:0.15 alpha:0.75];
@@ -693,65 +699,39 @@ static UIEdgeInsets RhythmEffectiveSafeAreaInsets(UIView *view) {
     self.toggleUIButton.layer.borderWidth = 1.0;
     self.toggleUIButton.layer.borderColor = [UIColor colorWithWhite:1.0 alpha:0.25].CGColor;
     self.toggleUIButton.frame = CGRectMake(12, topOffset + 4, btnSize, btnSize);
+    self.toggleUIButton.accessibilityLabel = @"显示更多控制";
     [self.toggleUIButton addTarget:self action:@selector(toggleUIButtonTapped:) forControlEvents:UIControlEventTouchUpInside];
     [self.view addSubview:self.toggleUIButton];
 }
 
 - (void)toggleUIButtonTapped:(UIButton *)sender {
-    self.isUIHidden = !self.isUIHidden;
-
-    // The song list covers most of the canvas even when fully transparent.
-    // Remove it from hit testing so the active Metal renderer can receive
-    // taps and drags while the chrome is hidden.
-    if (self.tableView) {
-        self.tableView.hidden = self.isUIHidden;
-        self.tableView.userInteractionEnabled = !self.isUIHidden;
-    }
-
-    NSLog(@"👁️ UI切换: %@", self.isUIHidden ? @"隐藏" : @"显示");
-    UIImage *eyeImage = nil;
+    self.areUtilityControlsCollapsed = !self.areUtilityControlsCollapsed;
+    NSLog(@"🎛️ 附加控制: %@", self.areUtilityControlsCollapsed ? @"收起" : @"展开");
+    UIImage *toggleImage = nil;
     if (@available(iOS 13.0, *)) {
         UIImageSymbolConfiguration *config = [UIImageSymbolConfiguration configurationWithPointSize:16 weight:UIImageSymbolWeightMedium];
-        eyeImage = [UIImage systemImageNamed:self.isUIHidden ? @"eye.slash.fill" : @"eye.fill" withConfiguration:config];
+        toggleImage = [UIImage systemImageNamed:self.areUtilityControlsCollapsed ? @"slider.horizontal.3" : @"xmark" withConfiguration:config];
     }
-    [self.toggleUIButton setImage:eyeImage forState:UIControlStateNormal];
+    [self.toggleUIButton setImage:toggleImage forState:UIControlStateNormal];
+    self.toggleUIButton.accessibilityLabel = self.areUtilityControlsCollapsed ? @"显示更多控制" : @"收起更多控制";
 
     [UIView animateWithDuration:0.3 animations:^{
-        self.toggleUIButton.alpha = self.isUIHidden ? 0.2 : 1.0;
-
         for (UIView *controlView in self.controlButtons) {
-            controlView.alpha = self.isUIHidden ? 0.0 : 1.0;
-            controlView.userInteractionEnabled = !self.isUIHidden;
+            controlView.alpha = self.areUtilityControlsCollapsed ? 0.0 : 1.0;
+            controlView.userInteractionEnabled = !self.areUtilityControlsCollapsed;
         }
-
-        if (self.fpsLabel) {
-            self.fpsLabel.alpha = self.isUIHidden ? 0.0 : 1.0;
-        }
-
         if (self.leftFunctionScrollView) {
-            self.leftFunctionScrollView.alpha = self.isUIHidden ? 0.0 : 1.0;
-            self.leftFunctionScrollView.userInteractionEnabled = !self.isUIHidden;
+            self.leftFunctionScrollView.alpha = self.areUtilityControlsCollapsed ? 0.0 : 1.0;
+            self.leftFunctionScrollView.userInteractionEnabled = !self.areUtilityControlsCollapsed;
         }
-
-        if (self.importLyricsButton) {
-            self.importLyricsButton.alpha = self.isUIHidden ? 0.0 : 1.0;
-            self.importLyricsButton.userInteractionEnabled = !self.isUIHidden;
-        }
-
-        if (self.playControlBarView) {
-            self.playControlBarView.alpha = self.isUIHidden ? 0.0 : 1.0;
-            self.playControlBarView.userInteractionEnabled = !self.isUIHidden;
-        }
-
         if (self.searchBar) {
-            self.searchBar.alpha = self.isUIHidden ? 0.0 : 1.0;
-            self.searchBar.userInteractionEnabled = !self.isUIHidden;
-            if (self.isUIHidden) {
-                [self.searchBar resignFirstResponder];
-            }
+            self.searchBar.alpha = self.areUtilityControlsCollapsed ? 0.0 : 1.0;
+            self.searchBar.userInteractionEnabled = !self.areUtilityControlsCollapsed;
         }
-
-        [self setProgressViewHidden:self.isUIHidden animated:NO];
+        if (self.tableView) {
+            self.tableView.alpha = self.areUtilityControlsCollapsed ? 0.0 : 1.0;
+            self.tableView.userInteractionEnabled = !self.areUtilityControlsCollapsed;
+        }
     }];
 }
 
@@ -774,7 +754,36 @@ static UIEdgeInsets RhythmEffectiveSafeAreaInsets(UIView *view) {
 }
 
 - (void)setupBackgroundLayers {
-    NSLog(@"🎵 音乐封面周围的圆弧已被移除，界面更加简洁");
+    UIImageView *atmosphere = [[UIImageView alloc] initWithFrame:self.view.bounds];
+    atmosphere.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    atmosphere.contentMode = UIViewContentModeScaleAspectFill;
+    atmosphere.clipsToBounds = YES;
+    atmosphere.alpha = 0.36;
+    self.artworkAtmosphereView = atmosphere;
+    [self.view insertSubview:atmosphere atIndex:0];
+
+    UIVisualEffectView *blur = [[UIVisualEffectView alloc] initWithEffect:
+        [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemUltraThinMaterialDark]];
+    blur.frame = self.view.bounds;
+    blur.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    blur.userInteractionEnabled = NO;
+    [self.view insertSubview:blur atIndex:1];
+
+    CAGradientLayer *shade = [CAGradientLayer layer];
+    shade.frame = self.view.bounds;
+    shade.colors = @[
+        (id)[UIColor colorWithRed:0.025 green:0.035 blue:0.07 alpha:0.68].CGColor,
+        (id)[UIColor colorWithRed:0.025 green:0.035 blue:0.07 alpha:0.18].CGColor,
+        (id)[UIColor colorWithRed:0.015 green:0.02 blue:0.045 alpha:0.88].CGColor
+    ];
+    shade.locations = @[@0.0, @0.48, @1.0];
+    shade.startPoint = CGPointMake(0.5, 0.0);
+    shade.endPoint = CGPointMake(0.5, 1.0);
+    shade.name = @"artwork-atmosphere-shade";
+    shade.zPosition = 10.0;
+    [blur.contentView.layer addSublayer:shade];
+
+    NSLog(@"🎵 已创建随专辑封面取色的暗色氛围背景");
 }
 
 - (CAShapeLayer *)createBackgroundRingWithCenter:(CGPoint)center
@@ -846,16 +855,45 @@ static UIEdgeInsets RhythmEffectiveSafeAreaInsets(UIView *view) {
         coverImage = [self musicImageWithMusicURL:fileUrl];
     }
 
+    self.coverImageView.layer.cornerRadius = self.coverImageView.frame.size.height / 2.0;
+    self.coverImageView.clipsToBounds = YES;
+    self.coverImageView.contentMode = UIViewContentModeScaleAspectFill;
+    self.coverImageView.layer.borderWidth = 1.0;
+    self.coverImageView.layer.borderColor = [UIColor colorWithWhite:1.0 alpha:0.22].CGColor;
+    self.coverImageView.layer.shadowColor = [UIColor colorWithRed:0.40 green:0.62 blue:1.0 alpha:1.0].CGColor;
+    self.coverImageView.layer.shadowOpacity = 0.34;
+    self.coverImageView.layer.shadowRadius = 28.0;
+    self.coverImageView.layer.shadowOffset = CGSizeZero;
+    self.coverImageView.center = self.view.center;
+    [self.view addSubview:self.coverImageView];
+
+    CGFloat metadataY = CGRectGetMidY(self.coverImageView.frame) + 102.0;
+    self.nowPlayingTitleLabel = [[UILabel alloc] initWithFrame:CGRectMake(104.0, metadataY, self.view.bounds.size.width - 208.0, 27.0)];
+    self.nowPlayingTitleLabel.font = [UIFont systemFontOfSize:18.0 weight:UIFontWeightSemibold];
+    self.nowPlayingTitleLabel.textColor = [UIColor colorWithWhite:1.0 alpha:0.96];
+    self.nowPlayingTitleLabel.textAlignment = NSTextAlignmentCenter;
+    self.nowPlayingTitleLabel.lineBreakMode = NSLineBreakByTruncatingTail;
+    self.nowPlayingTitleLabel.shadowColor = [UIColor colorWithWhite:0.0 alpha:0.35];
+    self.nowPlayingTitleLabel.shadowOffset = CGSizeMake(0.0, 1.0);
+    [self.view addSubview:self.nowPlayingTitleLabel];
+
+    self.nowPlayingArtistLabel = [[UILabel alloc] initWithFrame:CGRectMake(104.0, metadataY + 29.0, self.view.bounds.size.width - 208.0, 20.0)];
+    self.nowPlayingArtistLabel.font = [UIFont systemFontOfSize:13.0 weight:UIFontWeightMedium];
+    self.nowPlayingArtistLabel.textColor = [UIColor colorWithWhite:1.0 alpha:0.58];
+    self.nowPlayingArtistLabel.textAlignment = NSTextAlignmentCenter;
+    self.nowPlayingArtistLabel.lineBreakMode = NSLineBreakByTruncatingTail;
+    [self.view addSubview:self.nowPlayingArtistLabel];
+
+    self.nowPlayingTitleLabel.text = songName ?: @"未选择歌曲";
+    if (self.currentIndex < self.displayedMusicItems.count) {
+        MusicItem *currentItem = self.displayedMusicItems[self.currentIndex];
+        self.nowPlayingArtistLabel.text = currentItem.artist.length > 0 ? currentItem.artist : currentItem.album;
+    }
+
     [self displayAlbumArtwork:coverImage songName:songName];
     if (!coverImage) {
         [self fetchAppleMusicArtworkForCurrentItemIfNeeded];
     }
-
-    self.coverImageView.layer.cornerRadius = self.coverImageView.frame.size.height / 2.0;
-    self.coverImageView.clipsToBounds = YES;
-    self.coverImageView.contentMode = UIViewContentModeScaleAspectFill;
-    self.coverImageView.center = self.view.center;
-    [self.view addSubview:self.coverImageView];
 
     if (!self.isShowingVinylRecord) {
         [self.animationCoordinator addRotationViews:@[self.coverImageView]
@@ -865,6 +903,8 @@ static UIEdgeInsets RhythmEffectiveSafeAreaInsets(UIView *view) {
     }
 
     [self.view addSubview:[self buildTableHeadView]];
+    [self.view bringSubviewToFront:self.nowPlayingTitleLabel];
+    [self.view bringSubviewToFront:self.nowPlayingArtistLabel];
     [self bringControlButtonsToFront];
 }
 
@@ -936,7 +976,7 @@ static UIEdgeInsets RhythmEffectiveSafeAreaInsets(UIView *view) {
     CGFloat rightBtnRight = rightBtnSize + 12 + 8; // 按钮宽+右边距+间隙
 
     // ── 底部播放控制区高度 ──
-    CGFloat playAreaHeight = 100;
+    CGFloat playAreaHeight = 76;
     CGFloat bottomAreaTop  = screenHeight - safeBottom - playAreaHeight;
 
     // ══════════════════════════════════════════
@@ -957,6 +997,23 @@ static UIEdgeInsets RhythmEffectiveSafeAreaInsets(UIView *view) {
 
     CGFloat btnW = 58, btnH = 34, btnSpacing = 6, btnX = 11;
     CGFloat contentY = 8;
+    UILabel *demucsLabel = [[UILabel alloc] initWithFrame:CGRectMake(2, contentY, leftScrollWidth - 4, 16)];
+    demucsLabel.text = @"Demucs 分轨";
+    demucsLabel.textColor = [UIColor colorWithWhite:0.88 alpha:1.0];
+    demucsLabel.font = [UIFont systemFontOfSize:10.5 weight:UIFontWeightMedium];
+    demucsLabel.textAlignment = NSTextAlignmentCenter;
+    [self.leftFunctionScrollView addSubview:demucsLabel];
+
+    self.demucsStemsMainSwitch = [[UISwitch alloc] initWithFrame:CGRectMake(14, contentY + 17, 51, 31)];
+    self.demucsStemsMainSwitch.onTintColor = [UIColor colorWithRed:0.24 green:0.77 blue:0.91 alpha:1.0];
+    self.demucsStemsMainSwitch.on = self.guitarDemucsOnDeviceExperimentEnabled;
+    self.demucsStemsMainSwitch.transform = CGAffineTransformMakeScale(0.78, 0.78);
+    self.demucsStemsMainSwitch.accessibilityLabel = @"Demucs 分轨，吉他、钢琴和鼓";
+    self.demucsStemsMainSwitch.accessibilityIdentifier = @"guitarDemucsOnDeviceExperimentSwitch";
+    [self.demucsStemsMainSwitch addTarget:self action:@selector(guitarDemucsOnDeviceExperimentSwitchChanged:)
+                         forControlEvents:UIControlEventValueChanged];
+    [self.leftFunctionScrollView addSubview:self.demucsStemsMainSwitch];
+    contentY += 55.0;
     self.categoryButtons = [NSMutableArray array];
 
     NSArray *categories = @[
@@ -1057,6 +1114,8 @@ static UIEdgeInsets RhythmEffectiveSafeAreaInsets(UIView *view) {
 
     CGFloat totalContentH = utilY + utilButtons.count * (btnH + btnSpacing) + 16;
     self.leftFunctionScrollView.contentSize = CGSizeMake(leftScrollWidth, totalContentH);
+    self.leftFunctionScrollView.alpha = self.areUtilityControlsCollapsed ? 0.0 : 1.0;
+    self.leftFunctionScrollView.userInteractionEnabled = !self.areUtilityControlsCollapsed;
 
     // ══════════════════════════════════════════
     // 搜索栏 & 歌曲列表
@@ -1070,6 +1129,13 @@ static UIEdgeInsets RhythmEffectiveSafeAreaInsets(UIView *view) {
     self.searchBar.placeholder = @"搜索歌曲、艺术家...";
     self.searchBar.barStyle = UIBarStyleBlack;
     self.searchBar.searchBarStyle = UISearchBarStyleMinimal;
+    self.searchBar.backgroundImage = [UIImage new];
+    self.searchBar.searchTextField.backgroundColor = [UIColor colorWithWhite:1.0 alpha:0.075];
+    self.searchBar.searchTextField.textColor = [UIColor colorWithWhite:1.0 alpha:0.94];
+    self.searchBar.searchTextField.tintColor = [UIColor colorWithRed:0.48 green:0.82 blue:1.0 alpha:1.0];
+    self.searchBar.searchTextField.attributedPlaceholder = [[NSAttributedString alloc] initWithString:self.searchBar.placeholder
+                                                                                          attributes:@{NSForegroundColorAttributeName: [UIColor colorWithWhite:1.0 alpha:0.48]}];
+    self.searchBar.searchTextField.leftView.tintColor = [UIColor colorWithWhite:1.0 alpha:0.60];
     self.searchBar.enablesReturnKeyAutomatically = YES;
     [self.view addSubview:self.searchBar];
 
@@ -1088,6 +1154,10 @@ static UIEdgeInsets RhythmEffectiveSafeAreaInsets(UIView *view) {
     self.tableView.backgroundColor = [UIColor clearColor];
     self.tableView.rowHeight = 56;
     self.tableView.keyboardDismissMode = UIScrollViewKeyboardDismissModeOnDrag;
+    self.searchBar.alpha = self.areUtilityControlsCollapsed ? 0.0 : 1.0;
+    self.searchBar.userInteractionEnabled = !self.areUtilityControlsCollapsed;
+    self.tableView.alpha = self.areUtilityControlsCollapsed ? 0.0 : 1.0;
+    self.tableView.userInteractionEnabled = !self.areUtilityControlsCollapsed;
     [self.view addSubview:self.tableView];
     [self setupBackgroundMediaPanel];
 
@@ -1096,27 +1166,31 @@ static UIEdgeInsets RhythmEffectiveSafeAreaInsets(UIView *view) {
     // ══════════════════════════════════════════
     // 背景毛玻璃条
     UIView *playBar = [[UIView alloc] initWithFrame:CGRectMake(0, bottomAreaTop, screenWidth, playAreaHeight + safeBottom)];
-    playBar.backgroundColor = [UIColor colorWithWhite:0.0 alpha:0.55];
-    // 上边框线
-    CALayer *topLine = [CALayer layer];
-    topLine.frame = CGRectMake(0, 0, screenWidth, 0.5);
-    topLine.backgroundColor = [UIColor colorWithWhite:1.0 alpha:0.12].CGColor;
-    [playBar.layer addSublayer:topLine];
+    playBar.backgroundColor = [UIColor clearColor];
+    UIVisualEffectView *playBarMaterial = [[UIVisualEffectView alloc] initWithEffect:
+        [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemThinMaterialDark]];
+    playBarMaterial.frame = CGRectMake(14.0, 4.0, screenWidth - 28.0, playAreaHeight - 8.0);
+    playBarMaterial.autoresizingMask = UIViewAutoresizingFlexibleWidth;
+    playBarMaterial.layer.cornerRadius = 24.0;
+    playBarMaterial.clipsToBounds = YES;
+    playBarMaterial.layer.borderWidth = 1.0;
+    playBarMaterial.layer.borderColor = [UIColor colorWithWhite:1.0 alpha:0.13].CGColor;
+    [playBar addSubview:playBarMaterial];
     [self.view addSubview:playBar];
     self.playControlBarView = playBar;
 
     // 三个播放按钮居中
-    CGFloat prevW = 52, playW = 64, nextW = 52;
-    CGFloat playH = 52;
+    CGFloat prevW = 44, playW = 52, nextW = 44;
+    CGFloat playH = 44;
     CGFloat gap = 20;
     CGFloat totalW = prevW + playW + nextW + gap * 2;
     CGFloat startX = (screenWidth - totalW) / 2;
-    CGFloat btnCenterY = playAreaHeight / 2 - 4; // 在 playBar 内部的 Y
+    CGFloat btnCenterY = playAreaHeight / 2.0;
 
     // 上一首
     self.previousButton = [UIButton buttonWithType:UIButtonTypeSystem];
     if (@available(iOS 13.0, *)) {
-        UIImageSymbolConfiguration *cfg = [UIImageSymbolConfiguration configurationWithPointSize:22 weight:UIImageSymbolWeightMedium];
+        UIImageSymbolConfiguration *cfg = [UIImageSymbolConfiguration configurationWithPointSize:18 weight:UIImageSymbolWeightMedium];
         [self.previousButton setImage:[UIImage systemImageNamed:@"backward.end.fill" withConfiguration:cfg] forState:UIControlStateNormal];
     }
     [self.previousButton setTitle:@"" forState:UIControlStateNormal];
@@ -1130,15 +1204,15 @@ static UIEdgeInsets RhythmEffectiveSafeAreaInsets(UIView *view) {
     // 播放/暂停（更大更突出）
     self.playPauseButton = [UIButton buttonWithType:UIButtonTypeSystem];
     if (@available(iOS 13.0, *)) {
-        UIImageSymbolConfiguration *cfg = [UIImageSymbolConfiguration configurationWithPointSize:28 weight:UIImageSymbolWeightBold];
+        UIImageSymbolConfiguration *cfg = [UIImageSymbolConfiguration configurationWithPointSize:22 weight:UIImageSymbolWeightBold];
         [self.playPauseButton setImage:[UIImage systemImageNamed:@"play.fill" withConfiguration:cfg] forState:UIControlStateNormal];
     }
     [self.playPauseButton setTitle:@"" forState:UIControlStateNormal];
     self.playPauseButton.tintColor = [UIColor whiteColor];
-    self.playPauseButton.backgroundColor = [UIColor colorWithRed:0.15 green:0.6 blue:0.3 alpha:0.9];
+    self.playPauseButton.backgroundColor = [UIColor colorWithRed:0.18 green:0.66 blue:0.48 alpha:0.96];
     self.playPauseButton.layer.cornerRadius = playW / 2;
     self.playPauseButton.layer.borderWidth = 1.5;
-    self.playPauseButton.layer.borderColor = [UIColor colorWithRed:0.3 green:0.85 blue:0.5 alpha:0.6].CGColor;
+    self.playPauseButton.layer.borderColor = [UIColor colorWithRed:0.48 green:0.96 blue:0.74 alpha:0.72].CGColor;
     self.playPauseButton.frame = CGRectMake(startX + prevW + gap, btnCenterY - playW / 2, playW, playW);
     [self.playPauseButton addTarget:self action:@selector(playPauseButtonTapped:) forControlEvents:UIControlEventTouchUpInside];
     [playBar addSubview:self.playPauseButton];
@@ -1777,7 +1851,44 @@ static UIEdgeInsets RhythmEffectiveSafeAreaInsets(UIView *view) {
         [self cyberpunkControlButtonTapped:nil];
     } else if (effectType == VisualEffectTypeCellularWormhole) {
         [self showGuitarDemucsExperimentPanel];
+    } else if (effectType == VisualEffectTypeCoverDotMatrix) {
+        [self showCoverDotMatrixStylePicker];
     }
+}
+
+- (void)showCoverDotMatrixStylePicker {
+    NSArray<NSString *> *styleNames = @[
+        @"丝绸波面 · 柔和起伏",
+        @"隧道流动 · 向中心卷入",
+        @"星球轨道 · 球面旋转",
+        @"虚空散射 · 鼓点外推",
+        @"唱片纹路 · 旋转沟槽"
+    ];
+    NSInteger selectedStyle = [[NSUserDefaults standardUserDefaults] integerForKey:@"coverDotMatrixStyle"];
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"点阵样式"
+                                                                   message:@"选择封面点阵的运动形态"
+                                                            preferredStyle:UIAlertControllerStyleActionSheet];
+    __weak typeof(self) weakSelf = self;
+    [styleNames enumerateObjectsUsingBlock:^(NSString *name, NSUInteger idx, BOOL *stop) {
+        NSString *title = [NSString stringWithFormat:@"%@%@", (NSInteger)idx == selectedStyle ? @"✓ " : @"", name];
+        UIAlertAction *action = [UIAlertAction actionWithTitle:title style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+            NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+            [defaults setInteger:(NSInteger)idx forKey:@"coverDotMatrixStyle"];
+            // Apply to the dot-matrix effect immediately and let the manager
+            // retain the full parameter set under the correct effect key.
+            [weakSelf.visualEffectManager setCurrentEffect:VisualEffectTypeCoverDotMatrix animated:YES];
+            [weakSelf.visualEffectManager setRenderParameters:@{@"dotStyle": @((NSInteger)idx)}];
+        }];
+        [alert addAction:action];
+    }];
+    [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+    UIPopoverPresentationController *popover = alert.popoverPresentationController;
+    if (popover) {
+        popover.sourceView = self.view;
+        popover.sourceRect = CGRectMake(CGRectGetMidX(self.view.bounds), CGRectGetMidY(self.view.bounds), 1.0, 1.0);
+    }
+    UIViewController *presenter = self.presentedViewController ?: self;
+    [presenter presentViewController:alert animated:YES completion:nil];
 }
 
 - (void)showGuitarDemucsExperimentPanel {
@@ -1801,11 +1912,11 @@ static UIEdgeInsets RhythmEffectiveSafeAreaInsets(UIView *view) {
         [panel.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
         [panel.centerYAnchor constraintEqualToAnchor:self.view.centerYAnchor],
         [panel.widthAnchor constraintEqualToConstant:panelWidth],
-    [panel.heightAnchor constraintEqualToConstant:222.0]
+        [panel.heightAnchor constraintEqualToConstant:178.0]
     ]];
 
     UILabel *title = [[UILabel alloc] initWithFrame:CGRectMake(18, 16, 250, 27)];
-    title.text = @"深空蜂巢 · 吉他数据对比";
+    title.text = @"音源分离 · 特征曲线对比";
     title.textColor = UIColor.whiteColor;
     title.font = [UIFont systemFontOfSize:17 weight:UIFontWeightSemibold];
     [panel addSubview:title];
@@ -1831,22 +1942,8 @@ static UIEdgeInsets RhythmEffectiveSafeAreaInsets(UIView *view) {
            forControlEvents:UIControlEventValueChanged];
     [panel addSubview:sourceSwitch];
 
-    UILabel *phoneRow = [[UILabel alloc] initWithFrame:CGRectMake(18, 96, 225, 29)];
-    phoneRow.text = @"手机本地 Demucs（实验）";
-    phoneRow.textColor = UIColor.whiteColor;
-    phoneRow.font = [UIFont systemFontOfSize:14 weight:UIFontWeightMedium];
-    [panel addSubview:phoneRow];
-
-    UISwitch *phoneSwitch = [[UISwitch alloc] initWithFrame:CGRectMake(panelWidth - 68, 94, 51, 31)];
-    phoneSwitch.onTintColor = [UIColor colorWithRed:0.24 green:0.77 blue:0.91 alpha:1.0];
-    phoneSwitch.on = self.guitarDemucsOnDeviceExperimentEnabled;
-    phoneSwitch.accessibilityIdentifier = @"guitarDemucsOnDeviceExperimentSwitch";
-    [phoneSwitch addTarget:self action:@selector(guitarDemucsOnDeviceExperimentSwitchChanged:)
-          forControlEvents:UIControlEventValueChanged];
-    [panel addSubview:phoneSwitch];
-
-    UILabel *note = [[UILabel alloc] initWithFrame:CGRectMake(18, 137, panelWidth - 36, 69)];
-    note.text = @"电脑数据开关：仅用于《李荣浩 - 名字》的已有整首曲线。手机实验开关：任意本地歌曲先用 YAMNet 播放，同时后台分离吉他；完成并缓存后自动切到 Demucs，重播可使用缓存。不同歌曲的分离效果会有差异。模型约 186 MB，需要 iOS 16 或更新版本。";
+    UILabel *note = [[UILabel alloc] initWithFrame:CGRectMake(18, 98, panelWidth - 36, 65)];
+    note.text = @"电脑分离数据开关：仅用于《李荣浩 - 名字》的吉他曲线。手机 Demucs 分轨已移到主屏左侧；开启后先用 YAMNet 播放，吉他、钢琴和鼓曲线计算并缓存后自动切换。模型约 186 MB，需要 iOS 16 或更新版本。";
     note.textColor = [UIColor colorWithWhite:0.79 alpha:1.0];
     note.font = [UIFont systemFontOfSize:11.5];
     note.numberOfLines = 0;
@@ -1870,6 +1967,7 @@ static UIEdgeInsets RhythmEffectiveSafeAreaInsets(UIView *view) {
     self.guitarDemucsOnDeviceExperimentEnabled = sender.on;
     [[NSUserDefaults standardUserDefaults] setBool:sender.on forKey:kGuitarDemucsOnDeviceDefaultsKey];
     self.player.htDemucsGuitarAnalysisEnabled = sender.on;
+    self.demucsStemsMainSwitch.on = sender.on;
     self.dedicatedGuitarLastScoreLogSecond = -1;
     NSLog(@"[DemucsPhone] 手机上 Demucs 吉他实验 %@；启用时先沿用 YAMNet，完整分析成功后切换。", sender.on ? @"开启" : @"关闭");
 }
@@ -1927,9 +2025,11 @@ static UIEdgeInsets RhythmEffectiveSafeAreaInsets(UIView *view) {
     [self refreshVisualLyricsOverlayVisibility];
     [self updateAudioActivityMeterOverlayWithFeatures:self.latestAudioFeatures];
     [self updateMusicFeatureScopeOverlayWithFeatures:self.latestAudioFeatures];
-    if (effectType == VisualEffectTypeGlassResonance) {
+    if (effectType == VisualEffectTypeGlassResonance || effectType == VisualEffectTypeCoverDotMatrix) {
         self.coverImageView.hidden = YES;
         self.vinylRecordView.hidden = YES;
+        self.isShowingVinylRecord = NO;
+        [self.vinylRecordView stopSpinning];
         [self.visualEffectManager updateAlbumArtwork:self.coverImageView.image];
     } else if (!self.isBackgroundMediaEffectActive) {
         [self updateAudioSelection];
@@ -2120,8 +2220,9 @@ static UIEdgeInsets RhythmEffectiveSafeAreaInsets(UIView *view) {
     self.fpsLabel.layer.borderWidth = 0.5;
     self.fpsLabel.layer.borderColor = [UIColor colorWithRed:0.2 green:1.0 blue:0.4 alpha:0.4].CGColor;
     self.fpsLabel.text = @"-- FPS";
-    [self.view addSubview:self.fpsLabel];
-    [self.view bringSubviewToFront:self.fpsLabel];
+    // Keep the live performance counter out of the listening UI; it remains
+    // available to the monitor/logging path without covering the search field.
+    self.fpsLabel.hidden = YES;
 
     self.fpsDisplayLink = [CADisplayLink displayLinkWithTarget:self selector:@selector(updateFPS:)];
     [self.fpsDisplayLink addToRunLoop:[NSRunLoop mainRunLoop] forMode:NSRunLoopCommonModes];
@@ -2198,6 +2299,8 @@ static UIEdgeInsets RhythmEffectiveSafeAreaInsets(UIView *view) {
     [self.agentStatusButton addTarget:self action:@selector(agentStatusButtonTapped:) forControlEvents:UIControlEventTouchUpInside];
     [self.view addSubview:self.agentStatusButton];
     [self.controlButtons addObject:self.agentStatusButton];
+    self.agentStatusButton.alpha = self.areUtilityControlsCollapsed ? 0.0 : 1.0;
+    self.agentStatusButton.userInteractionEnabled = !self.areUtilityControlsCollapsed;
     [self bringControlButtonsToFront];
 
     CGFloat panelWidth = 320;

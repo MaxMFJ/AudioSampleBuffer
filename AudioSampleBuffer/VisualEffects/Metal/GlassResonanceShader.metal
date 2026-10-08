@@ -89,11 +89,17 @@ static float3 glassStudio(float3 d, float high, float climax, constant Uniforms 
     float strip=exp(-pow((d.y+0.38+0.14*d.x)/0.035,2.0f))*smoothstep(-0.8,0.2,d.z);
     float heat=1.0f+climax*0.32f;
     float3 atmosphere=glassAtmosphere(u), primary=glassPrimary(u), accent=glassAccent(u);
+    float guitar = saturate(u.instrumentStems.x);
+    float piano = saturate(u.instrumentStems.y);
+    float drums = saturate(u.instrumentStems.z);
+    float3 stemTint = u.stemPalette[0].rgb * guitar * 0.24
+                    + u.stemPalette[1].rgb * piano * 0.22
+                    + u.stemPalette[2].rgb * drums * 0.18;
     return atmosphere*0.16+
       primary*key*3.6*heat+
       accent*rim*(2.4+high*1.3+climax*0.70)+
       mix(primary,accent,0.38)*top*(1.0+climax*0.35)+
-      mix(primary,accent,0.28+climax*0.38)*strip*(1.8+climax*0.55);
+      mix(primary,accent,0.28+climax*0.38)*strip*(1.8+climax*0.55)+stemTint;
 }
 constexpr sampler glassSampler(coord::normalized,address::clamp_to_edge,filter::linear);
 constexpr sampler coverSampler(coord::normalized,address::clamp_to_edge,filter::linear,mip_filter::linear,max_anisotropy(8));
@@ -135,6 +141,15 @@ fragment float4 glassResonanceFragment(GlassVertex in [[stage_in]],constant Unif
     // Narrow reflected contours make the transparent volume legible on black.
     color+=reflection*0.025+glassAtmosphere(u)*pow(1-facing,3.0f)*0.34;
     color+=mix(glassAccent(u),glassPrimary(u),climax)*pow(1-facing,2.4f)*climax*0.18;
+    // Guitar sustains the bright edge, piano opens prismatic highlights, and
+    // drum energy adds a short, broader reflection hit without a new pass.
+    float guitar = saturate(u.instrumentStems.x);
+    float piano = saturate(u.instrumentStems.y);
+    float drums = saturate(u.instrumentStems.z);
+    float edgeMask = pow(1-facing, 2.2f);
+    color += u.stemPalette[0].rgb * guitar * edgeMask * 0.30;
+    color += u.stemPalette[1].rgb * piano * pow(1-facing, 1.6f) * 0.24;
+    color += u.stemPalette[2].rgb * drums * edgeMask * 0.42;
     return float4(color,1);
 }
 fragment float4 glassBackdropFragment(RasterizerData in [[stage_in]],constant Uniforms &u [[buffer(0)]]) {

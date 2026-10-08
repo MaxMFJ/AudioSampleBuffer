@@ -4,12 +4,13 @@
 #import <Accelerate/Accelerate.h>
 #import <CoreML/CoreML.h>
 #import <CommonCrypto/CommonDigest.h>
+#import <UIKit/UIKit.h>
 
 static const NSInteger kHTDMSampleRate = 44100;
 static const NSInteger kHTDMSegmentSeconds = 7;
 static const NSInteger kHTDMHopSamples = 220500; // 5 s; overlap-and-add covers the full track.
 static const NSInteger kHTDMFFTSize = 4096;
-static NSString * const kHTDMModelVersion = @"htdemucs6s-guitar-ios16-v1";
+static NSString * const kHTDMModelVersion = @"htdemucs6s-guitar-piano-drums-ios16-v1";
 #define ASB_CLAMP(value, low, high) fminf((high), fmaxf((low), (value)))
 
 static NSError *HTDMError(NSInteger code, NSString *message) {
@@ -20,7 +21,10 @@ static NSError *HTDMError(NSInteger code, NSString *message) {
 @interface HTDemucsGuitarAnalyzer ()
 @property (nonatomic, strong) dispatch_queue_t workQueue;
 @property (nonatomic, strong) NSLock *modelLock;
+@property (nonatomic, strong) NSLock *jobLock;
 @property (nonatomic, strong, nullable) MLModel *model;
+@property (nonatomic, assign) NSUInteger jobGeneration;
+@property (nonatomic, assign) BOOL applicationInBackground;
 @end
 
 @implementation HTDemucsGuitarAnalyzer
@@ -37,8 +41,49 @@ static NSError *HTDMError(NSInteger code, NSString *message) {
         _workQueue = dispatch_queue_create("app.audiosamplebuffer.htdemucs-guitar",
                                             dispatch_queue_attr_make_with_qos_class(DISPATCH_QUEUE_SERIAL, QOS_CLASS_UTILITY, 0));
         _modelLock = [[NSLock alloc] init];
+        _jobLock = [[NSLock alloc] init];
+        _applicationInBackground = UIApplication.sharedApplication.applicationState != UIApplicationStateActive;
+        NSNotificationCenter *notifications = NSNotificationCenter.defaultCenter;
+        [notifications addObserver:self selector:@selector(applicationWillResignActive:)
+                              name:UIApplicationWillResignActiveNotification object:nil];
+        [notifications addObserver:self selector:@selector(applicationDidBecomeActive:)
+                              name:UIApplicationDidBecomeActiveNotification object:nil];
     }
     return self;
+}
+
+- (void)dealloc {
+    [NSNotificationCenter.defaultCenter removeObserver:self];
+}
+
+- (void)applicationWillResignActive:(NSNotification *)notification {
+    [self.jobLock lock];
+    self.applicationInBackground = YES;
+    self.jobGeneration += 1;
+    [self.jobLock unlock];
+    NSLog(@"[DemucsPhone] 应用即将失去焦点；当前分析将在本次推理结束后停止。");
+}
+
+- (void)applicationDidBecomeActive:(NSNotification *)notification {
+    [self.jobLock lock];
+    self.applicationInBackground = NO;
+    [self.jobLock unlock];
+}
+
+- (BOOL)isJobGenerationCurrent:(NSUInteger)generation error:(NSError **)error {
+    [self.jobLock lock];
+    BOOL current = (self.jobGeneration == generation && !self.applicationInBackground);
+    [self.jobLock unlock];
+    if (!current && error && !*error) {
+        *error = HTDMError(13, @"应用进入后台或歌曲已切换，Demucs 分析已停止。");
+    }
+    return current;
+}
+
+- (void)cancelCurrentAnalysis {
+    [self.jobLock lock];
+    self.jobGeneration += 1;
+    [self.jobLock unlock];
 }
 
 - (NSString *)digestForURL:(NSURL *)url error:(NSError **)error {
@@ -65,7 +110,7 @@ static NSError *HTDMError(NSInteger code, NSString *message) {
 
 - (NSURL *)cacheURLForDigest:(NSString *)digest {
     NSURL *caches = [[[NSFileManager defaultManager] URLsForDirectory:NSCachesDirectory inDomains:NSUserDomainMask] firstObject];
-    NSURL *folder = [caches URLByAppendingPathComponent:@"HTDemucsGuitar" isDirectory:YES];
+    NSURL *folder = [caches URLByAppendingPathComponent:@"HTDemucsStems" isDirectory:YES];
     return [folder URLByAppendingPathComponent:[NSString stringWithFormat:@"%@-%@.json", kHTDMModelVersion, digest]];
 }
 
@@ -87,11 +132,14 @@ static NSError *HTDMError(NSInteger code, NSString *message) {
     if (!compiled && package) compiled = [MLModel compileModelAtURL:package error:error];
     if (!compiled) {
         [self.modelLock unlock];
-        if (error && !*error) *error = HTDMError(2, @"工程内未找到 HTDemucs 吉他模型。");
+        if (error && !*error) *error = HTDMError(2, @"工程内未找到 HTDemucs 吉他、钢琴、鼓模型。");
         return nil;
     }
     MLModelConfiguration *configuration = [[MLModelConfiguration alloc] init];
-    configuration.computeUnits = MLComputeUnitsCPUAndGPU;
+    // An in-flight prediction cannot be cancelled when iOS backgrounds the app.
+    // Keep Core ML off the GPU so a foreground-to-background transition cannot
+    // turn that prediction into BackgroundExecutionNotPermitted.
+    configuration.computeUnits = MLComputeUnitsCPUAndNeuralEngine;
     self.model = [MLModel modelWithContentsOfURL:compiled configuration:configuration error:error];
     MLModel *result = self.model;
     [self.modelLock unlock];
@@ -109,7 +157,8 @@ static NSError *HTDMError(NSInteger code, NSString *message) {
     NSLog(@"[DemucsPhone] HTDemucs model object released after the job; Core ML may reclaim GPU runtime buffers asynchronously.");
 }
 
-- (NSMutableData *)readStereoPCMAtURL:(NSURL *)url sampleRate:(double *)sampleRate error:(NSError **)error {
+- (NSMutableData *)readStereoPCMAtURL:(NSURL *)url generation:(NSUInteger)generation
+                          sampleRate:(double *)sampleRate error:(NSError **)error {
     AVURLAsset *asset = [AVURLAsset URLAssetWithURL:url options:nil];
     AVAssetTrack *track = [asset tracksWithMediaType:AVMediaTypeAudio].firstObject;
     if (!track) { if (error) *error = HTDMError(3, @"音频文件没有可读的音轨。"); return nil; }
@@ -128,6 +177,11 @@ static NSError *HTDMError(NSInteger code, NSString *message) {
     NSMutableData *pcm = [NSMutableData data];
     CMSampleBufferRef sample = NULL;
     while ((sample = [output copyNextSampleBuffer])) {
+        if (![self isJobGenerationCurrent:generation error:error]) {
+            CFRelease(sample);
+            [reader cancelReading];
+            return nil;
+        }
         CMBlockBufferRef block = CMSampleBufferGetDataBuffer(sample);
         size_t length = CMBlockBufferGetDataLength(block);
         NSUInteger oldLength = pcm.length;
@@ -144,7 +198,8 @@ static NSError *HTDMError(NSInteger code, NSString *message) {
 }
 
 - (BOOL)calculateChunk:(const float *)pcm totalFrames:(NSUInteger)totalFrames start:(NSUInteger)start
-                  model:(MLModel *)model frameSums:(float *)frameSums frameWeights:(float *)frameWeights error:(NSError **)error {
+                  model:(MLModel *)model frameSums:(float *)frameSums frameWeights:(float *)frameWeights
+             frameCount:(NSUInteger)frameCount stemCount:(NSUInteger *)stemCountOut error:(NSError **)error {
     const NSUInteger segmentFrames = kHTDMSampleRate * kHTDMSegmentSeconds;
     NSError *arrayError = nil;
     MLMultiArray *input = [[MLMultiArray alloc] initWithShape:@[@1, @2, @(segmentFrames)]
@@ -162,75 +217,89 @@ static NSError *HTDMError(NSInteger code, NSString *message) {
     MLDictionaryFeatureProvider *provider = [[MLDictionaryFeatureProvider alloc] initWithDictionary:@{@"audio": inputValue} error:&arrayError];
     id<MLFeatureProvider> prediction = provider ? [model predictionFromFeatures:provider error:&arrayError] : nil;
     MLMultiArray *sources = [prediction featureValueForName:@"sources"].multiArrayValue;
-    if (!sources || (sources.dataType != MLMultiArrayDataTypeFloat32 &&
-                     sources.dataType != MLMultiArrayDataTypeFloat16)) {
+    NSUInteger sourceCount = sources.shape.count >= 4 ? sources.shape[1].unsignedIntegerValue : 0;
+    if (!sources || sourceCount == 0 || sourceCount > 3 || sources.shape[2].unsignedIntegerValue != 2 ||
+        sources.shape[3].unsignedIntegerValue != segmentFrames ||
+        (sources.dataType != MLMultiArrayDataTypeFloat32 && sources.dataType != MLMultiArrayDataTypeFloat16)) {
         if (error) *error = arrayError ?: HTDMError(9, @"HTDemucs 输出格式不符合预期。");
         return NO;
     }
-    const NSUInteger stemLength = segmentFrames;
-    float *convertedStem = NULL;
-    const float *stem = sources.dataPointer;
+    if (*stemCountOut > 0 && *stemCountOut != sourceCount) {
+        if (error) *error = HTDMError(9, @"HTDemucs 分段输出的音轨数量不一致。");
+        return NO;
+    }
+    *stemCountOut = sourceCount;
+    const NSUInteger stemSamples = segmentFrames * 2;
+    float *convertedStems = NULL;
+    const float *stems = sources.dataPointer;
     if (sources.dataType == MLMultiArrayDataTypeFloat16) {
-        convertedStem = malloc(segmentFrames * 2 * sizeof(float));
-        if (!convertedStem) { if (error) *error = HTDMError(10, @"吉他输出缓冲区分配失败。"); return NO; }
+        convertedStems = malloc(stemSamples * sourceCount * sizeof(float));
+        if (!convertedStems) { if (error) *error = HTDMError(10, @"Demucs 输出缓冲区分配失败。"); return NO; }
         vImage_Buffer sourceBuffer = { .data = sources.dataPointer, .height = 1,
-            .width = segmentFrames * 2, .rowBytes = segmentFrames * 2 * sizeof(uint16_t) };
-        vImage_Buffer destinationBuffer = { .data = convertedStem, .height = 1,
-            .width = segmentFrames * 2, .rowBytes = segmentFrames * 2 * sizeof(float) };
+            .width = stemSamples * sourceCount, .rowBytes = stemSamples * sourceCount * sizeof(uint16_t) };
+        vImage_Buffer destinationBuffer = { .data = convertedStems, .height = 1,
+            .width = stemSamples * sourceCount, .rowBytes = stemSamples * sourceCount * sizeof(float) };
         vImage_Error conversion = vImageConvert_Planar16FtoPlanarF(&sourceBuffer, &destinationBuffer, 0);
         if (conversion != kvImageNoError) {
-            free(convertedStem);
+            free(convertedStems);
             if (error) *error = HTDMError(11, @"无法将 Demucs Float16 输出转换为 Float32。");
             return NO;
         }
-        stem = convertedStem;
+        stems = convertedStems;
     }
     const NSUInteger validStart = padLeft;
     const NSUInteger validEnd = MIN(segmentFrames, padLeft + available);
     const NSUInteger hop = (NSUInteger)llround(kHTDMSampleRate * 0.05);
     const NSUInteger firstFrame = (start + validStart) / hop;
-    const NSUInteger lastFrame = MIN((NSUInteger)ceil((double)(start + validEnd) / hop), (NSUInteger)ceil((double)totalFrames / hop));
+    const NSUInteger lastFrame = MIN((NSUInteger)ceil((double)(start + validEnd) / hop), frameCount);
     float *window = calloc(kHTDMFFTSize, sizeof(float));
     float *real = calloc(kHTDMFFTSize / 2, sizeof(float));
     float *imag = calloc(kHTDMFFTSize / 2, sizeof(float));
     FFTSetup setup = vDSP_create_fftsetup((vDSP_Length)log2(kHTDMFFTSize), kFFTRadix2);
     if (!window || !real || !imag || !setup) {
         free(window); free(real); free(imag); if (setup) vDSP_destroy_fftsetup(setup);
-        free(convertedStem);
+        free(convertedStems);
         if (error) *error = HTDMError(12, @"频谱分析缓冲区分配失败。"); return NO;
     }
     for (NSUInteger index = firstFrame; index < lastFrame; index++) {
         NSInteger globalCenter = (NSInteger)(index * hop + hop / 2);
         NSInteger localCenter = globalCenter - (NSInteger)start + (NSInteger)padLeft;
-        for (NSInteger n = 0; n < kHTDMFFTSize; n++) {
-            NSInteger sampleIndex = localCenter - kHTDMFFTSize / 2 + n;
-            float mono = 0.0f;
-            if (sampleIndex >= (NSInteger)validStart && sampleIndex < (NSInteger)validEnd) {
-                float left = stem[sampleIndex];
-                float right = stem[stemLength + sampleIndex];
-                mono = (left + right) * 0.5f;
+        for (NSUInteger sourceIndex = 0; sourceIndex < sourceCount; sourceIndex++) {
+            const float *stem = stems + sourceIndex * stemSamples;
+            for (NSInteger n = 0; n < kHTDMFFTSize; n++) {
+                NSInteger sampleIndex = localCenter - kHTDMFFTSize / 2 + n;
+                float mono = 0.0f;
+                if (sampleIndex >= (NSInteger)validStart && sampleIndex < (NSInteger)validEnd) {
+                    float left = stem[sampleIndex];
+                    float right = stem[segmentFrames + sampleIndex];
+                    mono = (left + right) * 0.5f;
+                }
+                float hann = 0.5f - 0.5f * cosf((2.0f * (float)M_PI * n) / (kHTDMFFTSize - 1));
+                window[n] = mono * hann;
             }
-            float hann = 0.5f - 0.5f * cosf((2.0f * (float)M_PI * n) / (kHTDMFFTSize - 1));
-            window[n] = mono * hann;
+            DSPSplitComplex split = { .realp = real, .imagp = imag };
+            vDSP_ctoz((DSPComplex *)window, 2, &split, 1, kHTDMFFTSize / 2);
+            vDSP_fft_zrip(setup, &split, 1, (vDSP_Length)log2(kHTDMFFTSize), FFT_FORWARD);
+            double power = 0.0;
+            NSUInteger firstEnergyBin = sourceIndex == 0 ? 140 : 1;
+            for (NSUInteger bin = firstEnergyBin; bin < kHTDMFFTSize / 2; bin++) {
+                power += (double)real[bin] * real[bin] + (double)imag[bin] * imag[bin];
+            }
+            NSUInteger localSample = (NSUInteger)MAX(0, MIN((NSInteger)segmentFrames - 1, localCenter));
+            float blend = (float)MIN(localSample + 1, segmentFrames - localSample);
+            float level = (float)sqrt(power);
+            frameSums[sourceIndex * frameCount + index] += level * blend;
         }
-        DSPSplitComplex split = { .realp = real, .imagp = imag };
-        vDSP_ctoz((DSPComplex *)window, 2, &split, 1, kHTDMFFTSize / 2);
-        vDSP_fft_zrip(setup, &split, 1, (vDSP_Length)log2(kHTDMFFTSize), FFT_FORWARD);
-        double power = 0.0;
-        for (NSUInteger bin = 140; bin < kHTDMFFTSize / 2; bin++) power += (double)real[bin] * real[bin] + (double)imag[bin] * imag[bin];
         NSUInteger localSample = (NSUInteger)MAX(0, MIN((NSInteger)segmentFrames - 1, localCenter));
-        float blend = (float)MIN(localSample + 1, segmentFrames - localSample);
-        float level = (float)sqrt(power);
-        frameSums[index] += level * blend;
-        frameWeights[index] += blend;
+        frameWeights[index] += (float)MIN(localSample + 1, segmentFrames - localSample);
     }
     vDSP_destroy_fftsetup(setup);
     free(window); free(real); free(imag);
-    free(convertedStem);
+    free(convertedStems);
     return YES;
 }
 
-- (NSDictionary *)analyzeURL:(NSURL *)url error:(NSError **)error {
+- (NSDictionary *)analyzeURL:(NSURL *)url generation:(NSUInteger)generation error:(NSError **)error {
     NSString *digest = [self digestForURL:url error:error];
     if (!digest) return nil;
     NSURL *cacheURL = [self cacheURLForDigest:digest];
@@ -238,46 +307,73 @@ static NSError *HTDMError(NSInteger code, NSString *message) {
     NSDictionary *cachedObject = cached ? [NSJSONSerialization JSONObjectWithData:cached options:0 error:nil] : nil;
     if ([cachedObject isKindOfClass:NSDictionary.class]) { NSLog(@"[DemucsPhone] CACHE HIT: %@", url.lastPathComponent); return cachedObject; }
 
+    if (![self isJobGenerationCurrent:generation error:error]) return nil;
+
     CFAbsoluteTime started = CFAbsoluteTimeGetCurrent();
     MLModel *model = [self loadModel:error];
     if (!model) return nil;
     double sampleRate = 0.0;
-    NSMutableData *pcmData = [self readStereoPCMAtURL:url sampleRate:&sampleRate error:error];
+    NSMutableData *pcmData = [self readStereoPCMAtURL:url generation:generation sampleRate:&sampleRate error:error];
     if (!pcmData) return nil;
+    if (![self isJobGenerationCurrent:generation error:error]) return nil;
     NSUInteger totalFrames = pcmData.length / (sizeof(float) * 2);
     const NSUInteger hop = (NSUInteger)llround(sampleRate * 0.05);
     NSUInteger curveCount = (NSUInteger)ceil((double)totalFrames / hop);
-    float *sums = calloc(curveCount, sizeof(float));
+    float *sums = calloc(curveCount * 3, sizeof(float));
     float *weights = calloc(curveCount, sizeof(float));
-    if (!sums || !weights) { free(sums); free(weights); if (error) *error = HTDMError(12, @"吉他曲线缓冲区分配失败。"); return nil; }
+    NSUInteger stemCount = 0;
+    if (!sums || !weights) { free(sums); free(weights); if (error) *error = HTDMError(12, @"乐器曲线缓冲区分配失败。"); return nil; }
     const float *pcm = pcmData.bytes;
     for (NSUInteger start = 0; start < totalFrames; start += kHTDMHopSamples) {
+        if (![self isJobGenerationCurrent:generation error:error]) {
+            free(sums); free(weights); return nil;
+        }
         __block BOOL chunkSucceeded = NO;
         @autoreleasepool {
             chunkSucceeded = [self calculateChunk:pcm totalFrames:totalFrames start:start model:model
-                                         frameSums:sums frameWeights:weights error:error];
+                                         frameSums:sums frameWeights:weights frameCount:curveCount
+                                         stemCount:&stemCount error:error];
         }
         if (!chunkSucceeded) {
+            free(sums); free(weights); return nil;
+        }
+        if (![self isJobGenerationCurrent:generation error:error]) {
             free(sums); free(weights); return nil;
         }
     }
     // PCM is no longer needed after the final chunk; release its full-track
     // allocation before building and serializing the small envelope.
     pcmData = nil;
-    NSMutableArray<NSNumber *> *raw = [NSMutableArray arrayWithCapacity:curveCount];
-    for (NSUInteger i = 0; i < curveCount; i++) [raw addObject:@(weights[i] > 0.0f ? sums[i] / weights[i] : 0.0f)];
-    free(sums); free(weights);
-    NSArray<NSNumber *> *sorted = [raw sortedArrayUsingComparator:^NSComparisonResult(NSNumber *a, NSNumber *b) { return [a compare:b]; }];
-    float floor = sorted[(NSUInteger)(sorted.count * 0.12)].floatValue;
-    float ceiling = sorted[MIN(sorted.count - 1, (NSUInteger)(sorted.count * 0.96))].floatValue;
-    NSMutableArray<NSNumber *> *frames = [NSMutableArray arrayWithCapacity:curveCount];
-    for (NSNumber *number in raw) {
-        float value = ceiling > floor ? ASB_CLAMP((number.floatValue - floor) / (ceiling - floor), 0.0f, 1.0f) : 0.0f;
-        if (value < 0.08f) value = 0.0f;
-        [frames addObject:@(value)];
+    NSArray<NSString *> *stemNames = @[@"guitar", @"piano", @"drums"];
+    NSMutableDictionary *stemCurves = [NSMutableDictionary dictionaryWithCapacity:stemCount];
+    for (NSUInteger stemIndex = 0; stemIndex < stemCount; stemIndex++) {
+        NSMutableArray<NSNumber *> *raw = [NSMutableArray arrayWithCapacity:curveCount];
+        const float *stemSums = sums + stemIndex * curveCount;
+        for (NSUInteger i = 0; i < curveCount; i++) {
+            [raw addObject:@(weights[i] > 0.0f ? stemSums[i] / weights[i] : 0.0f)];
+        }
+        NSArray<NSNumber *> *sorted = [raw sortedArrayUsingComparator:^NSComparisonResult(NSNumber *a, NSNumber *b) { return [a compare:b]; }];
+        float floor = sorted[(NSUInteger)(sorted.count * 0.12)].floatValue;
+        float ceiling = sorted[MIN(sorted.count - 1, (NSUInteger)(sorted.count * 0.96))].floatValue;
+        NSMutableArray<NSNumber *> *frames = [NSMutableArray arrayWithCapacity:curveCount];
+        for (NSNumber *number in raw) {
+            float value = ceiling > floor ? ASB_CLAMP((number.floatValue - floor) / (ceiling - floor), 0.0f, 1.0f) : 0.0f;
+            if (value < 0.08f) value = 0.0f;
+            [frames addObject:@(value)];
+        }
+        stemCurves[stemNames[stemIndex]] = @{@"frames": frames};
     }
-    NSDictionary *result = @{@"model_version": kHTDMModelVersion, @"duration_sec": @((double)totalFrames / sampleRate),
-                              @"frame_hop_sec": @0.05, @"frames": frames};
+    free(sums); free(weights);
+    NSArray<NSNumber *> *guitarFrames = stemCurves[@"guitar"][@"frames"] ?: @[];
+    NSMutableDictionary *result = [@{@"model_version": kHTDMModelVersion,
+                                     @"duration_sec": @((double)totalFrames / sampleRate),
+                                     @"frame_hop_sec": @0.05,
+                                     @"stem_order": [stemNames subarrayWithRange:NSMakeRange(0, stemCount)],
+                                     @"stems": stemCurves,
+                                     @"frames": guitarFrames} mutableCopy];
+    if (stemCount > 1) result[@"piano_frames"] = stemCurves[@"piano"][@"frames"];
+    if (stemCount > 2) result[@"drums_frames"] = stemCurves[@"drums"][@"frames"];
+    if (![self isJobGenerationCurrent:generation error:error]) return nil;
     NSData *json = [NSJSONSerialization dataWithJSONObject:result options:0 error:nil];
     if (json) {
         [[NSFileManager defaultManager] createDirectoryAtURL:cacheURL.URLByDeletingLastPathComponent
@@ -285,17 +381,25 @@ static NSError *HTDMError(NSInteger code, NSString *message) {
         [json writeToURL:cacheURL options:NSDataWritingAtomic error:nil];
     }
     NSLog(@"[DemucsPhone] ANALYSIS COMPLETE: %.2f s audio, %lu frames, elapsed %.2f s, cache %@",
-          [result[@"duration_sec"] doubleValue], (unsigned long)frames.count,
+          [result[@"duration_sec"] doubleValue], (unsigned long)guitarFrames.count,
           CFAbsoluteTimeGetCurrent() - started, cacheURL.lastPathComponent);
     return result;
 }
 
 - (void)analyzeAudioAtURL:(NSURL *)audioURL completion:(void (^)(NSDictionary *, NSError *))completion {
+    [self.jobLock lock];
+    NSUInteger generation = ++self.jobGeneration;
+    BOOL inBackground = self.applicationInBackground;
+    [self.jobLock unlock];
     dispatch_async(self.workQueue, ^{
         NSError *error = nil;
         NSDictionary *result = nil;
         @autoreleasepool {
-            result = [self analyzeURL:audioURL error:&error];
+            if (inBackground) {
+                error = HTDMError(13, @"应用处于后台，Demucs 分析已延后。");
+            } else {
+                result = [self analyzeURL:audioURL generation:generation error:&error];
+            }
             [self unloadModel];
         }
         dispatch_async(dispatch_get_main_queue(), ^{ if (completion) completion(result, error); });

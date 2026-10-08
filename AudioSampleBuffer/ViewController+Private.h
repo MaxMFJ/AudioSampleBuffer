@@ -54,9 +54,13 @@ typedef NS_ENUM(NSInteger, BackgroundMediaKind) {
 @property (nonatomic, assign) BOOL guitarDemucsExperimentEnabled;
 @property (nonatomic, assign) BOOL guitarDemucsOnDeviceExperimentEnabled;
 @property (nonatomic, strong, nullable) UIView *guitarDemucsExperimentPanel;
+@property (nonatomic, strong, nullable) UISwitch *demucsStemsMainSwitch;
 @property (nonatomic, assign) NSInteger currentIndex;
 @property (nonatomic, strong) CAShapeLayer *backgroundRingLayer;
 @property (nonatomic, strong) UIImageView *coverImageView;
+@property (nonatomic, strong) UIImageView *artworkAtmosphereView;
+@property (nonatomic, strong) UILabel *nowPlayingTitleLabel;
+@property (nonatomic, strong) UILabel *nowPlayingArtistLabel;
 
 @property (nonatomic, strong) UITableView *tableView;
 @property (nonatomic, strong) UITableView *backgroundMediaTableView;
@@ -203,6 +207,7 @@ typedef NS_ENUM(NSInteger, BackgroundMediaKind) {
 @property (nonatomic, strong, nullable) AudioFeatures *latestAudioFeatures;
 @property (nonatomic, assign) BOOL dedicatedGuitarVisualActive;
 @property (nonatomic, assign) NSInteger dedicatedGuitarLastScoreLogSecond;
+@property (nonatomic, assign) NSInteger separatedStemLastLogBucket;
 @property (nonatomic, strong, nullable) UIView *audioActivityMeterOverlayView;
 @property (nonatomic, strong, nullable) NSArray<UILabel *> *audioActivityMeterLabels;
 @property (nonatomic, strong, nullable) UIView *musicFeatureScopeOverlayView;
@@ -228,7 +233,7 @@ typedef NS_ENUM(NSInteger, BackgroundMediaKind) {
 @property (nonatomic, strong) UIButton *lyricsTimingButton;
 
 @property (nonatomic, strong) UIButton *toggleUIButton;
-@property (nonatomic, assign) BOOL isUIHidden;
+@property (nonatomic, assign) BOOL areUtilityControlsCollapsed;
 @property (nonatomic, strong) NSMutableArray<UIView *> *controlButtons;
 @property (nonatomic, strong) UIButton *cloudButton;
 

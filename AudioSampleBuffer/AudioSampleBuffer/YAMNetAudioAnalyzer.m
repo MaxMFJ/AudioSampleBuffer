@@ -90,7 +90,9 @@ static NSError *YAMNetError(NSInteger code, NSString *message) {
         }
         if (!compiledURL || ![[NSFileManager defaultManager] fileExistsAtPath:compiledURL.path]) return;
         NSError *error = nil;
-        MLModel *model = [MLModel modelWithContentsOfURL:compiledURL error:&error];
+        MLModelConfiguration *configuration = [[MLModelConfiguration alloc] init];
+        configuration.computeUnits = MLComputeUnitsCPUAndNeuralEngine;
+        MLModel *model = [MLModel modelWithContentsOfURL:compiledURL configuration:configuration error:&error];
         if (error || !model) {
             NSLog(@"[YAMNet] MODEL LOAD FAILED at %@: %@", compiledURL.path, error.localizedDescription);
             return;
@@ -129,7 +131,11 @@ static NSError *YAMNetError(NSInteger code, NSString *message) {
         if (!error) [fm copyItemAtURL:compiledURL toURL:destination error:&error];
 
         MLModel *loaded = nil;
-        if (!error) loaded = [MLModel modelWithContentsOfURL:destination error:&error];
+        if (!error) {
+            MLModelConfiguration *configuration = [[MLModelConfiguration alloc] init];
+            configuration.computeUnits = MLComputeUnitsCPUAndNeuralEngine;
+            loaded = [MLModel modelWithContentsOfURL:destination configuration:configuration error:&error];
+        }
         if (!error && !loaded) error = YAMNetError(3, @"编译后的模型无法加载。");
         if (!error) {
             MLFeatureDescription *input = loaded.modelDescription.inputDescriptionsByName[@"features"];

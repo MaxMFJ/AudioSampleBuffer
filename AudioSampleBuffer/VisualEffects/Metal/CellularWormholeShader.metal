@@ -21,8 +21,9 @@ fragment float4 cellularWormholeFragment(RasterizerData in [[stage_in]],
     // Spectrum fallbacks keep the main layers responsive on the legacy path.
     float musicGate = smoothstep(0.008, 0.065, max(energy, max(bass, max(mid, treble))));
     float low = max(bass, saturate(u.activityMeter1.x)) * musicGate;
-    float hit = max(beat, saturate(u.activityMeter1.y)) * musicGate;
-    float melody = max(mid * 0.70, saturate(u.activityMeter1.z)) * musicGate;
+    float hit = max(beat, max(saturate(u.activityMeter1.y), saturate(u.instrumentStems.z))) * musicGate;
+    float melody = max(mid * 0.70, max(saturate(u.activityMeter1.z), saturate(u.instrumentStems.y))) * musicGate;
+    float guitar = saturate(u.instrumentStems.x) * musicGate;
     float haze = saturate(u.activityMeter1.w) * musicGate;
     float highPeak = max(max(u.audioData[54].z, u.audioData[62].z),
                          max(u.audioData[70].z, u.audioData[78].z));
@@ -53,7 +54,7 @@ fragment float4 cellularWormholeFragment(RasterizerData in [[stage_in]],
     float r = length(p);
     float angle = atan2(p.y, p.x);
     float baseCore = u.galaxyParams1.x > 0.0 ? clamp(u.galaxyParams1.x, 0.26, 0.38) : 0.32;
-    float core = baseCore + low * 0.024 + beat * 0.012
+    float core = baseCore + low * 0.024 + beat * 0.012 + guitar * 0.010
                - sidechain * beat * 0.009;
     float organic = 0.010 * sin(angle * 3.0 + t * 0.13)
                   + 0.006 * sin(angle * 5.0 - t * 0.09);
@@ -135,36 +136,32 @@ fragment float4 cellularWormholeFragment(RasterizerData in [[stage_in]],
     // keeps its color until its own lifetime ends, then the theme returns.
     float3 waveTrailColor = float3(0.0);
     float waveTrailWeight = 0.0;
-    float3 waveFrontColor = float3(0.0);
     for (int waveIndex = 0; waveIndex < 8; waveIndex++) {
         float waveAge = max(u.guitarWaves[waveIndex].x, 0.0);
         float waveStrength = saturate(u.guitarWaves[waveIndex].y);
         if (waveStrength <= 0.001 || waveAge >= 2.8) continue;
         float waveRadius = core + waveAge * 0.38;
-        float waveFrontDistance = (r - waveRadius) / 0.024;
-        float waveFront = exp(-waveFrontDistance * waveFrontDistance);
         float distanceFromFront = r - waveRadius;
         float waveReached = 1.0 - smoothstep(-0.012, 0.028, distanceFromFront);
         float lifeFade = 1.0 - smoothstep(2.0, 2.8, waveAge);
         float confidence = smoothstep(0.12, 0.80, waveStrength);
         float opacity = (0.38 + confidence * 0.62) * exp(-waveAge * 0.22) * lifeFade;
         float palette = u.guitarWaves[waveIndex].z;
-        float3 waveColor = float3(0.04, 0.88, 1.0);
-        if (palette < 0.5) waveColor = float3(0.04, 0.88, 1.0);
-        else if (palette < 1.5) waveColor = float3(1.0, 0.66, 0.08);
-        else if (palette < 2.5) waveColor = float3(0.45, 1.0, 0.18);
-        else waveColor = float3(0.20, 0.45, 1.0);
+        int paletteIndex = clamp(int(palette + 0.5), 0, 3);
+        float3 waveColor = mix(u.guitarPalette[paletteIndex].rgb,
+                               float3(1.0), 0.10);
         float trailWeight = waveReached * opacity;
         waveTrailColor += waveColor * trailWeight;
         waveTrailWeight += trailWeight;
-        waveFrontColor += waveColor * waveFront * opacity
-                        * (0.65 + confidence * 1.10);
     }
     color += wall * membrane * tint * (0.30 + ridges * 0.45 + bass * 0.20);
-    color += waveFrontColor;
     color += wall * detail * lip * highlight
-           * (0.14 + poreSignal * 0.70 + beat * 0.20);
+           * (0.14 + poreSignal * 0.70 + beat * 0.20 + melody * 0.14);
     color += wall * detail * softGlow * tint * (0.06 + energy * 0.10);
+    // Separated instrument layers add distinct, song-matched color energy.
+    color += wall * detail * softGlow * u.stemPalette[0].rgb * guitar * 0.34;
+    color += wall * detail * lip * u.stemPalette[1].rgb * melody * 0.22;
+    color += wall * detail * lip * u.stemPalette[2].rgb * hit * 0.26;
     float highShimmer = 0.62 + 0.38 * sin(t * 13.0 + poreSeed * 31.0 + depth * 1.7);
     color += wall * detail * lip * mix(highlight, float3(1.0), 0.48)
            * high * highShimmer * 0.46;

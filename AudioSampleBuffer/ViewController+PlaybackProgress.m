@@ -42,11 +42,11 @@ static const void *kProgressViewKey = &kProgressViewKey;
         safeAreaBottom = self.view.safeAreaInsets.bottom;
     }
 
-    // 进度条放在底部播放栏（高100pt）的顶部区域，避免与播放按钮重叠
-    // 底部播放栏起始 Y = screenHeight - safeAreaBottom - 100
+    // 进度条放在紧凑播放栏的顶部区域，避免与播放按钮重叠
+    // 底部播放栏起始 Y = screenHeight - safeAreaBottom - 76
     // 进度条高度 36pt，放在播放栏起始 Y 的上方贴合
     CGFloat progressHeight = 36;
-    CGFloat playBarTop     = screenHeight - safeAreaBottom - 100;
+    CGFloat playBarTop     = screenHeight - safeAreaBottom - 76;
     CGFloat progressY      = playBarTop - progressHeight;
 
     UIView *containerView = [[UIView alloc] initWithFrame:CGRectMake(0, progressY, screenWidth, progressHeight)];

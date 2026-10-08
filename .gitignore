@@ -6,6 +6,7 @@
 .deriveddata/
 build/DerivedData/
 build/*DerivedData/
+build/DerivedData-*/
 build/VerifyDerivedData/
 
 # Local source-separation experiments, weights, and derived audio

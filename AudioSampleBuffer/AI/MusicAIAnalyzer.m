@@ -263,7 +263,8 @@ NSString *const kAIConfigurationKey = @"configuration";
         @"   - 摇滚/电子：红、橙、品红为主\n"
         @"   - 抒情/慢歌：紫、靛、深蓝为主\n"
         @"   - 欢快/舞曲：黄、橙、粉、青为主\n"
-        @"   - laserFanBlue 可以是红色、橙色、品红、青色等任何与歌曲匹配的颜色",
+        @"   - laserFanBlue 可以是红色、橙色、品红、青色等任何与歌曲匹配的颜色\n"
+        @"10. 深空蜂巢的吉他变色会依次使用 pulseRing、coronaFilaments、volumetricBeam、rotatingBeam；请让这四种颜色形成符合歌曲情绪的色组，彼此有清晰区分，并避免所有歌曲都落在同一组紫/蓝色",
         songName, artistInfo
     ];
 }
