@@ -9,6 +9,7 @@
 #import "MusicLibraryManager.h"
 #import <UIKit/UIKit.h>
 #import <AVFoundation/AVFoundation.h>
+#import <string.h>
 
 // API基础URL
 static NSString *const kAPIBaseURL = @"https://api.qqmp3.vip/api";
@@ -21,6 +22,7 @@ static NSString *const kAPIBaseURL = @"https://api.qqmp3.vip/api";
 
 @interface QQMusicAPIService ()
 @property (nonatomic, strong) NSURLSession *session;
+- (nullable NSString *)audioExtensionAtPath:(NSString *)path;
 @end
 
 @implementation QQMusicAPIService
@@ -281,15 +283,8 @@ static NSString *const kAPIBaseURL = @"https://api.qqmp3.vip/api";
     NSString *safeName = [self sanitizeFileName:detail.name];
     NSString *baseFileName = [NSString stringWithFormat:@"%@ - %@", safeArtist, safeName];
     
-    // 🔧 自动检测文件扩展名（从URL推断）
-    NSString *downloadExtension = @"mp3";
-    if ([detail.url containsString:@".aac"]) {
-        downloadExtension = @"aac";
-        NSLog(@"🔍 [下载] 检测到AAC格式");
-    } else if ([detail.url containsString:@".m4a"]) {
-        downloadExtension = @"m4a";
-        NSLog(@"🔍 [下载] 检测到M4A格式");
-    }
+    // URL 常常没有可靠后缀，先用临时扩展名保存，下载后根据文件头识别真实格式。
+    __block NSString *downloadExtension = @"audio";
     
     // 🆕 先下载为临时文件，如果有封面则转换为M4A，否则保持原格式
     NSString *tempFilePath = [downloadDir stringByAppendingPathComponent:[NSString stringWithFormat:@"%@_temp.%@", baseFileName, downloadExtension]];
@@ -305,6 +300,14 @@ static NSString *const kAPIBaseURL = @"https://api.qqmp3.vip/api";
             completion(nil, error);
             return;
         }
+
+        NSHTTPURLResponse *httpResponse = [response isKindOfClass:NSHTTPURLResponse.class] ? (NSHTTPURLResponse *)response : nil;
+        if (!httpResponse || httpResponse.statusCode < 200 || httpResponse.statusCode >= 300) {
+            NSError *httpError = [NSError errorWithDomain:@"QQMusicAPIService" code:(httpResponse.statusCode ?: -2)
+                userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"歌曲服务器返回 HTTP %@", httpResponse ? @(httpResponse.statusCode) : @"无效响应"]}];
+            completion(nil, httpError);
+            return;
+        }
         
         // 移动文件到临时位置
         NSError *moveError = nil;
@@ -314,7 +317,18 @@ static NSString *const kAPIBaseURL = @"https://api.qqmp3.vip/api";
             completion(nil, moveError);
             return;
         }
-        
+
+        NSString *actualExtension = [self audioExtensionAtPath:tempFilePath];
+        if (!actualExtension) {
+            NSDictionary *attributes = [[NSFileManager defaultManager] attributesOfItemAtPath:tempFilePath error:nil];
+            NSString *message = @"下载内容不是可识别的音频文件，歌曲服务可能返回了错误页或无效数据";
+            if ([attributes[NSFileSize] unsignedLongLongValue] == 0) message = @"下载到的歌曲文件为空";
+            [[NSFileManager defaultManager] removeItemAtPath:tempFilePath error:nil];
+            NSError *formatError = [NSError errorWithDomain:@"QQMusicAPIService" code:-4 userInfo:@{NSLocalizedDescriptionKey: message}];
+            completion(nil, formatError);
+            return;
+        }
+        downloadExtension = actualExtension;
         NSLog(@"✅ [下载] 完成: %@_temp.%@", baseFileName, downloadExtension);
         
         // 🆕 下载封面并嵌入到音频文件中（如果有）
@@ -423,6 +437,21 @@ static NSString *const kAPIBaseURL = @"https://api.qqmp3.vip/api";
     if (progress) {
         progress(0.5, @"下载中...");
     }
+}
+
+- (NSString *)audioExtensionAtPath:(NSString *)path {
+    NSFileHandle *handle = [NSFileHandle fileHandleForReadingAtPath:path];
+    NSData *data = [handle readDataOfLength:16];
+    [handle closeFile];
+    const unsigned char *b = data.bytes;
+    NSUInteger n = data.length;
+    if (n >= 4 && memcmp(b, "fLaC", 4) == 0) return @"flac";
+    if (n >= 12 && memcmp(b, "RIFF", 4) == 0 && memcmp(b + 8, "WAVE", 4) == 0) return @"wav";
+    if (n >= 8 && memcmp(b + 4, "ftyp", 4) == 0) return @"m4a";
+    if (n >= 3 && memcmp(b, "ID3", 3) == 0) return @"mp3";
+    if (n >= 2 && b[0] == 0xFF && (b[1] & 0xF6) == 0xF0) return @"aac";
+    if (n >= 2 && b[0] == 0xFF && (b[1] & 0xE0) == 0xE0) return @"mp3";
+    return nil;
 }
 
 - (void)searchAndDownload:(NSString *)keyword

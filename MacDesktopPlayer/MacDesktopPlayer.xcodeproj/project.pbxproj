@@ -1,0 +1,117 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		A10000000000000000000001 /* App.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000001 /* App.swift */; };
+		A10000000000000000000002 /* RealtimeAnalyzerDSP.c in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000002 /* RealtimeAnalyzerDSP.c */; };
+		A10000000000000000000003 /* YAMNetAudioAnalyzer.m in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000003 /* YAMNetAudioAnalyzer.m */; };
+		A10000000000000000000004 /* Aurora.metal in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000004 /* Aurora.metal */; };
+		A10000000000000000000010 /* Tyndall.metal in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000010 /* Tyndall.metal */; };
+		A10000000000000000000011 /* CoverDotMatrix.metal in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000011 /* CoverDotMatrix.metal */; };
+		A10000000000000000000005 /* YAMNet.mlpackage in Resources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000005 /* YAMNet.mlpackage */; };
+		A10000000000000000000006 /* AppKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A20000000000000000000006 /* AppKit.framework */; };
+		A10000000000000000000007 /* AVFoundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A20000000000000000000007 /* AVFoundation.framework */; };
+		A10000000000000000000008 /* MetalKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A20000000000000000000008 /* MetalKit.framework */; };
+		A10000000000000000000009 /* Accelerate.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A20000000000000000000009 /* Accelerate.framework */; };
+		A1000000000000000000000A /* CoreML.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000A /* CoreML.framework */; };
+		A1000000000000000000000B /* AudioToolbox.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000B /* AudioToolbox.framework */; };
+		A1000000000000000000000C /* DesktopEffectFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000E /* DesktopEffectFactory.swift */; };
+		A1000000000000000000000D /* CoverDotDesktopEffectRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000F /* CoverDotDesktopEffectRenderer.swift */; };
+		A10000000000000000000020 /* HTDemucsMacAnalyzer.m in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000020 /* HTDemucsMacAnalyzer.m */; };
+		A10000000000000000000021 /* HTDemucs6s_Guitar_iOS16.mlpackage in Resources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000021 /* HTDemucs6s_Guitar_iOS16.mlpackage */; };
+		A10000000000000000000030 /* DesktopCoverInteraction.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000030 /* DesktopCoverInteraction.swift */; };
+		A10000000000000000000031 /* CoverStageLyrics.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000031 /* CoverStageLyrics.swift */; };
+		A10000000000000000000032 /* CellularHive.metal in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000032 /* CellularHive.metal */; };
+		A10000000000000000000033 /* DesktopLyricsSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000033 /* DesktopLyricsSource.swift */; };
+		A10000000000000000000034 /* DesktopLyricsController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000034 /* DesktopLyricsController.swift */; };
+		A10000000000000000000035 /* DesktopLyricsOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000035 /* DesktopLyricsOverlay.swift */; };
+		A10000000000000000000036 /* DesktopLyricsSettingsWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000036 /* DesktopLyricsSettingsWindow.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		A20000000000000000000001 /* App.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = App.swift; sourceTree = "<group>"; };
+		A20000000000000000000002 /* RealtimeAnalyzerDSP.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = RealtimeAnalyzerDSP.c; sourceTree = "<group>"; };
+		A20000000000000000000003 /* YAMNetAudioAnalyzer.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = YAMNetAudioAnalyzer.m; sourceTree = "<group>"; };
+		A20000000000000000000004 /* Aurora.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = Aurora.metal; sourceTree = "<group>"; };
+		A20000000000000000000010 /* Tyndall.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = Tyndall.metal; sourceTree = "<group>"; };
+		A20000000000000000000011 /* CoverDotMatrix.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = CoverDotMatrix.metal; sourceTree = "<group>"; };
+		A20000000000000000000005 /* YAMNet.mlpackage */ = {isa = PBXFileReference; lastKnownFileType = wrapper.mlpackage; path = YAMNet.mlpackage; sourceTree = "<group>"; };
+		A20000000000000000000006 /* AppKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AppKit.framework; path = System/Library/Frameworks/AppKit.framework; sourceTree = SDKROOT; };
+		A20000000000000000000007 /* AVFoundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AVFoundation.framework; path = System/Library/Frameworks/AVFoundation.framework; sourceTree = SDKROOT; };
+		A20000000000000000000008 /* MetalKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = MetalKit.framework; path = System/Library/Frameworks/MetalKit.framework; sourceTree = SDKROOT; };
+		A20000000000000000000009 /* Accelerate.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Accelerate.framework; path = System/Library/Frameworks/Accelerate.framework; sourceTree = SDKROOT; };
+		A2000000000000000000000A /* CoreML.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreML.framework; path = System/Library/Frameworks/CoreML.framework; sourceTree = SDKROOT; };
+		A2000000000000000000000B /* AudioToolbox.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AudioToolbox.framework; path = System/Library/Frameworks/AudioToolbox.framework; sourceTree = SDKROOT; };
+		A2000000000000000000000C /* MacDesktopPlayer.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MacDesktopPlayer.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A2000000000000000000000E /* DesktopEffectFactory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesktopEffectFactory.swift; sourceTree = "<group>"; };
+		A2000000000000000000000F /* CoverDotDesktopEffectRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoverDotDesktopEffectRenderer.swift; sourceTree = "<group>"; };
+		A20000000000000000000020 /* HTDemucsMacAnalyzer.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = HTDemucsMacAnalyzer.m; sourceTree = "<group>"; };
+		A20000000000000000000022 /* HTDemucsMacAnalyzer.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = HTDemucsMacAnalyzer.h; sourceTree = "<group>"; };
+		A20000000000000000000021 /* HTDemucs6s_Guitar_iOS16.mlpackage */ = {isa = PBXFileReference; lastKnownFileType = wrapper.mlpackage; name = HTDemucs6s_Guitar_iOS16.mlpackage; path = ../Models/HTDemucs6s_Guitar_iOS16.mlpackage; sourceTree = SOURCE_ROOT; };
+		A20000000000000000000030 /* DesktopCoverInteraction.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesktopCoverInteraction.swift; sourceTree = "<group>"; };
+		A20000000000000000000031 /* CoverStageLyrics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoverStageLyrics.swift; sourceTree = "<group>"; };
+		A20000000000000000000032 /* CellularHive.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = CellularHive.metal; sourceTree = "<group>"; };
+		A20000000000000000000033 /* DesktopLyricsSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesktopLyricsSource.swift; sourceTree = "<group>"; };
+		A20000000000000000000034 /* DesktopLyricsController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesktopLyricsController.swift; sourceTree = "<group>"; };
+		A20000000000000000000035 /* DesktopLyricsOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesktopLyricsOverlay.swift; sourceTree = "<group>"; };
+		A20000000000000000000036 /* DesktopLyricsSettingsWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesktopLyricsSettingsWindow.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXGroup section */
+		A30000000000000000000001 = {isa = PBXGroup; children = (A30000000000000000000002 /* Sources */, A30000000000000000000003 /* Frameworks */, A30000000000000000000004 /* Products */); sourceTree = "<group>"; };
+		A30000000000000000000002 /* Sources */ = {isa = PBXGroup; children = (A30000000000000000000005 /* MacDesktopPlayer */, A30000000000000000000006 /* RealtimeDSP */, A30000000000000000000007 /* YAMNetMac */, A30000000000000000000015 /* HTDemucsMac */); path = Sources; sourceTree = "<group>"; };
+		A30000000000000000000005 /* MacDesktopPlayer */ = {isa = PBXGroup; children = (A20000000000000000000001 /* App.swift */, A3000000000000000000000E /* DesktopVisual */, A30000000000000000000008 /* MacDesktopPlayer-Bridging-Header.h */, A30000000000000000000009 /* Resources */); path = MacDesktopPlayer; sourceTree = "<group>"; };
+		A30000000000000000000006 /* RealtimeDSP */ = {isa = PBXGroup; children = (A20000000000000000000002 /* RealtimeAnalyzerDSP.c */, A3000000000000000000000A /* include */); path = RealtimeDSP; sourceTree = "<group>"; };
+		A30000000000000000000007 /* YAMNetMac */ = {isa = PBXGroup; children = (A20000000000000000000003 /* YAMNetAudioAnalyzer.m */, A3000000000000000000000B /* include */); path = YAMNetMac; sourceTree = "<group>"; };
+		A30000000000000000000008 /* MacDesktopPlayer-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "MacDesktopPlayer-Bridging-Header.h"; sourceTree = "<group>"; };
+		A30000000000000000000009 /* Resources */ = {isa = PBXGroup; children = (A20000000000000000000004 /* Aurora.metal */, A20000000000000000000010 /* Tyndall.metal */, A20000000000000000000011 /* CoverDotMatrix.metal */, A20000000000000000000032 /* CellularHive.metal */, A20000000000000000000005 /* YAMNet.mlpackage */, A20000000000000000000021 /* HTDemucs6s_Guitar_iOS16.mlpackage */); path = Resources; sourceTree = "<group>"; };
+		A3000000000000000000000A /* include */ = {isa = PBXGroup; children = (A3000000000000000000000C /* RealtimeAnalyzerDSP.h */,); path = include; sourceTree = "<group>"; };
+		A3000000000000000000000B /* include */ = {isa = PBXGroup; children = (A3000000000000000000000D /* YAMNetAudioAnalyzer.h */,); path = include; sourceTree = "<group>"; };
+		A3000000000000000000000C /* RealtimeAnalyzerDSP.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = RealtimeAnalyzerDSP.h; sourceTree = "<group>"; };
+		A3000000000000000000000D /* YAMNetAudioAnalyzer.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = YAMNetAudioAnalyzer.h; sourceTree = "<group>"; };
+		A30000000000000000000015 /* HTDemucsMac */ = {isa = PBXGroup; children = (A20000000000000000000020 /* HTDemucsMacAnalyzer.m */, A30000000000000000000016 /* include */); path = HTDemucsMac; sourceTree = "<group>"; };
+		A30000000000000000000016 /* include */ = {isa = PBXGroup; children = (A20000000000000000000022 /* HTDemucsMacAnalyzer.h */,); path = include; sourceTree = "<group>"; };
+		A3000000000000000000000E /* DesktopVisual */ = {isa = PBXGroup; children = (A2000000000000000000000E /* DesktopEffectFactory.swift */, A2000000000000000000000F /* CoverDotDesktopEffectRenderer.swift */, A20000000000000000000030 /* DesktopCoverInteraction.swift */, A20000000000000000000031 /* CoverStageLyrics.swift */, A20000000000000000000033 /* DesktopLyricsSource.swift */, A20000000000000000000034 /* DesktopLyricsController.swift */, A20000000000000000000035 /* DesktopLyricsOverlay.swift */, A20000000000000000000036 /* DesktopLyricsSettingsWindow.swift */, ); path = DesktopVisual; sourceTree = "<group>"; };
+		A30000000000000000000003 /* Frameworks */ = {isa = PBXGroup; children = (A20000000000000000000006, A20000000000000000000007, A20000000000000000000008, A20000000000000000000009, A2000000000000000000000A, A2000000000000000000000B); name = Frameworks; sourceTree = "<group>"; };
+		A30000000000000000000004 /* Products */ = {isa = PBXGroup; children = (A2000000000000000000000C /* MacDesktopPlayer.app */,); name = Products; sourceTree = "<group>"; };
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		A40000000000000000000001 /* MacDesktopPlayer */ = {isa = PBXNativeTarget; buildConfigurationList = A50000000000000000000003 /* Build configuration list for PBXNativeTarget "MacDesktopPlayer" */; buildPhases = (A60000000000000000000001 /* Sources */, A60000000000000000000002 /* Frameworks */, A60000000000000000000003 /* Resources */,); buildRules = (); dependencies = (); name = MacDesktopPlayer; productName = MacDesktopPlayer; productReference = A2000000000000000000000C /* MacDesktopPlayer.app */; productType = "com.apple.product-type.application"; };
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		A70000000000000000000001 /* Project object */ = {isa = PBXProject; attributes = {BuildIndependentTargetsInParallel = YES; LastUpgradeCheck = 2600; TargetAttributes = {A40000000000000000000001 = {CreatedOnToolsVersion = 26.0; }; }; }; buildConfigurationList = A50000000000000000000006 /* Build configuration list for PBXProject "MacDesktopPlayer" */; compatibilityVersion = "Xcode 14.0"; developmentRegion = en; hasScannedForEncodings = 0; knownRegions = (en, Base,); mainGroup = A30000000000000000000001; productRefGroup = A30000000000000000000004 /* Products */; projectDirPath = ""; projectRoot = ""; targets = (A40000000000000000000001 /* MacDesktopPlayer */,); };
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		A60000000000000000000003 /* Resources */ = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (A10000000000000000000005 /* YAMNet.mlpackage in Resources */, A10000000000000000000021 /* HTDemucs6s_Guitar_iOS16.mlpackage in Resources */,); runOnlyForDeploymentPostprocessing = 0; };
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		A60000000000000000000001 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A10000000000000000000001 /* App.swift in Sources */, A1000000000000000000000C /* DesktopEffectFactory.swift in Sources */, A1000000000000000000000D /* CoverDotDesktopEffectRenderer.swift in Sources */, A10000000000000000000031 /* CoverStageLyrics.swift in Sources */, A10000000000000000000033 /* DesktopLyricsSource.swift in Sources */, A10000000000000000000034 /* DesktopLyricsController.swift in Sources */, A10000000000000000000035 /* DesktopLyricsOverlay.swift in Sources */, A10000000000000000000036 /* DesktopLyricsSettingsWindow.swift in Sources */,  A10000000000000000000030 /* DesktopCoverInteraction.swift in Sources */, A10000000000000000000002 /* RealtimeAnalyzerDSP.c in Sources */, A10000000000000000000004 /* Aurora.metal in Sources */, A10000000000000000000010 /* Tyndall.metal in Sources */, A10000000000000000000011 /* CoverDotMatrix.metal in Sources */, A10000000000000000000032 /* CellularHive.metal in Sources */, A10000000000000000000003 /* YAMNetAudioAnalyzer.m in Sources */, A10000000000000000000020 /* HTDemucsMacAnalyzer.m in Sources */,); runOnlyForDeploymentPostprocessing = 0; };
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		A60000000000000000000002 /* Frameworks */ = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (A10000000000000000000006 /* AppKit.framework in Frameworks */, A10000000000000000000007 /* AVFoundation.framework in Frameworks */, A10000000000000000000008 /* MetalKit.framework in Frameworks */, A10000000000000000000009 /* Accelerate.framework in Frameworks */, A1000000000000000000000A /* CoreML.framework in Frameworks */, A1000000000000000000000B /* AudioToolbox.framework in Frameworks */,); runOnlyForDeploymentPostprocessing = 0; };
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		A50000000000000000000001 /* Project Debug */ = {isa = XCBuildConfiguration; buildSettings = {CLANG_ENABLE_MODULES = YES; MACOSX_DEPLOYMENT_TARGET = 13.0; SDKROOT = macosx; SWIFT_VERSION = 5.0; }; name = Debug; };
+		A50000000000000000000002 /* Project Release */ = {isa = XCBuildConfiguration; buildSettings = {CLANG_ENABLE_MODULES = YES; MACOSX_DEPLOYMENT_TARGET = 13.0; SDKROOT = macosx; SWIFT_VERSION = 5.0; }; name = Release; };
+		A50000000000000000000004 /* Target Debug */ = {isa = XCBuildConfiguration; buildSettings = {CLANG_ENABLE_OBJC_ARC = YES; CODE_SIGNING_ALLOWED = NO; ENABLE_APP_SANDBOX = NO; GENERATE_INFOPLIST_FILE = YES; HEADER_SEARCH_PATHS = ("$(SRCROOT)/Sources/RealtimeDSP/include", "$(SRCROOT)/Sources/YAMNetMac/include", "$(SRCROOT)/Sources/HTDemucsMac/include", "$(inherited)",); INFOPLIST_KEY_CFBundleDisplayName = "桌面音乐"; INFOPLIST_KEY_LSUIElement = YES; MACOSX_DEPLOYMENT_TARGET = 13.0; PRODUCT_BUNDLE_IDENTIFIER = com.audiosamplebuffer.macdesktopplayer; PRODUCT_NAME = "$(TARGET_NAME)"; SDKROOT = macosx; SWIFT_OBJC_BRIDGING_HEADER = "$(SRCROOT)/Sources/MacDesktopPlayer/MacDesktopPlayer-Bridging-Header.h"; SWIFT_VERSION = 5.0; }; name = Debug; };
+		A50000000000000000000005 /* Target Release */ = {isa = XCBuildConfiguration; buildSettings = {CLANG_ENABLE_OBJC_ARC = YES; CODE_SIGNING_ALLOWED = NO; ENABLE_APP_SANDBOX = NO; GENERATE_INFOPLIST_FILE = YES; HEADER_SEARCH_PATHS = ("$(SRCROOT)/Sources/RealtimeDSP/include", "$(SRCROOT)/Sources/YAMNetMac/include", "$(SRCROOT)/Sources/HTDemucsMac/include", "$(inherited)",); INFOPLIST_KEY_CFBundleDisplayName = "桌面音乐"; INFOPLIST_KEY_LSUIElement = YES; MACOSX_DEPLOYMENT_TARGET = 13.0; PRODUCT_BUNDLE_IDENTIFIER = com.audiosamplebuffer.macdesktopplayer; PRODUCT_NAME = "$(TARGET_NAME)"; SDKROOT = macosx; SWIFT_OBJC_BRIDGING_HEADER = "$(SRCROOT)/Sources/MacDesktopPlayer/MacDesktopPlayer-Bridging-Header.h"; SWIFT_VERSION = 5.0; }; name = Release; };
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		A50000000000000000000006 /* Project configuration list */ = {isa = XCConfigurationList; buildConfigurations = (A50000000000000000000001, A50000000000000000000002,); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+		A50000000000000000000003 /* Target configuration list */ = {isa = XCConfigurationList; buildConfigurations = (A50000000000000000000004, A50000000000000000000005,); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+/* End XCConfigurationList section */
+
+	};
+	rootObject = A70000000000000000000001 /* Project object */;
+}
