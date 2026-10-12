@@ -209,7 +209,7 @@ vertex DesktopDotParticleOut desktopCoverReliefVertex(
     // Restore the cover's instrument response: a diagonal guitar resonance
     // travels through depth and light, while piano adds a quieter broad lift.
     // Neither stem moves the artwork samples sideways or changes their UVs.
-    float guitarDrive = squareCover ? smoothstep(0.08, 0.62, saturate(stage.audio.x)) : 0.0;
+    float guitarDrive = squareCover ? smoothstep(0.03, 0.42, saturate(stage.audio.x)) : 0.0;
     float pianoDrive = squareCover ? saturate(stage.audio.y) : 0.0;
     float stringAxis = uv.x * 0.88 + uv.y * 0.46;
     float stringPhase = stringAxis * 34.0 - stage.viewport.w * 6.0
@@ -256,6 +256,7 @@ struct DesktopStageLyricOut {
     float active;
     float opacity;
     float time;
+    float age;
 };
 
 vertex DesktopStageLyricOut desktopStageLyricVertex(
@@ -263,6 +264,7 @@ vertex DesktopStageLyricOut desktopStageLyricVertex(
     constant float4 &placement [[buffer(1)]],
     constant float4 &style [[buffer(2)]],
     constant float4 &highlight [[buffer(3)]],
+    constant float4 &effectParameters [[buffer(4)]],
     constant DesktopCoverStageUniforms &stage [[buffer(5)]]) {
     constexpr float2 corners[6] = {
         float2(0, 0), float2(1, 0), float2(0, 1),
@@ -281,20 +283,98 @@ vertex DesktopStageLyricOut desktopStageLyricVertex(
     out.active = style.y;
     out.opacity = style.z;
     out.time = stage.viewport.w;
+    out.age = style.w;
     return out;
+}
+
+struct DesktopStageLyricParticleOut {
+    float4 position [[position]];
+    float pointSize [[point_size]];
+    float2 uv;
+    float coverage;
+    float progress;
+    float active;
+    float opacity;
+    float3 color;
+};
+
+vertex DesktopStageLyricParticleOut desktopStageLyricParticleVertex(
+    uint id [[vertex_id]],
+    constant float4 &placement [[buffer(1)]],
+    constant float4 &style [[buffer(2)]],
+    constant float4 &highlight [[buffer(3)]],
+    constant float4 &effectParameters [[buffer(4)]],
+    constant DesktopCoverStageUniforms &stage [[buffer(5)]],
+    texture2d<float> glyphMask [[texture(1)]]) {
+    constexpr uint columns = 48;
+    constexpr uint rows = 28;
+    constexpr sampler maskSampler(coord::normalized, address::clamp_to_edge, filter::linear);
+    float2 uv = (float2(float(id % columns), float(id / columns)) + 0.5) / float2(columns, rows);
+    float2 maskUV = float2(uv.x, 1.0 - uv.y);
+    float coverage = glyphMask.sample(maskSampler, maskUV).a;
+    float seed = desktopHash3(float3(float(id), 19.71, 4.13));
+    float seedY = desktopHash3(float3(float(id), 7.31, 12.9));
+    float gather = 1.0 - smoothstep(0.04, 0.92, style.w);
+    float spread = effectParameters.y * gather;
+    float2 local = (uv - 0.5) * float2(placement.z, placement.w);
+    local += float2(seed - 0.5, seedY - 0.5) * float2(placement.z * 0.76, placement.w * 2.2) * spread;
+    float3 point = float3(placement.xy * float2(stage.layout.z, 1.0) + local, 0.16);
+    DesktopStageLyricParticleOut out;
+    out.position = desktopStageProject(point, stage);
+    out.pointSize = clamp((1.15 + effectParameters.y * 1.55) * stage.viewport.z, 1.0, 7.0);
+    out.uv = uv;
+    out.coverage = coverage;
+    out.progress = style.x;
+    out.active = style.y;
+    out.opacity = style.z;
+    out.color = style.y > 0.5 ? mix(float3(0.70, 0.91, 1.0), highlight.rgb, 0.30) : float3(0.70, 0.77, 0.89);
+    return out;
+}
+
+fragment float4 desktopStageLyricParticleFragment(DesktopStageLyricParticleOut in [[stage_in]],
+                                                  float2 pointCoord [[point_coord]]) {
+    float2 centered = pointCoord - 0.5;
+    float radius = length(centered) * 2.0;
+    float dotShape = 1.0 - smoothstep(0.58, 0.98, radius);
+    if (in.coverage < 0.16 || dotShape < 0.02) discard_fragment();
+    float karaoke = in.active * (1.0 - smoothstep(in.progress - 0.08, in.progress + 0.08, in.uv.x));
+    float3 color = mix(in.color, float3(1.0), karaoke * 0.28);
+    return float4(color, dotShape * in.coverage * in.opacity);
 }
 
 fragment float4 desktopStageLyricFragment(DesktopStageLyricOut in [[stage_in]],
                                           texture2d<float> glyphMask [[texture(1)]],
+                                          constant float4 &effectParameters [[buffer(4)]],
                                           constant float4 &highlight [[buffer(3)]]) {
     constexpr sampler maskSampler(coord::normalized, address::clamp_to_edge, filter::linear);
-    float coverage = glyphMask.sample(maskSampler, in.maskUV).a;
+    float mode = effectParameters.x;
+    float intensity = saturate(effectParameters.y);
+    float2 sampleUV = in.maskUV;
+    float effectOpacity = 1.0;
+    float3 effectTint = float3(0.0);
+    if (mode > 1.5 && mode < 2.5) {
+        float ageFade = 1.0 - smoothstep(0.0, 0.85, in.age);
+        float2 cell = floor(in.uv * float2(22.0, 7.0));
+        float seed = desktopHash3(float3(cell, floor(in.time * 18.0)));
+        float broken = ageFade * intensity;
+        sampleUV += float2((seed - 0.5) * 0.16, (fract(seed * 7.13) - 0.5) * 0.12) * broken;
+        effectOpacity = 1.0 - smoothstep(0.48, 0.88, seed) * broken * 0.48;
+        effectTint = float3(0.20, 0.72, 1.0) * broken * smoothstep(0.78, 0.98, seed);
+    } else if (mode > 2.5) {
+        float band = floor(in.uv.y * 36.0);
+        float pulse = desktopHash3(float3(band, floor(in.time * 14.0), floor(in.time * 5.0)));
+        float glitch = step(0.78, pulse) * intensity;
+        sampleUV.x += (pulse - 0.5) * 0.18 * glitch;
+        effectOpacity = 1.0 - glitch * 0.20;
+        effectTint = float3(0.12, 0.72, 1.0) * glitch * step(0.50, pulse);
+    }
+    float coverage = glyphMask.sample(maskSampler, sampleUV).a * effectOpacity;
     if (coverage < 0.025) discard_fragment();
     float sweep = in.active * (1.0 - smoothstep(in.progress - 0.08, in.progress + 0.08, in.uv.x));
     float shimmer = 0.97 + 0.03 * sin(in.uv.x * 18.0 + in.time * 1.2);
     float3 inactive = float3(0.70, 0.77, 0.89);
     float3 active = mix(float3(0.70, 0.91, 1.0), highlight.rgb, 0.30);
-    float3 color = mix(inactive, active, in.active * (0.72 + 0.28 * sweep));
+    float3 color = mix(inactive, active, in.active * (0.72 + 0.28 * sweep)) + effectTint;
     float glow = 1.0 + in.active * (0.12 + 0.10 * sweep);
     return float4(color * glow * shimmer, coverage * in.opacity);
 }

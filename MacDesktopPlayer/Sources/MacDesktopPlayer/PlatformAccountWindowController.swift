@@ -63,9 +63,7 @@ private final class PlatformAccountView: NSView {
 
         let refresh = NSButton(title: "刷新全部状态", target: self, action: #selector(refreshAll))
         refresh.bezelStyle = .rounded
-        let bridge = NSButton(title: "启动并打开 Bridge", target: self, action: #selector(openBridge))
-        bridge.bezelStyle = .rounded
-        let actions = NSStackView(views: [refresh, bridge])
+        let actions = NSStackView(views: [refresh])
         actions.orientation = .horizontal
         actions.spacing = 10
         stack.addArrangedSubview(actions)
@@ -160,18 +158,4 @@ private final class PlatformAccountView: NSView {
         }
     }
 
-    @objc private func openBridge() {
-        Task { [weak self] in
-            let result = await PlatformBridgeRuntime.shared.ensureRunning()
-            guard let self else { return }
-            switch result {
-            case .success:
-                guard let url = URL(string: "http://127.0.0.1:3000/") else { return }
-                NSWorkspace.shared.open(url)
-                self.status.stringValue = "Bridge 已启动"
-            case .failure(let error):
-                self.status.stringValue = error.localizedDescription
-            }
-        }
-    }
 }

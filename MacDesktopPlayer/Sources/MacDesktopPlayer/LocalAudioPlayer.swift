@@ -32,6 +32,7 @@ enum PlaybackRepeatMode: Int {
 final class LocalAudioPlayer {
     private let engine = AVAudioEngine()
     private let player = AVAudioPlayerNode()
+    private let audioControlQueue = DispatchQueue(label: "app.audiosamplebuffer.audio-control", qos: .userInitiated)
     private let analyzerLock = NSLock()
     private var dsp: OpaquePointer?
     private var file: AVAudioFile?
@@ -40,6 +41,7 @@ final class LocalAudioPlayer {
     private var activePlaybackOffset: Double = 0
     private var pausedPlaybackTime: Double?
     private var playbackScheduleGeneration: UInt64 = 0
+    private var playRequestGeneration: UInt64 = 0
     private(set) var currentTitle = "尚未播放"
     private(set) var currentArtist: String?
     private(set) var currentArtwork: NSImage?
@@ -50,6 +52,7 @@ final class LocalAudioPlayer {
     private(set) var guitarSurgeEnabled = UserDefaults.standard.object(forKey: "desktopGuitarSurgeEnabled") == nil
         ? true : UserDefaults.standard.bool(forKey: "desktopGuitarSurgeEnabled")
     var onTrackStart: ((URL) -> Void)?
+    var onPlatformAdjacentTrack: ((Int) -> Bool)?
     private(set) var repeatMode: PlaybackRepeatMode = PlaybackRepeatMode(rawValue: UserDefaults.standard.integer(forKey: "desktopRepeatMode")) ?? .off
     private var stemCurves: [[Float]] = []
     private var vocalCurve: [Float] = []
@@ -61,7 +64,6 @@ final class LocalAudioPlayer {
 
     init() {
         engine.attach(player)
-        engine.connect(player, to: engine.mainMixerNode, format: nil)
     }
 
     var duration: Double {
@@ -97,8 +99,16 @@ final class LocalAudioPlayer {
     }
 
     func play(url: URL, title: String? = nil, artist: String? = nil) {
+        playRequestGeneration &+= 1
+        let request = playRequestGeneration
+        stopPlayback { [weak self] in
+            guard let self, self.playRequestGeneration == request else { return }
+            self.beginPlayback(url: url, title: title, artist: artist)
+        }
+    }
+
+    private func beginPlayback(url: URL, title: String?, artist: String?) {
         do {
-            stop()
             electricGuitarConfidence = 0
             vocalCurve = []
             visualGuitarPeak = 0
@@ -111,6 +121,11 @@ final class LocalAudioPlayer {
             currentArtist = artist
             lyricsController.load(for: url, title: title ?? url.deletingPathExtension().lastPathComponent, artist: artist)
             let format = audioFile.processingFormat
+            // Configure both ends before installing the analysis tap. A tap can
+            // change the player's format without updating an existing mixer
+            // input, causing 48 kHz audio to be consumed at 44.1 kHz.
+            engine.disconnectNodeOutput(player)
+            engine.connect(player, to: engine.mainMixerNode, format: format)
             analyzerLock.lock()
             if let dsp { AnalyzerDSP_Destroy(dsp) }
             dsp = AnalyzerDSP_Create(4096, 80, 50, 18_000, Float(format.sampleRate))
@@ -123,6 +138,12 @@ final class LocalAudioPlayer {
                 }
             }
             if !engine.isRunning { try engine.start() }
+            NSLog("[AudioPlayback] file=%@ source=%.0fHz/%uch player=%.0fHz mixerInput=%.0fHz mixerOutput=%.0fHz device=%.0fHz",
+                  url.lastPathComponent, format.sampleRate, format.channelCount,
+                  player.outputFormat(forBus: 0).sampleRate,
+                  engine.mainMixerNode.inputFormat(forBus: 0).sampleRate,
+                  engine.mainMixerNode.outputFormat(forBus: 0).sampleRate,
+                  engine.outputNode.outputFormat(forBus: 0).sampleRate)
             let generation = playbackScheduleGeneration
             player.scheduleSegment(audioFile, startingFrame: 0, frameCount: AVAudioFrameCount(min(audioFile.length, Int64(UInt32.max))), at: nil, completionCallbackType: .dataPlayedBack) { [weak self] _ in
                 Task { @MainActor [weak self] in self?.handlePlaybackFinished(generation: generation) }
@@ -138,6 +159,11 @@ final class LocalAudioPlayer {
     }
 
     func stop() {
+        playRequestGeneration &+= 1
+        stopPlayback(completion: nil)
+    }
+
+    private func stopPlayback(completion: (() -> Void)?) {
         // stop() also completes pending schedules. Invalidate them before it
         // runs so a stopped song cannot restart or advance the new song.
         playbackScheduleGeneration &+= 1
@@ -146,15 +172,28 @@ final class LocalAudioPlayer {
         trackGeneration += 1
         HTDemucsMacAnalyzer.shared().cancelCurrentAnalysis()
 #endif
-        player.stop()
-        player.removeTap(onBus: 0)
-        engine.stop()
-        analyzerLock.lock()
-        if let dsp {
-            AnalyzerDSP_Destroy(dsp)
-            self.dsp = nil
+        let oldFile = file
+        let player = self.player
+        let engine = self.engine
+        let controlQueue = audioControlQueue
+        let finishOnMain = { [weak self] in
+            guard let self else { return }
+            self.analyzerLock.lock()
+            if let dsp = self.dsp {
+                AnalyzerDSP_Destroy(dsp)
+                self.dsp = nil
+            }
+            self.analyzerLock.unlock()
+            completion?()
         }
-        analyzerLock.unlock()
+        controlQueue.async {
+            player.stop()
+            player.removeTap(onBus: 0)
+            engine.stop()
+            // Retain the old file until AVAudioPlayerNode has unscheduled it.
+            _ = oldFile
+            DispatchQueue.main.async(execute: finishOnMain)
+        }
         levels = (0, 0, 0)
         stemCurves = []
         vocalCurve = []
@@ -190,16 +229,36 @@ final class LocalAudioPlayer {
         let remaining = file.length - frame
         playbackScheduleGeneration &+= 1
         let generation = playbackScheduleGeneration
-        player.stop()
+        playRequestGeneration &+= 1
+        let request = playRequestGeneration
         activePlaybackOffset = target
         pausedPlaybackTime = wasPlaying ? nil : target
-        player.scheduleSegment(file, startingFrame: frame, frameCount: AVAudioFrameCount(min(remaining, Int64(UInt32.max))), at: nil, completionCallbackType: .dataPlayedBack) { [weak self] _ in
+        let scheduledFile = file
+        let player = self.player
+        audioControlQueue.async { [weak self] in
+            player.stop()
+            DispatchQueue.main.async {
+                guard let self, self.playRequestGeneration == request,
+                      self.playbackScheduleGeneration == generation,
+                      self.file === scheduledFile else { return }
+                self.schedule(file: scheduledFile, startingFrame: frame,
+                              frameCount: AVAudioFrameCount(min(remaining, Int64(UInt32.max))),
+                              generation: generation, shouldPlay: wasPlaying)
+            }
+        }
+    }
+
+    private func schedule(file: AVAudioFile, startingFrame: AVAudioFramePosition,
+                          frameCount: AVAudioFrameCount, generation: UInt64, shouldPlay: Bool) {
+        player.scheduleSegment(file, startingFrame: startingFrame, frameCount: frameCount,
+                               at: nil, completionCallbackType: .dataPlayedBack) { [weak self] _ in
             Task { @MainActor [weak self] in self?.handlePlaybackFinished(generation: generation) }
         }
-        if wasPlaying { player.play() }
+        if shouldPlay { player.play() }
     }
 
     @discardableResult func playAdjacentTrack(_ direction: Int) -> LocalTrack? {
+        if onPlatformAdjacentTrack?(direction) == true { return nil }
         guard let currentTrackID, let index = playbackQueue.firstIndex(where: { $0.id == currentTrackID }) else { return nil }
         let nextIndex = index + direction
         guard playbackQueue.indices.contains(nextIndex) else { return nil }
@@ -250,7 +309,6 @@ final class LocalAudioPlayer {
         case .off:
             activePlaybackOffset = duration
             pausedPlaybackTime = duration
-            player.stop()
         }
     }
 
@@ -295,7 +353,8 @@ final class LocalAudioPlayer {
     }
 #endif
 
-    func visualAudio(time: Float, aspectRatio: Float, isolatedInstruments: Bool = false) -> VisualAudio {
+    func visualAudio(time: Float, aspectRatio: Float, isolatedInstruments: Bool = false,
+                     coverDotSensitivity: Bool = false) -> VisualAudio {
         let playbackTime = Float(currentPlaybackTime)
         func curve(_ index: Int) -> Float {
             guard stemCurves.indices.contains(index), !stemCurves[index].isEmpty else { return 0 }
@@ -308,7 +367,10 @@ final class LocalAudioPlayer {
         let fftGuitar = min(max(levels.1 * 0.55 + levels.2 * 0.85, 0), 1)
         let hasPianoStem = stemCurves.indices.contains(1) && !stemCurves[1].isEmpty
         let hasDrumStem = stemCurves.indices.contains(2) && !stemCurves[2].isEmpty
-        let guitar = hasGuitarStem ? curve(0) : (isolatedInstruments ? 0 : fftGuitar)
+        let separatedGuitar = curve(0)
+        let guitar = hasGuitarStem
+            ? ((coverDotSensitivity || separatedGuitar >= 0.08) ? separatedGuitar : 0)
+            : (isolatedInstruments ? 0 : fftGuitar)
         let electricClassified = electricGuitarConfidence >= 0.28
         let guitarDrive = max(guitar, electricClassified ? levels.1 * 0.55 + levels.2 * 0.85 : 0)
         let gate = electricClassified
@@ -328,7 +390,9 @@ final class LocalAudioPlayer {
         let vocal = vocalCurve.isEmpty ? 0 : interpolated(vocalCurve, at: playbackTime, interval: 0.48)
         return VisualAudio(time: time, bass: levels.0, mid: levels.1, treble: levels.2,
                            aspectRatio: aspectRatio, guitar: guitar,
-                           piano: hasPianoStem ? curve(1) : (isolatedInstruments ? 0 : min(max(levels.1 * 0.55, 0), 1)),
+                           piano: hasPianoStem
+                            ? ((coverDotSensitivity || curve(1) >= 0.08) ? curve(1) : 0)
+                            : (isolatedInstruments ? 0 : min(max(levels.1 * 0.55, 0), 1)),
                            drums: hasDrumStem ? curve(2) : levels.0, playbackTime: playbackTime,
                            electricGuitarConfidence: electricGuitarConfidence, vocal: vocal,
                            guitarPeak: visualGuitarPeak, playing: isPlaying ? 1 : 0)

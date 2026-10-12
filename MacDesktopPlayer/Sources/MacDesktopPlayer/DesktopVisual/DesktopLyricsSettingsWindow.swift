@@ -6,6 +6,13 @@ final class DesktopLyricsSettingsWindowController: NSWindowController {
     private var surface: DesktopLyricsSurface = .overlay
     private let surfacePicker = NSPopUpButton()
     private let enableButton = NSButton(checkboxWithTitle: "显示歌词", target: nil, action: nil)
+    private let followsCoverRotationButton = NSButton(checkboxWithTitle: "跟随封面转动", target: nil, action: nil)
+    private let coverEffectPicker = NSPopUpButton()
+    private let coverEffectIntensity = NSSlider(value: 0.55, minValue: 0, maxValue: 1, target: nil, action: nil)
+    private let coverEffectIntensityValue = NSTextField(labelWithString: "55%")
+    private var coverEffectSection: NSView?
+    private var coverEffectPickerRow: NSView?
+    private var coverEffectIntensityRow: NSView?
     private let lineCount = NSSlider(value: 5, minValue: 1, maxValue: 12, target: nil, action: nil)
     private let lineCountValue = NSTextField(labelWithString: "5")
     private let windowPicker = NSPopUpButton()
@@ -19,17 +26,17 @@ final class DesktopLyricsSettingsWindowController: NSWindowController {
     private let fontSizeValue = NSTextField(labelWithString: "")
     private let inactiveScale = NSSlider(value: 0.78, minValue: 0.3, maxValue: 1, target: nil, action: nil)
     private let inactiveOpacity = NSSlider(value: 0.46, minValue: 0, maxValue: 1, target: nil, action: nil)
-    private var controls: [NSControl] { [enableButton, lineCount, windowPicker, layoutPicker, xSlider, ySlider, spacingSlider, widthSlider, fontMode, fontSize, inactiveScale, inactiveOpacity] }
+    private var controls: [NSControl] { [enableButton, followsCoverRotationButton, coverEffectPicker, coverEffectIntensity, lineCount, windowPicker, layoutPicker, xSlider, ySlider, spacingSlider, widthSlider, fontMode, fontSize, inactiveScale, inactiveOpacity] }
 
     init(controller: DesktopLyricsController) {
         lyricsController = controller
-        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 600, height: 760), styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 600, height: 830), styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
         window.title = "歌词管理"
         window.isOpaque = false
         window.backgroundColor = .clear
         window.titlebarAppearsTransparent = true
         window.appearance = NSAppearance(named: .darkAqua)
-        window.minSize = NSSize(width: 600, height: 790)
+        window.minSize = NSSize(width: 600, height: 830)
         window.collectionBehavior = [.moveToActiveSpace, .fullScreenAuxiliary]
         window.center()
         window.isReleasedWhenClosed = false
@@ -60,6 +67,19 @@ final class DesktopLyricsSettingsWindowController: NSWindowController {
         surfacePicker.addItems(withTitles: ["桌面浮层", "封面舞台"]); surfacePicker.target = self; surfacePicker.action = #selector(surfaceChanged)
         root.addArrangedSubview(row("应用到", surfacePicker))
         root.addArrangedSubview(enableButton); enableButton.target = self; enableButton.action = #selector(valueChanged(_:))
+        root.addArrangedSubview(followsCoverRotationButton)
+        followsCoverRotationButton.target = self; followsCoverRotationButton.action = #selector(valueChanged(_:))
+        let effectSection = section("封面舞台文字特效")
+        coverEffectSection = effectSection
+        root.addArrangedSubview(effectSection)
+        coverEffectPicker.addItems(withTitles: DesktopCoverLyricsEffect.allCases.map(\.title))
+        coverEffectPicker.target = self; coverEffectPicker.action = #selector(valueChanged(_:))
+        let effectPickerRow = row("特效样式", coverEffectPicker)
+        coverEffectPickerRow = effectPickerRow
+        root.addArrangedSubview(effectPickerRow)
+        let effectIntensityRow = sliderRow("特效强度", coverEffectIntensity, coverEffectIntensityValue, #selector(valueChanged(_:)))
+        coverEffectIntensityRow = effectIntensityRow
+        root.addArrangedSubview(effectIntensityRow)
         root.addArrangedSubview(section("显示方式"))
         windowPicker.addItems(withTitles: ["当前行居中", "整组切换"]); windowPicker.target = self; windowPicker.action = #selector(valueChanged(_:))
         layoutPicker.addItems(withTitles: ["纵向排列", "分散排列"]); layoutPicker.target = self; layoutPicker.action = #selector(valueChanged(_:))
@@ -128,7 +148,16 @@ final class DesktopLyricsSettingsWindowController: NSWindowController {
 
     private func configuration() -> DesktopLyricsConfiguration { lyricsController.configuration(for: surface) }
     private func refresh() {
-        let c = configuration(); enableButton.state = c.isEnabled ? .on : .off; lineCount.doubleValue = Double(c.lineCount); lineCountValue.stringValue = "\(c.lineCount)"
+        let c = configuration(); enableButton.state = c.isEnabled ? .on : .off
+        followsCoverRotationButton.state = c.followsCoverRotation ? .on : .off
+        followsCoverRotationButton.isHidden = surface != .coverStage
+        coverEffectSection?.isHidden = surface != .coverStage
+        coverEffectPicker.selectItem(at: DesktopCoverLyricsEffect.allCases.firstIndex(of: c.coverEffect) ?? 0)
+        coverEffectPickerRow?.isHidden = surface != .coverStage
+        coverEffectIntensity.doubleValue = Double(c.coverEffectIntensity)
+        coverEffectIntensityValue.stringValue = String(format: "%.0f%%", c.coverEffectIntensity * 100)
+        coverEffectIntensityRow?.isHidden = surface != .coverStage
+        lineCount.doubleValue = Double(c.lineCount); lineCountValue.stringValue = "\(c.lineCount)"
         windowPicker.selectItem(at: c.window == .centered ? 0 : 1); layoutPicker.selectItem(at: { if case .scattered = c.layout { return 1 }; return 0 }())
         xSlider.doubleValue = Double(c.position.x); ySlider.doubleValue = Double(c.position.y); spacingSlider.doubleValue = Double(c.lineSpacing); widthSlider.doubleValue = Double(c.maxWidthFraction)
         switch c.fontSize { case .fixed(let points): fontMode.selectItem(at: 0); fontSize.minValue = 12; fontSize.maxValue = 80; fontSize.doubleValue = Double(points); fontSizeValue.stringValue = "\(Int(points)) pt"
@@ -138,6 +167,9 @@ final class DesktopLyricsSettingsWindowController: NSWindowController {
             readouts[slider]?.stringValue = String(format: "%.0f%%", slider.doubleValue * 100)
         }
         controls.forEach { $0.isEnabled = c.isEnabled || $0 === enableButton }
+        followsCoverRotationButton.isEnabled = c.isEnabled && surface == .coverStage
+        coverEffectPicker.isEnabled = c.isEnabled && surface == .coverStage
+        coverEffectIntensity.isEnabled = c.isEnabled && surface == .coverStage
         if case .scattered = c.layout { spacingSlider.isEnabled = false }
 
     }
@@ -146,6 +178,9 @@ final class DesktopLyricsSettingsWindowController: NSWindowController {
     @objc private func valueChanged(_ sender: NSControl) {
         var c = configuration()
         c.isEnabled = enableButton.state == .on
+        c.followsCoverRotation = followsCoverRotationButton.state == .on
+        c.coverEffect = DesktopCoverLyricsEffect.allCases[min(max(coverEffectPicker.indexOfSelectedItem, 0), DesktopCoverLyricsEffect.allCases.count - 1)]
+        c.coverEffectIntensity = CGFloat(coverEffectIntensity.doubleValue)
         c.lineCount = Int(lineCount.doubleValue.rounded())
         c.window = windowPicker.indexOfSelectedItem == 0 ? .centered : .grouped
         if sender === layoutPicker {

@@ -170,7 +170,8 @@ final class DesktopRenderer: NSObject, MTKViewDelegate {
               let command = queue.makeCommandBuffer(), let encoder = command.makeRenderCommandEncoder(descriptor: pass) else { return }
         let values = audio.visualAudio(time: Float(ProcessInfo.processInfo.systemUptime - startedAt),
                                        aspectRatio: Float(view.drawableSize.width / max(view.drawableSize.height, 1)),
-                                       isolatedInstruments: effectRenderer.effect == .tyndall)
+                                       isolatedInstruments: effectRenderer.effect == .tyndall,
+                                       coverDotSensitivity: effectRenderer.effect == .coverDots)
         let squareCover = effectRenderer.effect == .coverDots
         let showCoverStage = squareCover || centerRecordVisible
         if let desktopView = view as? DesktopMetalView {
@@ -179,7 +180,10 @@ final class DesktopRenderer: NSObject, MTKViewDelegate {
             let accent = DesktopMoodService.shared.colors.pulseRing
             if showCoverStage {
                 desktopView.hideFlatLyrics()
-                coverRecordRenderer.setLyrics(frame)
+                coverRecordRenderer.setLyrics(frame,
+                    followsCoverRotation: audio.lyricsController.configuration(for: .coverStage).followsCoverRotation,
+                    effect: audio.lyricsController.configuration(for: .coverStage).coverEffect,
+                    effectIntensity: audio.lyricsController.configuration(for: .coverStage).coverEffectIntensity)
             } else {
                 desktopView.setLyrics(frame, highlight: NSColor(calibratedRed: CGFloat(accent.x), green: CGFloat(accent.y), blue: CGFloat(accent.z), alpha: 1))
             }

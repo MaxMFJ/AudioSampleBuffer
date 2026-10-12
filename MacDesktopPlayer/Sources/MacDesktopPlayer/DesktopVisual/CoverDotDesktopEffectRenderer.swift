@@ -12,6 +12,7 @@ final class CoverDotDesktopEffectRenderer {
     private var pianoEnvelope: Float = 0
     private let interaction = DesktopCoverInteraction()
     private let lyricRenderer: CoverStageLyrics
+    private var lyricsFollowCoverRotation = false
 
     init(device: MTLDevice, pixelFormat: MTLPixelFormat, library: MTLLibrary) {
         let descriptor = MTLRenderPipelineDescriptor()
@@ -60,8 +61,10 @@ final class CoverDotDesktopEffectRenderer {
         hasArtwork = artwork != nil
     }
 
-    func setLyrics(_ frame: DesktopLyricsFrame) {
-        lyricRenderer.update(frame)
+    func setLyrics(_ frame: DesktopLyricsFrame, followsCoverRotation: Bool,
+                   effect: DesktopCoverLyricsEffect, effectIntensity: CGFloat) {
+        lyricRenderer.update(frame, effect: effect, intensity: effectIntensity)
+        lyricsFollowCoverRotation = followsCoverRotation
     }
 
     func draw(encoder: MTLRenderCommandEncoder, view: MTKView, audio: VisualAudio, squareCover: Bool) {
@@ -109,7 +112,11 @@ final class CoverDotDesktopEffectRenderer {
         encoder.setVertexTexture(artwork ?? placeholder, index: 0)
         encoder.drawPrimitives(type: .point, vertexStart: 0, vertexCount: columns * coverRows)
         var lyricStage = stage
-        lyricStage.rotation.w = 0
+        if !lyricsFollowCoverRotation {
+            lyricStage.rotation.x = 0
+            lyricStage.rotation.y = 0
+            lyricStage.rotation.w = 0
+        }
         lyricRenderer.draw(encoder: encoder, view: view, stage: lyricStage, highlight: mood.pulseRing)
     }
 }

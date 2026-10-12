@@ -1,5 +1,6 @@
 import Foundation
 import AppKit
+import AVFoundation
 import ImageIO
 
 /// Platform source exposed by the local Mineradio-compatible bridge.
@@ -88,6 +89,7 @@ actor PlatformBridgeClient {
     private let artworkMemoryCache = NSCache<NSString, NSImage>()
     private let artworkCacheLimitBytes = 32 * 1024 * 1024
     private let artworkDiskLimitBytes = 128 * 1024 * 1024
+    private var audioPreparationTasks: [String: Task<(URL, URL?), Error>] = [:]
 
     init(baseURL: URL = URL(string: "http://127.0.0.1:3000")!) {
         self.baseURL = baseURL
@@ -151,19 +153,60 @@ actor PlatformBridgeClient {
         return rows.compactMap { Self.decodeTrack($0, provider: provider) }
     }
 
-    /// Downloads only to the app cache so AVAudioFile can analyze/play it.
-    /// It is not added to the user's local library and can be replaced later.
-    func cachedAudioFile(for remoteURL: URL) async throws -> URL {
-        // Netease may return a signed http://music.126.net URL. macOS ATS
-        // rejects that URL when the app downloads it directly. Route it
-        // through the local Bridge, which already owns the provider headers
-        // and performs the remote fetch outside the app's URLSession.
+    /// Reuses a complete local copy before asking the provider to resolve a
+    /// short-lived URL. Adjacent-track prefetches and taps share one task.
+    func hasCachedAudioFile(for track: PlatformTrack) -> Bool {
+        let quality = track.provider == .netease ? "exhigh" : "standard"
+        let key = audioCacheKey(provider: track.provider, trackID: track.id, quality: quality)
+        let directory = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("MacDesktopPlayer/PlatformAudio", isDirectory: true)
+        return validAudioCache(in: directory, key: key) != nil
+    }
+
+    func preparedAudioFile(for track: PlatformTrack) async throws -> (fileURL: URL, remoteURL: URL?, cacheHit: Bool) {
+        let quality = track.provider == .netease ? "exhigh" : "standard"
+        let cacheKey = audioCacheKey(provider: track.provider, trackID: track.id, quality: quality)
+        let cacheDirectory = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("MacDesktopPlayer/PlatformAudio", isDirectory: true)
+
+        if let cached = validAudioCache(in: cacheDirectory, key: cacheKey) {
+            NSLog("[PlatformPlayback] provider=%@ track=%@ cache=hit", track.provider.rawValue, track.id)
+            return (cached, nil, true)
+        }
+        if let task = audioPreparationTasks[cacheKey] {
+            let (fileURL, remoteURL) = try await task.value
+            return (fileURL, remoteURL, false)
+        }
+
+        let task = Task { () throws -> (URL, URL?) in
+            let resolveStart = Date()
+            let playback = try await self.playbackURL(for: track, quality: quality)
+            let resolveMilliseconds = Int(Date().timeIntervalSince(resolveStart) * 1_000)
+            guard let remoteURL = playback.url else {
+                throw PlatformBridgeError.server(playback.restriction?.message ?? playback.message ?? "这首歌当前没有可播放地址")
+            }
+
+            let downloadStart = Date()
+            let downloaded = try await self.downloadAudioFile(for: remoteURL, in: cacheDirectory, key: cacheKey)
+            let downloadMilliseconds = Int(Date().timeIntervalSince(downloadStart) * 1_000)
+            let fileSize = (try? downloaded.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+            NSLog("[PlatformPlayback] provider=%@ track=%@ cache=miss resolve=%dms download=%dms bytes=%d",
+                  track.provider.rawValue, track.id, resolveMilliseconds, downloadMilliseconds, fileSize)
+            return (downloaded, remoteURL)
+        }
+        audioPreparationTasks[cacheKey] = task
+        defer { audioPreparationTasks[cacheKey] = nil }
+        let (fileURL, remoteURL) = try await task.value
+        return (fileURL, remoteURL, false)
+    }
+
+    private func downloadAudioFile(for remoteURL: URL, in cacheDirectory: URL, key: String) async throws -> URL {
+        if let cached = validAudioCache(in: cacheDirectory, key: key) { return cached }
+        try FileManager.default.createDirectory(at: cacheDirectory, withIntermediateDirectories: true)
         guard var components = URLComponents(
             url: baseURL.appendingPathComponent("api/audio"),
             resolvingAgainstBaseURL: false
-        ) else {
-            throw PlatformBridgeError.notConfigured
-        }
+        ) else { throw PlatformBridgeError.notConfigured }
         components.queryItems = [URLQueryItem(name: "url", value: remoteURL.absoluteString)]
         guard let proxyURL = components.url else { throw PlatformBridgeError.notConfigured }
         var request = URLRequest(url: proxyURL)
@@ -172,14 +215,54 @@ actor PlatformBridgeClient {
         guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
             throw PlatformBridgeError.server("平台音频地址不可用")
         }
-        let cache = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("MacDesktopPlayer/PlatformAudio", isDirectory: true)
-        try FileManager.default.createDirectory(at: cache, withIntermediateDirectories: true)
         let ext = remoteURL.pathExtension.isEmpty ? "audio" : remoteURL.pathExtension
-        let destination = cache.appendingPathComponent(UUID().uuidString).appendingPathExtension(ext)
+        let destination = cacheDirectory.appendingPathComponent("\(key).\(ext)")
         try? FileManager.default.removeItem(at: destination)
         try FileManager.default.moveItem(at: temporaryURL, to: destination)
+        guard validAudioCache(in: cacheDirectory, key: key) != nil else {
+            try? FileManager.default.removeItem(at: destination)
+            throw PlatformBridgeError.server("平台返回的音频文件无效")
+        }
+        trimAudioCache(in: cacheDirectory, keeping: destination)
         return destination
+    }
+
+    private func validAudioCache(in directory: URL, key: String) -> URL? {
+        guard let files = try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: [.fileSizeKey]),
+              let candidate = files.first(where: { $0.lastPathComponent.hasPrefix(key + ".") }),
+              let size = try? candidate.resourceValues(forKeys: [.fileSizeKey]).fileSize,
+              size > 4_096,
+              let audio = try? AVAudioFile(forReading: candidate), audio.length > 0 else { return nil }
+        return candidate
+    }
+
+    private func audioCacheKey(provider: PlatformProvider, trackID: String, quality: String) -> String {
+        let bytes = Array("\(provider.rawValue)|\(trackID)|\(quality)".utf8)
+        var hash: UInt64 = 1469598103934665603
+        for byte in bytes {
+            hash ^= UInt64(byte)
+            hash &*= 1099511628211
+        }
+        return String(format: "%016llx", hash)
+    }
+
+    private func trimAudioCache(in directory: URL, keeping currentFile: URL) {
+        let limit = 512 * 1024 * 1024
+        guard let files = try? FileManager.default.contentsOfDirectory(
+            at: directory, includingPropertiesForKeys: [.fileSizeKey, .contentModificationDateKey]
+        ) else { return }
+        var entries = files.compactMap { file -> (URL, Int, Date)? in
+            guard let values = try? file.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey]),
+                  let size = values.fileSize, let date = values.contentModificationDate else { return nil }
+            return (file, size, date)
+        }.sorted { $0.2 < $1.2 }
+        var total = entries.reduce(0) { $0 + $1.1 }
+        while total > limit, let oldest = entries.first {
+            entries.removeFirst()
+            guard oldest.0 != currentFile else { continue }
+            try? FileManager.default.removeItem(at: oldest.0)
+            total -= oldest.1
+        }
     }
 
     /// Fetches third-party artwork through the Bridge so HTTP artwork URLs and
@@ -290,8 +373,9 @@ actor PlatformBridgeClient {
         }
     }
 
-    func playbackURL(for track: PlatformTrack, quality: String = "standard") async throws -> PlatformPlayback {
-        var query = [URLQueryItem(name: "quality", value: quality)]
+    func playbackURL(for track: PlatformTrack, quality: String? = nil) async throws -> PlatformPlayback {
+        let requestedQuality = quality ?? (track.provider == .netease ? "exhigh" : "standard")
+        var query = [URLQueryItem(name: "quality", value: requestedQuality)]
         switch track.provider {
         case .netease:
             query.append(URLQueryItem(name: "id", value: track.id))

@@ -112,8 +112,10 @@ static NSError *HTDMError(NSInteger code, NSString *message) {
         return nil;
     }
     MLModelConfiguration *configuration = [[MLModelConfiguration alloc] init];
-    // Keep separation off the GPU so the live Metal wallpaper keeps its frame budget.
-    configuration.computeUnits = MLComputeUnitsCPUAndNeuralEngine;
+    // This model's long temporal tensors and transposed convolutions exceed
+    // current macOS ANE compiler limits. Keep Demucs on CPU to avoid a failed
+    // ANE plan; it also leaves the wallpaper's Metal GPU budget untouched.
+    configuration.computeUnits = MLComputeUnitsCPUOnly;
     self.model = [MLModel modelWithContentsOfURL:compiled configuration:configuration error:error];
     MLModel *result = self.model;
     [self.modelLock unlock];
@@ -336,7 +338,11 @@ static NSError *HTDMError(NSInteger code, NSString *message) {
         NSMutableArray<NSNumber *> *frames = [NSMutableArray arrayWithCapacity:curveCount];
         for (NSNumber *number in raw) {
             float value = ceiling > floor ? ASB_CLAMP((number.floatValue - floor) / (ceiling - floor), 0.0f, 1.0f) : 0.0f;
-            if (value < 0.08f) value = 0.0f;
+            // Preserve quieter guitar and piano phrases for the cover-dot
+            // renderer. Other effects retain their previous gate downstream.
+            // Keep the drum noise floor unchanged.
+            float noiseFloor = (stemIndex == 0 || stemIndex == 1) ? 0.035f : 0.08f;
+            if (value < noiseFloor) value = 0.0f;
             [frames addObject:@(value)];
         }
         stemCurves[stemNames[stemIndex]] = @{@"frames": frames};

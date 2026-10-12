@@ -4081,19 +4081,10 @@ async function resolveNeteaseDirectSongUrl(id, loginInfo, qualityPreference) {
       const url = d && d.url;
       const freeTrial = d && d.freeTrialInfo;
       console.log('[SongUrl]', q.level, '->', url ? 'OK' : 'no url', freeTrial ? '(TRIAL)' : '');
-      let probe = null;
-      if (url) {
-        probe = probeCache.get(url);
-        if (!probe) {
-          probe = await probePlaybackAudioUrl(url, Math.min(2500, Math.max(600, resolveDeadline - Date.now())));
-          probeCache.set(url, probe);
-        }
-        if (!probe.ok || !probe.magic) {
-          probeFailures.push(q.level + ':' + (probe.status || probe.reason || 'invalid-audio'));
-          continue;
-        }
-      }
-      if (url && !freeTrial && probe && probe.ok) {
+      // Full-track URLs are immediately consumed by the desktop client, which
+      // downloads and decodes the complete file before playback. Avoid a
+      // second remote request for an 8 KB probe on this latency-sensitive path.
+      if (url && !freeTrial) {
         return {
           provider: 'netease',
           source: 'netease',
@@ -4104,10 +4095,20 @@ async function resolveNeteaseDirectSongUrl(id, loginInfo, qualityPreference) {
           quality: q.label,
           br: d.br,
           requestedQuality,
-          probeStatus: probe.status,
-          probeBytes: probe.bytes,
-          probeMagic: probe.magic,
+          probeStatus: 'validated-on-download',
         };
+      }
+      let probe = null;
+      if (url && freeTrial) {
+        probe = probeCache.get(url);
+        if (!probe) {
+          probe = await probePlaybackAudioUrl(url, Math.min(2500, Math.max(600, resolveDeadline - Date.now())));
+          probeCache.set(url, probe);
+        }
+        if (!probe.ok || !probe.magic) {
+          probeFailures.push(q.level + ':' + (probe.status || probe.reason || 'invalid-audio'));
+          continue;
+        }
       }
       if (url && freeTrial && probe && probe.ok && !trialFallback) {
         trialFallback = {

@@ -25,6 +25,8 @@ private final class PlatformLibraryView: NSView, NSTableViewDataSource, NSTableV
     private var playlists: [PlatformPlaylist] = []
     private var tracks: [PlatformTrack] = []
     private var selectedPlaylist: PlatformPlaylist?
+    private let playbackLoadingView = PlatformPlaybackLoadingView()
+    private var playbackRequestGeneration = 0
 
     init(play: @escaping (URL, String, String, URL?) -> Void) {
         self.play = play
@@ -89,6 +91,9 @@ private final class PlatformLibraryView: NSView, NSTableViewDataSource, NSTableV
         addSubview(refresh)
         addSubview(playlistScroll)
         addSubview(trackScroll)
+        playbackLoadingView.translatesAutoresizingMaskIntoConstraints = false
+        playbackLoadingView.isHidden = true
+        addSubview(playbackLoadingView)
         addSubview(status)
         NSLayoutConstraint.activate([
             title.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 24),
@@ -103,6 +108,10 @@ private final class PlatformLibraryView: NSView, NSTableViewDataSource, NSTableV
             trackScroll.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -24),
             trackScroll.topAnchor.constraint(equalTo: playlistScroll.topAnchor),
             trackScroll.bottomAnchor.constraint(equalTo: playlistScroll.bottomAnchor),
+            playbackLoadingView.centerXAnchor.constraint(equalTo: trackScroll.centerXAnchor),
+            playbackLoadingView.centerYAnchor.constraint(equalTo: trackScroll.centerYAnchor),
+            playbackLoadingView.widthAnchor.constraint(equalToConstant: 292),
+            playbackLoadingView.heightAnchor.constraint(equalToConstant: 92),
             status.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 24),
             status.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -24),
             status.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -18)
@@ -151,19 +160,29 @@ private final class PlatformLibraryView: NSView, NSTableViewDataSource, NSTableV
     }
 
     private func playTrack(_ track: PlatformTrack) {
+        playbackRequestGeneration += 1
+        let request = playbackRequestGeneration
+        playbackLoadingView.dismiss()
         status.stringValue = "正在获取播放地址：\(track.name)…"
         Task { [weak self] in
             do {
-                let playback = try await PlatformBridgeClient.shared.playbackURL(for: track, quality: "standard")
-                guard let remoteURL = playback.url else {
-                    throw PlatformBridgeError.server(playback.restriction?.message ?? playback.message ?? "这首歌当前没有可播放地址")
-                }
-                let cachedURL = try await PlatformBridgeClient.shared.cachedAudioFile(for: remoteURL)
-                guard let self else { return }
-                self.play(cachedURL, track.name, track.displayArtist, track.coverURL)
+                let cacheHit = await PlatformBridgeClient.shared.hasCachedAudioFile(for: track)
+                guard let self, self.playbackRequestGeneration == request else { return }
+                if !cacheHit { self.playbackLoadingView.present(trackName: track.name) }
+                let prepared = try await PlatformBridgeClient.shared.preparedAudioFile(for: track)
+                guard self.playbackRequestGeneration == request else { return }
+                self.playbackLoadingView.dismiss()
+                self.play(prepared.fileURL, track.name, track.displayArtist, track.coverURL)
                 self.status.stringValue = "正在播放：\(track.name)"
+                if let index = self.tracks.firstIndex(where: { $0.id == track.id }),
+                   self.tracks.indices.contains(index + 1) {
+                    let nextTrack = self.tracks[index + 1]
+                    Task { _ = try? await PlatformBridgeClient.shared.preparedAudioFile(for: nextTrack) }
+                }
             } catch {
-                self?.status.stringValue = "播放失败：\(error.localizedDescription)"
+                guard let self, self.playbackRequestGeneration == request else { return }
+                self.playbackLoadingView.dismiss()
+                self.status.stringValue = "播放失败：\(error.localizedDescription)"
             }
         }
     }
@@ -226,5 +245,106 @@ private final class PlatformLibraryView: NSView, NSTableViewDataSource, NSTableV
     @objc private func play(_ sender: NSButton) {
         guard let id = sender.identifier?.rawValue, let track = tracks.first(where: { $0.id == id }) else { return }
         playTrack(track)
+    }
+}
+
+@MainActor
+final class PlatformPlaybackLoadingView: NSView {
+    private let material = NSVisualEffectView()
+    private let spinner = NSProgressIndicator()
+    private let titleLabel = NSTextField(labelWithString: "正在加载歌曲")
+    private let detailLabel = NSTextField(labelWithString: "正在连接平台音源…")
+    private let progress = NSProgressIndicator()
+    private var visibilityGeneration = 0
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        wantsLayer = true
+        layer?.cornerRadius = 14
+        layer?.masksToBounds = true
+        layer?.borderWidth = 0.7
+        layer?.borderColor = NSColor.white.withAlphaComponent(0.2).cgColor
+
+        material.material = .hudWindow
+        material.blendingMode = .withinWindow
+        material.state = .active
+        material.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(material)
+        NSLayoutConstraint.activate([
+            material.leadingAnchor.constraint(equalTo: leadingAnchor),
+            material.trailingAnchor.constraint(equalTo: trailingAnchor),
+            material.topAnchor.constraint(equalTo: topAnchor),
+            material.bottomAnchor.constraint(equalTo: bottomAnchor)
+        ])
+
+        spinner.style = .spinning
+        spinner.controlSize = .small
+        spinner.isIndeterminate = true
+        spinner.translatesAutoresizingMaskIntoConstraints = false
+        material.addSubview(spinner)
+
+        titleLabel.font = .systemFont(ofSize: 13, weight: .semibold)
+        titleLabel.textColor = .labelColor
+        titleLabel.translatesAutoresizingMaskIntoConstraints = false
+        material.addSubview(titleLabel)
+
+        detailLabel.font = .systemFont(ofSize: 11, weight: .regular)
+        detailLabel.textColor = .secondaryLabelColor
+        detailLabel.lineBreakMode = .byTruncatingTail
+        detailLabel.translatesAutoresizingMaskIntoConstraints = false
+        material.addSubview(detailLabel)
+
+        progress.style = .bar
+        progress.isIndeterminate = true
+        progress.controlSize = .small
+        progress.translatesAutoresizingMaskIntoConstraints = false
+        material.addSubview(progress)
+
+        NSLayoutConstraint.activate([
+            spinner.leadingAnchor.constraint(equalTo: material.leadingAnchor, constant: 16),
+            spinner.centerYAnchor.constraint(equalTo: titleLabel.centerYAnchor),
+            spinner.widthAnchor.constraint(equalToConstant: 18),
+            spinner.heightAnchor.constraint(equalToConstant: 18),
+            titleLabel.leadingAnchor.constraint(equalTo: spinner.trailingAnchor, constant: 10),
+            titleLabel.topAnchor.constraint(equalTo: material.topAnchor, constant: 18),
+            titleLabel.trailingAnchor.constraint(equalTo: material.trailingAnchor, constant: -14),
+            detailLabel.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
+            detailLabel.trailingAnchor.constraint(equalTo: titleLabel.trailingAnchor),
+            detailLabel.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 3),
+            progress.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
+            progress.trailingAnchor.constraint(equalTo: titleLabel.trailingAnchor),
+            progress.topAnchor.constraint(equalTo: detailLabel.bottomAnchor, constant: 8),
+            progress.bottomAnchor.constraint(equalTo: material.bottomAnchor, constant: -12)
+        ])
+        alphaValue = 0
+    }
+
+    required init?(coder: NSCoder) { nil }
+
+    func present(trackName: String) {
+        visibilityGeneration += 1
+        detailLabel.stringValue = trackName
+        isHidden = false
+        spinner.startAnimation(nil)
+        progress.startAnimation(nil)
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.16
+            animator().alphaValue = 1
+        }
+    }
+
+    func dismiss() {
+        guard !isHidden else { return }
+        visibilityGeneration += 1
+        let generation = visibilityGeneration
+        spinner.stopAnimation(nil)
+        progress.stopAnimation(nil)
+        NSAnimationContext.runAnimationGroup({ context in
+            context.duration = 0.14
+            animator().alphaValue = 0
+        }, completionHandler: { [weak self] in
+            guard let self, self.visibilityGeneration == generation else { return }
+            self.isHidden = true
+        })
     }
 }

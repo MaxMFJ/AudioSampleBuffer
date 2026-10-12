@@ -1,13 +1,19 @@
 import AppKit
 import Foundation
 
+private enum DrawerGeometry {
+    static let width: CGFloat = 324
+    static let handleWidth: CGFloat = 72
+    static let handleHeight: CGFloat = 120
+}
+
 @MainActor
 final class PlaylistDrawerController {
     private let audio: LocalAudioPlayer
     private let library: MusicLibraryStore
     private let onOpenControls: () -> Void
     private let onArtworkChange: (NSImage?) -> Void
-    private let panel = PlaylistDrawerPanel(contentRect: NSRect(x: 0, y: 0, width: 56, height: 88),
+    private let panel = PlaylistDrawerPanel(contentRect: NSRect(x: 0, y: 0, width: DrawerGeometry.handleWidth, height: DrawerGeometry.handleHeight),
                                             styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
     private var drawerView: PlaylistDrawerView?
     private var expanded = false
@@ -50,7 +56,8 @@ final class PlaylistDrawerController {
     }
 
     private func collapsedFrame(on screen: NSScreen) -> NSRect {
-        NSRect(x: screen.frame.minX, y: screen.frame.midY - 44, width: 56, height: 88)
+        NSRect(x: screen.frame.minX, y: screen.frame.midY - DrawerGeometry.handleHeight / 2,
+               width: DrawerGeometry.handleWidth, height: DrawerGeometry.handleHeight)
     }
 
     private func setExpanded(_ expanded: Bool, screen: NSScreen) {
@@ -61,7 +68,7 @@ final class PlaylistDrawerController {
         if expanded {
             // Keep the window stationary during the slide so text and blur are never squeezed.
             panel.setFrame(NSRect(x: screen.frame.minX, y: screen.frame.minY,
-                                  width: 380, height: screen.frame.height), display: true)
+                                  width: DrawerGeometry.width + DrawerGeometry.handleWidth, height: screen.frame.height), display: true)
             drawerView?.layoutSubtreeIfNeeded()
         }
         drawerView?.setExpanded(expanded) { [weak self] in
@@ -78,6 +85,32 @@ final class PlaylistDrawerController {
 final class PlaylistDrawerPanel: NSPanel {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
+}
+
+@MainActor
+private final class DrawerToggleButton: NSButton {
+    private var hoverTrackingArea: NSTrackingArea?
+
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
+    override func mouseDown(with event: NSEvent) {
+        // Treat the entire handle as the target, including its empty margins.
+        guard isEnabled else { return }
+        sendAction(action, to: target)
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let hoverTrackingArea { removeTrackingArea(hoverTrackingArea) }
+        let area = NSTrackingArea(rect: .zero,
+                                  options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect], owner: self)
+        addTrackingArea(area)
+        hoverTrackingArea = area
+    }
+
+    override func mouseEntered(with event: NSEvent) { contentTintColor = .white.withAlphaComponent(0.72) }
+
+    override func mouseExited(with event: NSEvent) { contentTintColor = .white }
 }
 
 @MainActor
@@ -129,7 +162,7 @@ final class PlaylistDrawerView: NSView, NSSearchFieldDelegate {
     private var expanded = false
     private let surface = NSView()
     private var animating = false
-    private let arrowButton = NSButton()
+    private let arrowButton = DrawerToggleButton()
     private let heading = NSTextField(labelWithString: "歌曲")
     private let sourceControl = NSSegmentedControl(labels: ["本地", "平台"], trackingMode: .selectOne, target: nil, action: nil)
     private let searchField = NSSearchField()
@@ -137,6 +170,7 @@ final class PlaylistDrawerView: NSView, NSSearchFieldDelegate {
     private let scrollView = NSScrollView()
     private let platformPlaylistScroll = PlaylistHorizontalScrollView()
     private let platformPlaylistStack = NSStackView()
+    private let playbackLoadingView = PlatformPlaybackLoadingView()
     private let platformLoadMoreButton = NSButton(title: "加载更多", target: nil, action: nil)
     private var platformLoadMoreWidthConstraint: NSLayoutConstraint!
     private let controlsButton = NSButton(title: "打开控制面板", target: nil, action: nil)
@@ -145,6 +179,7 @@ final class PlaylistDrawerView: NSView, NSSearchFieldDelegate {
     private var platformScrollTopConstraint: NSLayoutConstraint!
     private var platformPlaylistConstraints: [NSLayoutConstraint] = []
     private var libraryObserver: NSObjectProtocol?
+    private var platformScrollObserver: NSObjectProtocol?
     private var platformPlaylists: [PlatformPlaylist] = []
     private var platformTracks: [PlatformTrack] = []
     private var selectedPlatformPlaylist: PlatformPlaylist?
@@ -153,6 +188,10 @@ final class PlaylistDrawerView: NSView, NSSearchFieldDelegate {
     private var platformHasMore = false
     private let platformPageSize = 40
     private var platformArtworkGeneration = 0
+    private var currentPlatformTrackID: String?
+    private var currentPlatformCachedPath: String?
+    private var platformTrackSwitchInProgress = false
+    private var platformPlaybackRequestGeneration = 0
 
     init(audio: LocalAudioPlayer, library: MusicLibraryStore, onOpenControls: @escaping () -> Void,
          onArtworkChange: @escaping (NSImage?) -> Void,
@@ -162,7 +201,10 @@ final class PlaylistDrawerView: NSView, NSSearchFieldDelegate {
         self.onOpenControls = onOpenControls
         self.onArtworkChange = onArtworkChange
         self.onExpansionChange = onExpansionChange
-        super.init(frame: NSRect(x: 0, y: 0, width: 56, height: 88))
+        super.init(frame: NSRect(x: 0, y: 0, width: DrawerGeometry.handleWidth, height: DrawerGeometry.handleHeight))
+        audio.onPlatformAdjacentTrack = { [weak self] direction in
+            self?.playAdjacentPlatformTrack(direction) ?? false
+        }
         // Auto Layout evaluates the surface's child constraints as soon as the
         // panel is ordered front. Give it its real drawer width before that
         // first layout pass (layout() will update the height afterward).
@@ -198,6 +240,7 @@ final class PlaylistDrawerView: NSView, NSSearchFieldDelegate {
         arrowButton.isBordered = false
         arrowButton.focusRingType = .none
         arrowButton.contentTintColor = .white
+        arrowButton.toolTip = "展开或收起歌曲列表"
         arrowButton.target = self
         arrowButton.action = #selector(toggleExpanded)
         addSubview(arrowButton)
@@ -227,6 +270,7 @@ final class PlaylistDrawerView: NSView, NSSearchFieldDelegate {
         scrollView.scrollerStyle = .overlay
         scrollView.contentView = DrawerClipView()
         scrollView.contentView.drawsBackground = false
+        scrollView.contentView.postsBoundsChangedNotifications = true
         scrollView.documentView = songStack
         scrollView.translatesAutoresizingMaskIntoConstraints = false
         surface.addSubview(scrollView)
@@ -245,6 +289,9 @@ final class PlaylistDrawerView: NSView, NSSearchFieldDelegate {
         platformPlaylistScroll.translatesAutoresizingMaskIntoConstraints = false
         platformPlaylistScroll.isHidden = true
         surface.addSubview(platformPlaylistScroll)
+        playbackLoadingView.translatesAutoresizingMaskIntoConstraints = false
+        playbackLoadingView.isHidden = true
+        surface.addSubview(playbackLoadingView)
         controlsButton.bezelStyle = .rounded
         controlsButton.target = self
         controlsButton.action = #selector(openControls)
@@ -258,6 +305,12 @@ final class PlaylistDrawerView: NSView, NSSearchFieldDelegate {
             searchField.trailingAnchor.constraint(equalTo: surface.trailingAnchor, constant: -16),
             scrollView.leadingAnchor.constraint(equalTo: surface.leadingAnchor, constant: 12),
             scrollView.trailingAnchor.constraint(equalTo: surface.trailingAnchor, constant: -12),
+            playbackLoadingView.centerXAnchor.constraint(equalTo: scrollView.centerXAnchor),
+            playbackLoadingView.centerYAnchor.constraint(equalTo: scrollView.centerYAnchor),
+            playbackLoadingView.leadingAnchor.constraint(greaterThanOrEqualTo: scrollView.leadingAnchor, constant: 4),
+            playbackLoadingView.trailingAnchor.constraint(lessThanOrEqualTo: scrollView.trailingAnchor, constant: -4),
+            playbackLoadingView.widthAnchor.constraint(equalToConstant: 292),
+            playbackLoadingView.heightAnchor.constraint(equalToConstant: 92),
             platformPlaylistScroll.leadingAnchor.constraint(equalTo: surface.leadingAnchor, constant: 12),
             platformPlaylistScroll.trailingAnchor.constraint(equalTo: surface.trailingAnchor, constant: -12),
             songStack.leadingAnchor.constraint(equalTo: scrollView.contentView.leadingAnchor),
@@ -282,6 +335,13 @@ final class PlaylistDrawerView: NSView, NSSearchFieldDelegate {
             platformPlaylistScroll.heightAnchor.constraint(equalToConstant: 58)
         ]
         NSLayoutConstraint.activate([localScrollTopConstraint])
+        platformScrollObserver = NotificationCenter.default.addObserver(
+            forName: NSView.boundsDidChangeNotification,
+            object: scrollView.contentView,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.loadMorePlatformTracksIfNeeded() }
+        }
         libraryObserver = NotificationCenter.default.addObserver(forName: .desktopMusicLibraryChanged,
             object: library, queue: .main) { [weak self] _ in
                 MainActor.assumeIsolated { if self?.expanded == true { self?.refreshRows() } }
@@ -289,13 +349,18 @@ final class PlaylistDrawerView: NSView, NSSearchFieldDelegate {
     }
 
     required init?(coder: NSCoder) { nil }
-    deinit { if let libraryObserver { NotificationCenter.default.removeObserver(libraryObserver) } }
+    deinit {
+        if let libraryObserver { NotificationCenter.default.removeObserver(libraryObserver) }
+        if let platformScrollObserver { NotificationCenter.default.removeObserver(platformScrollObserver) }
+    }
 
     override func layout() {
         super.layout()
         guard !animating else { return }
         surface.frame = NSRect(x: expanded ? 0 : -324, y: 0, width: 324, height: bounds.height)
-        arrowButton.frame = NSRect(x: expanded ? 324 : 0, y: bounds.midY - 44, width: 56, height: 88)
+        arrowButton.frame = NSRect(x: expanded ? DrawerGeometry.width : 0,
+                                   y: bounds.midY - DrawerGeometry.handleHeight / 2,
+                                   width: DrawerGeometry.handleWidth, height: DrawerGeometry.handleHeight)
     }
 
     func setExpanded(_ expanded: Bool, completion: @escaping () -> Void) {
@@ -313,7 +378,8 @@ final class PlaylistDrawerView: NSView, NSSearchFieldDelegate {
             context.duration = 0.34
             context.timingFunction = CAMediaTimingFunction(controlPoints: 0.22, 0.8, 0.25, 1)
             surface.animator().setFrameOrigin(NSPoint(x: expanded ? 0 : -324, y: 0))
-            arrowButton.animator().setFrameOrigin(NSPoint(x: expanded ? 324 : 0, y: bounds.midY - 44))
+            arrowButton.animator().setFrameOrigin(NSPoint(x: expanded ? DrawerGeometry.width : 0,
+                                                          y: bounds.midY - DrawerGeometry.handleHeight / 2))
         } completionHandler: { [weak self] in
             MainActor.assumeIsolated {
                 self?.animating = false
@@ -343,6 +409,8 @@ final class PlaylistDrawerView: NSView, NSSearchFieldDelegate {
             let row = PlaylistDrawerRow(title: track.title, artist: track.artist,
                 onSelect: { [weak self] in
                     guard let self else { return }
+                    self.currentPlatformTrackID = nil
+                    self.currentPlatformCachedPath = nil
                     self.audio.setPlaybackQueue(self.library.tracks, currentID: track.id)
                     self.audio.play(url: URL(fileURLWithPath: track.path), title: track.title, artist: track.artist)
                 }, onDelete: { [weak self] in
@@ -431,6 +499,10 @@ final class PlaylistDrawerView: NSView, NSSearchFieldDelegate {
         let chipWidth: CGFloat = 140
         let chipSpacing: CGFloat = 8
         platformPlaylistScroll.documentWidth = max(1, CGFloat(platformPlaylists.count) * (chipWidth + chipSpacing) - chipSpacing)
+        // NSStackView lays out every arranged chip against its document view's
+        // width. Set that width before inserting fixed-width chips so AppKit
+        // never tries to squeeze the whole playlist into the initial 300pt.
+        platformPlaylistStack.setFrameSize(NSSize(width: platformPlaylistScroll.documentWidth, height: 58))
         for playlist in platformPlaylists {
             let button = NSButton(title: playlist.name, target: self, action: #selector(platformPlaylistPressed(_:)))
             button.identifier = NSUserInterfaceItemIdentifier(playlist.id)
@@ -452,7 +524,6 @@ final class PlaylistDrawerView: NSView, NSSearchFieldDelegate {
             button.heightAnchor.constraint(equalToConstant: 42).isActive = true
             platformPlaylistStack.addArrangedSubview(button)
         }
-        platformPlaylistScroll.layoutSubtreeIfNeeded()
         platformPlaylistScroll.contentView.scroll(to: .zero)
         platformPlaylistScroll.reflectScrolledClipView(platformPlaylistScroll.contentView)
     }
@@ -501,29 +572,76 @@ final class PlaylistDrawerView: NSView, NSSearchFieldDelegate {
         }
     }
 
+    private func loadMorePlatformTracksIfNeeded() {
+        guard expanded,
+              sourceControl.selectedSegment == 1,
+              platformHasMore,
+              !platformLoadingMore,
+              let documentView = scrollView.documentView else { return }
+        let visibleBottom = scrollView.contentView.bounds.maxY
+        let remaining = documentView.bounds.height - visibleBottom
+        // Start the next page before the user reaches the end so the list
+        // keeps moving without waiting on the network at the bottom edge.
+        guard remaining <= 520 else { return }
+        loadMorePlatformTracks()
+    }
+
     private func playPlatformTrack(_ track: PlatformTrack) {
+        platformPlaybackRequestGeneration += 1
+        let request = platformPlaybackRequestGeneration
+        playbackLoadingView.dismiss()
+        currentPlatformTrackID = track.id
+        currentPlatformCachedPath = nil
+        platformTrackSwitchInProgress = true
         statusMessage("正在获取播放地址：\(track.name)…")
         Task { [weak self] in
             do {
-                let playback = try await PlatformBridgeClient.shared.playbackURL(for: track)
-                guard let remoteURL = playback.url else {
-                    throw PlatformBridgeError.server(playback.restriction?.message ?? playback.message ?? "这首歌当前没有可播放地址")
+                let cacheHit = await PlatformBridgeClient.shared.hasCachedAudioFile(for: track)
+                guard let self, self.platformPlaybackRequestGeneration == request else { return }
+                if !cacheHit, self.sourceControl.selectedSegment == 1 {
+                    self.playbackLoadingView.present(trackName: track.name)
                 }
-                let cachedURL = try await PlatformBridgeClient.shared.cachedAudioFile(for: remoteURL)
-                guard let self else { return }
-                self.audio.play(url: cachedURL, title: track.name, artist: track.displayArtist)
+                let prepared = try await PlatformBridgeClient.shared.preparedAudioFile(for: track)
+                guard self.platformPlaybackRequestGeneration == request else { return }
+                self.playbackLoadingView.dismiss()
+                self.currentPlatformCachedPath = prepared.fileURL.path
+                self.platformTrackSwitchInProgress = false
+                self.audio.play(url: prepared.fileURL, title: track.name, artist: track.displayArtist)
                 self.platformArtworkGeneration += 1
                 let generation = self.platformArtworkGeneration
                 self.onArtworkChange(nil)
                 Task { [weak self] in
                     let image = await resolvePlatformArtwork(title: track.name, artist: track.displayArtist,
-                                                             album: track.album, fallbackURL: track.coverURL ?? remoteURL)
+                                                             album: track.album, fallbackURL: track.coverURL ?? prepared.remoteURL)
                     guard let self, self.platformArtworkGeneration == generation else { return }
                     self.onArtworkChange(image)
                 }
                 self.statusMessage("正在播放：\(track.name) · 已进入实时分析")
-            } catch { self?.statusMessage("平台播放失败：\(error.localizedDescription)") }
+                if let index = self.platformTracks.firstIndex(where: { $0.id == track.id }),
+                   self.platformTracks.indices.contains(index + 1) {
+                    let nextTrack = self.platformTracks[index + 1]
+                    Task { _ = try? await PlatformBridgeClient.shared.preparedAudioFile(for: nextTrack) }
+                }
+            } catch {
+                guard let self, self.platformPlaybackRequestGeneration == request else { return }
+                self.playbackLoadingView.dismiss()
+                self.platformTrackSwitchInProgress = false
+                self.statusMessage("平台播放失败：\(error.localizedDescription)")
+            }
         }
+    }
+
+    private func playAdjacentPlatformTrack(_ direction: Int) -> Bool {
+        guard let currentPlatformTrackID else { return false }
+        if platformTrackSwitchInProgress { return true }
+        guard let currentPlatformCachedPath,
+              audio.currentURL?.path == currentPlatformCachedPath else { return false }
+        guard let index = platformTracks.firstIndex(where: { $0.id == currentPlatformTrackID }) else { return true }
+        let targetIndex = index + direction
+        guard platformTracks.indices.contains(targetIndex) else { return true }
+        platformTrackSwitchInProgress = true
+        playPlatformTrack(platformTracks[targetIndex])
+        return true
     }
 
     private func statusMessage(_ message: String) {
@@ -541,6 +659,8 @@ final class PlaylistDrawerView: NSView, NSSearchFieldDelegate {
             platformPlaylistScroll.isHidden = false
             loadPlatformPlaylists()
         } else {
+            platformPlaybackRequestGeneration += 1
+            playbackLoadingView.dismiss()
             platformScrollTopConstraint.isActive = false
             platformPlaylistConstraints.forEach { $0.isActive = false }
             localScrollTopConstraint.isActive = true

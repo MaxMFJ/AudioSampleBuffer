@@ -5,6 +5,32 @@ enum DesktopLyricsSurface {
     case coverStage
 }
 
+/// Registry for cover-stage lyric styles. Each style maps to a Metal rendering path.
+enum DesktopCoverLyricsEffect: String, CaseIterable, Identifiable {
+    case classic
+    case particleAssembly
+    case shatter
+    case electronicGlitch
+
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .classic: return "基础文字"
+        case .particleAssembly: return "粒子合成"
+        case .shatter: return "破碎重组"
+        case .electronicGlitch: return "电子损坏"
+        }
+    }
+    var shaderMode: Float {
+        switch self {
+        case .classic: return 0
+        case .particleAssembly: return 1
+        case .shatter: return 2
+        case .electronicGlitch: return 3
+        }
+    }
+}
+
 /// Positions use viewport fractions, with (0, 0) at the top left.
 struct DesktopLyricsConfiguration {
     enum Window { case grouped, centered }
@@ -23,6 +49,9 @@ struct DesktopLyricsConfiguration {
     }
 
     var isEnabled = true
+    var followsCoverRotation = false
+    var coverEffect: DesktopCoverLyricsEffect = .classic
+    var coverEffectIntensity: CGFloat = 0.55
     var lineCount = 5
     var window: Window = .centered
     var layout: Layout = .column
@@ -106,6 +135,9 @@ final class DesktopLyricsController {
     private func save(_ configuration: DesktopLyricsConfiguration, for surface: DesktopLyricsSurface) {
         var values: [String: Any] = [
             "enabled": configuration.isEnabled, "lines": configuration.lineCount,
+            "followsCoverRotation": configuration.followsCoverRotation,
+            "coverEffect": configuration.coverEffect.rawValue,
+            "coverEffectIntensity": Double(configuration.coverEffectIntensity),
             "window": configuration.window == .centered ? "centered" : "grouped",
             "x": Double(configuration.position.x), "y": Double(configuration.position.y),
             "spacing": Double(configuration.lineSpacing), "width": Double(configuration.maxWidthFraction),
@@ -137,6 +169,10 @@ final class DesktopLyricsController {
         }
         var config = fallback
         config.isEnabled = values["enabled"] as? Bool ?? fallback.isEnabled
+        config.followsCoverRotation = values["followsCoverRotation"] as? Bool ?? fallback.followsCoverRotation
+        if let rawEffect = values["coverEffect"] as? String,
+           let effect = DesktopCoverLyricsEffect(rawValue: rawEffect) { config.coverEffect = effect }
+        config.coverEffectIntensity = number("coverEffectIntensity", fallback.coverEffectIntensity, 0...1)
         config.lineCount = min(max(values["lines"] as? Int ?? fallback.lineCount, 1), 12)
         if let mode = values["window"] as? String { config.window = mode == "grouped" ? .grouped : .centered }
         if values["layout"] as? String == "column" { config.layout = .column }
