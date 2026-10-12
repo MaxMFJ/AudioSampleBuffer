@@ -17,6 +17,7 @@ struct DesktopDotParticleOut {
     float height;
 };
 constexpr sampler desktopCoverSampler(coord::normalized, address::clamp_to_edge, filter::linear);
+float3 desktopCoverDisplayColor(float3 linearColor);
 
 // iOS CoverDotMatrix base style: one Metal point per fixed cover sample.
 vertex DesktopDotParticleOut desktopDotParticleVertex(
@@ -45,12 +46,12 @@ vertex DesktopDotParticleOut desktopDotParticleVertex(
     if (coverAspect > 1.0) imageUV.x = (imageUV.x - 0.5) / coverAspect + 0.5;
     else imageUV.y = (imageUV.y - 0.5) * coverAspect + 0.5;
     float3 sampledColor = cover.sample(desktopCoverSampler, imageUV, level(0.0)).rgb;
-    // The texture is decoded as linear sRGB but MTKView writes to a non-sRGB
-    // drawable. Encode for display here; otherwise album art looks muddy/dim.
-    float3 displayColor = pow(max(sampledColor, float3(0.0)), float3(1.0 / 2.2));
-    float luminance = dot(displayColor, float3(0.2126, 0.7152, 0.0722));
-    float3 vividColor = clamp((displayColor - luminance) * 1.16 + luminance * 1.12, 0.0, 1.0);
-    float3 coverColor = insideCover ? vividColor : float3(0.048, 0.060, 0.086);
+    // MTKTextureLoader decodes sRGB textures to linear values. Convert back
+    // using the exact sRGB transfer function before writing to the non-sRGB
+    // MTKView drawable; do not apply palette grading to album-art pixels.
+    float3 coverColor = insideCover
+        ? desktopCoverDisplayColor(sampledColor)
+        : float3(0.048, 0.060, 0.086);
     float2 visualUV = insideCover ? coverUV : uv;
     float middle = saturate(audio.mid);
     float high = saturate(audio.treble);
@@ -70,8 +71,6 @@ vertex DesktopDotParticleOut desktopDotParticleVertex(
     // HTDemucs stem envelopes drive independent piano/guitar fields. FFT remains
     // the fallback when those model-derived envelopes are unavailable.
     float height = idleWave + pianoWave * piano * 0.23 + guitarWave * guitar * 0.16;
-    float crest = saturate(0.5 + height * 1.4);
-
     float2 clip = float2(uv.x * 2.0 - 1.0, 1.0 - uv.y * 2.0);
     clip += height * float2(0.018, 0.064);
     float pitch = controls.w / grid;
@@ -82,15 +81,11 @@ vertex DesktopDotParticleOut desktopDotParticleVertex(
     DesktopDotParticleOut out;
     out.position = float4(clip, 0.0, 1.0);
     out.pointSize = clamp(size, 1.5, 8.0);
-    float3 paletteWarm = mood.edgeLight.rgb;
-    float3 paletteCool = mood.volumetricBeam.rgb;
-    out.color = insideCover
-              ? coverColor * (1.06 + crest * 0.28) + paletteCool * guitar * 0.14 + paletteWarm * piano * 0.13
-              : coverColor + outerBeat * mood.pulseRing.rgb;
+    out.color = insideCover ? coverColor : coverColor + outerBeat * mood.pulseRing.rgb;
     // The independent artwork pass replaces only the cover samples. Keep every
     // empty-field point, its motion, and the original drum illumination unchanged.
     out.opacity = insideCover
-                ? (styleControls.w > 0.5 ? 0.0 : 0.96)
+                ? (styleControls.w > 0.5 ? 0.0 : 1.0)
                 : 0.11 + outerBeat * 0.73;
     out.height = height;
     return out;
@@ -103,7 +98,7 @@ fragment float4 desktopDotParticleFragment(DesktopDotParticleOut in [[stage_in]]
     float glow = exp(-distanceFromCenter * distanceFromCenter * 7.0);
     float alpha = saturate(core * 0.98 + glow * 0.06) * in.opacity;
     if (alpha < 0.015) discard_fragment();
-    float3 color = in.color * (0.96 + saturate(in.height + 0.5) * 0.24);
+    float3 color = in.color;
     return float4(color, alpha);
 }
 

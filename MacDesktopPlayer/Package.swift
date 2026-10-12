@@ -36,7 +36,7 @@ let package = Package(
         .executableTarget(
             name: "MacDesktopPlayer",
             dependencies: ["RealtimeDSP", "YAMNetMac", "HTDemucsMac"],
-            resources: [.process("Resources")]
+            resources: [.process("Resources"), .copy("Bridge")]
         )
     ]
 )

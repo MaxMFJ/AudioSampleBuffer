@@ -5,6 +5,7 @@
 #import <CoreML/CoreML.h>
 #import <CommonCrypto/CommonDigest.h>
 #import <AppKit/AppKit.h>
+#import <stdint.h>
 
 static const NSInteger kHTDMSampleRate = 44100;
 static const NSInteger kHTDMSegmentSeconds = 7;
@@ -122,12 +123,13 @@ static NSError *HTDMError(NSInteger code, NSString *message) {
 - (void)unloadModel {
     [self.modelLock lock];
     MLModel *releasedModel = self.model;
+    BOOL hadModel = releasedModel != nil;
     self.model = nil;
     [self.modelLock unlock];
     // Drop our strong reference outside the lock; Core ML can then release its
     // model-side CPU/GPU resources when the in-flight prediction is finished.
     releasedModel = nil;
-    NSLog(@"[DemucsMac] HTDemucs model object released after the job.");
+    if (hadModel) NSLog(@"[DemucsMac] HTDemucs model object released after the job.");
 }
 
 - (NSMutableData *)readStereoPCMAtURL:(NSURL *)url generation:(NSUInteger)generation
@@ -137,7 +139,9 @@ static NSError *HTDMError(NSInteger code, NSString *message) {
     if (!track) { if (error) *error = HTDMError(3, @"音频文件没有可读的音轨。"); return nil; }
     NSDictionary *settings = @{
         AVFormatIDKey: @(kAudioFormatLinearPCM), AVSampleRateKey: @(kHTDMSampleRate), AVNumberOfChannelsKey: @2,
-        AVLinearPCMBitDepthKey: @32, AVLinearPCMIsFloatKey: @YES, AVLinearPCMIsBigEndianKey: @NO,
+        // The full decoded track is retained while fixed-size Demucs windows
+        // are analyzed. Int16 halves that track-sized allocation.
+        AVLinearPCMBitDepthKey: @16, AVLinearPCMIsFloatKey: @NO, AVLinearPCMIsBigEndianKey: @NO,
         AVLinearPCMIsNonInterleaved: @NO
     };
     AVAssetReader *reader = [[AVAssetReader alloc] initWithAsset:asset error:error];
@@ -165,12 +169,12 @@ static NSError *HTDMError(NSInteger code, NSString *message) {
         if (status != kCMBlockBufferNoErr) { if (error) *error = HTDMError(6, @"读取 PCM 数据失败。"); return nil; }
     }
     if (reader.status == AVAssetReaderStatusFailed) { if (error) *error = reader.error ?: HTDMError(7, @"解码音频失败。"); return nil; }
-    if (pcm.length < sizeof(float) * 2) { if (error) *error = HTDMError(8, @"解码后的 PCM 为空。"); return nil; }
+    if (pcm.length < sizeof(int16_t) * 2) { if (error) *error = HTDMError(8, @"解码后的 PCM 为空。"); return nil; }
     if (sampleRate) *sampleRate = kHTDMSampleRate;
     return pcm;
 }
 
-- (BOOL)calculateChunk:(const float *)pcm totalFrames:(NSUInteger)totalFrames start:(NSUInteger)start
+- (BOOL)calculateChunk:(const int16_t *)pcm totalFrames:(NSUInteger)totalFrames start:(NSUInteger)start
                   model:(MLModel *)model frameSums:(float *)frameSums frameWeights:(float *)frameWeights
              frameCount:(NSUInteger)frameCount stemCount:(NSUInteger *)stemCountOut error:(NSError **)error {
     const NSUInteger segmentFrames = kHTDMSampleRate * kHTDMSegmentSeconds;
@@ -183,8 +187,8 @@ static NSError *HTDMError(NSInteger code, NSString *message) {
     NSUInteger padLeft = (segmentFrames - available) / 2;
     memset(in, 0, segmentFrames * 2 * sizeof(float));
     for (NSUInteger i = 0; i < available; i++) {
-        in[padLeft + i] = pcm[(start + i) * 2];
-        in[segmentFrames + padLeft + i] = pcm[(start + i) * 2 + 1];
+        in[padLeft + i] = (float)pcm[(start + i) * 2] / 32768.0f;
+        in[segmentFrames + padLeft + i] = (float)pcm[(start + i) * 2 + 1] / 32768.0f;
     }
     MLFeatureValue *inputValue = [MLFeatureValue featureValueWithMultiArray:input];
     MLDictionaryFeatureProvider *provider = [[MLDictionaryFeatureProvider alloc] initWithDictionary:@{@"audio": inputValue} error:&arrayError];
@@ -273,6 +277,7 @@ static NSError *HTDMError(NSInteger code, NSString *message) {
 }
 
 - (NSDictionary *)analyzeURL:(NSURL *)url generation:(NSUInteger)generation error:(NSError **)error {
+    if (![self isJobGenerationCurrent:generation error:error]) return nil;
     NSString *digest = [self digestForURL:url error:error];
     if (!digest) return nil;
     NSURL *cacheURL = [self cacheURLForDigest:digest];
@@ -289,14 +294,14 @@ static NSError *HTDMError(NSInteger code, NSString *message) {
     NSMutableData *pcmData = [self readStereoPCMAtURL:url generation:generation sampleRate:&sampleRate error:error];
     if (!pcmData) return nil;
     if (![self isJobGenerationCurrent:generation error:error]) return nil;
-    NSUInteger totalFrames = pcmData.length / (sizeof(float) * 2);
+    NSUInteger totalFrames = pcmData.length / (sizeof(int16_t) * 2);
     const NSUInteger hop = (NSUInteger)llround(sampleRate * 0.05);
     NSUInteger curveCount = (NSUInteger)ceil((double)totalFrames / hop);
     float *sums = calloc(curveCount * 3, sizeof(float));
     float *weights = calloc(curveCount, sizeof(float));
     NSUInteger stemCount = 0;
     if (!sums || !weights) { free(sums); free(weights); if (error) *error = HTDMError(12, @"乐器曲线缓冲区分配失败。"); return nil; }
-    const float *pcm = pcmData.bytes;
+    const int16_t *pcm = pcmData.bytes;
     for (NSUInteger start = 0; start < totalFrames; start += kHTDMHopSamples) {
         if (![self isJobGenerationCurrent:generation error:error]) {
             free(sums); free(weights); return nil;

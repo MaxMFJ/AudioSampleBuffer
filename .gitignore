@@ -11,3 +11,7 @@ build/VerifyDerivedData/
 
 # Local source-separation experiments, weights, and derived audio
 build/guitar_poc/
+
+MacDesktopPlayer/Sources/MacDesktopPlayer/Bridge/node_modules*
+MacDesktopPlayer/Sources/MacDesktopPlayer/Bridge/runtime/node
+MacDesktopPlayer/Sources/MacDesktopPlayer/Bridge/runtime/libnode*.dylib
