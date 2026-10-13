@@ -5,17 +5,23 @@
 #import <CoreML/CoreML.h>
 #import <CommonCrypto/CommonDigest.h>
 #import <UIKit/UIKit.h>
+#import <stdint.h>
 
 static const NSInteger kHTDMSampleRate = 44100;
 static const NSInteger kHTDMSegmentSeconds = 7;
 static const NSInteger kHTDMHopSamples = 220500; // 5 s; overlap-and-add covers the full track.
 static const NSInteger kHTDMFFTSize = 4096;
-static NSString * const kHTDMModelVersion = @"htdemucs6s-guitar-piano-drums-ios16-v1";
+static NSString * const kHTDMModelVersion = @"htdemucs6s-guitar-piano-drums-other-ios16-v2";
 #define ASB_CLAMP(value, low, high) fminf((high), fmaxf((low), (value)))
 
 static NSError *HTDMError(NSInteger code, NSString *message) {
     return [NSError errorWithDomain:@"HTDemucsGuitarAnalyzer" code:code
                            userInfo:@{NSLocalizedDescriptionKey: message}];
+}
+
+static BOOL HTDMIsBackgroundExecutionError(NSError *error) {
+    NSString *text = error.localizedDescription.lowercaseString;
+    return [text containsString:@"background"];
 }
 
 @interface HTDemucsGuitarAnalyzer ()
@@ -132,14 +138,15 @@ static NSError *HTDMError(NSInteger code, NSString *message) {
     if (!compiled && package) compiled = [MLModel compileModelAtURL:package error:error];
     if (!compiled) {
         [self.modelLock unlock];
-        if (error && !*error) *error = HTDMError(2, @"工程内未找到 HTDemucs 吉他、钢琴、鼓模型。");
+        if (error && !*error) *error = HTDMError(2, @"工程内未找到 HTDemucs 吉他、钢琴、鼓、其他音源模型。");
         return nil;
     }
     MLModelConfiguration *configuration = [[MLModelConfiguration alloc] init];
-    // An in-flight prediction cannot be cancelled when iOS backgrounds the app.
-    // Keep Core ML off the GPU so a foreground-to-background transition cannot
-    // turn that prediction into BackgroundExecutionNotPermitted.
-    configuration.computeUnits = MLComputeUnitsCPUAndNeuralEngine;
+    // The 4096-wide temporal kernels and stride-4 transposed convolutions are
+    // rejected by the Neural Engine. Compiling that plan, then falling back,
+    // is slower than the CPU path Mac already uses. CPU also stays off the
+    // GPU, so Demucs does not compete with the cover-dot Metal renderer.
+    configuration.computeUnits = MLComputeUnitsCPUOnly;
     self.model = [MLModel modelWithContentsOfURL:compiled configuration:configuration error:error];
     MLModel *result = self.model;
     [self.modelLock unlock];
@@ -164,7 +171,10 @@ static NSError *HTDMError(NSInteger code, NSString *message) {
     if (!track) { if (error) *error = HTDMError(3, @"音频文件没有可读的音轨。"); return nil; }
     NSDictionary *settings = @{
         AVFormatIDKey: @(kAudioFormatLinearPCM), AVSampleRateKey: @(kHTDMSampleRate), AVNumberOfChannelsKey: @2,
-        AVLinearPCMBitDepthKey: @32, AVLinearPCMIsFloatKey: @YES, AVLinearPCMIsBigEndianKey: @NO,
+        // The full decoded track is retained while fixed-size Demucs windows
+        // are analyzed. Int16 halves that track-sized allocation; each window
+        // is scaled to float only for the model input.
+        AVLinearPCMBitDepthKey: @16, AVLinearPCMIsFloatKey: @NO, AVLinearPCMIsBigEndianKey: @NO,
         AVLinearPCMIsNonInterleaved: @NO
     };
     AVAssetReader *reader = [[AVAssetReader alloc] initWithAsset:asset error:error];
@@ -192,12 +202,12 @@ static NSError *HTDMError(NSInteger code, NSString *message) {
         if (status != kCMBlockBufferNoErr) { if (error) *error = HTDMError(6, @"读取 PCM 数据失败。"); return nil; }
     }
     if (reader.status == AVAssetReaderStatusFailed) { if (error) *error = reader.error ?: HTDMError(7, @"解码音频失败。"); return nil; }
-    if (pcm.length < sizeof(float) * 2) { if (error) *error = HTDMError(8, @"解码后的 PCM 为空。"); return nil; }
+    if (pcm.length < sizeof(int16_t) * 2) { if (error) *error = HTDMError(8, @"解码后的 PCM 为空。"); return nil; }
     if (sampleRate) *sampleRate = kHTDMSampleRate;
     return pcm;
 }
 
-- (BOOL)calculateChunk:(const float *)pcm totalFrames:(NSUInteger)totalFrames start:(NSUInteger)start
+- (BOOL)calculateChunk:(const int16_t *)pcm totalFrames:(NSUInteger)totalFrames start:(NSUInteger)start
                   model:(MLModel *)model frameSums:(float *)frameSums frameWeights:(float *)frameWeights
              frameCount:(NSUInteger)frameCount stemCount:(NSUInteger *)stemCountOut error:(NSError **)error {
     const NSUInteger segmentFrames = kHTDMSampleRate * kHTDMSegmentSeconds;
@@ -210,15 +220,19 @@ static NSError *HTDMError(NSInteger code, NSString *message) {
     NSUInteger padLeft = (segmentFrames - available) / 2;
     memset(in, 0, segmentFrames * 2 * sizeof(float));
     for (NSUInteger i = 0; i < available; i++) {
-        in[padLeft + i] = pcm[(start + i) * 2];
-        in[segmentFrames + padLeft + i] = pcm[(start + i) * 2 + 1];
+        in[padLeft + i] = (float)pcm[(start + i) * 2] / 32768.0f;
+        in[segmentFrames + padLeft + i] = (float)pcm[(start + i) * 2 + 1] / 32768.0f;
     }
     MLFeatureValue *inputValue = [MLFeatureValue featureValueWithMultiArray:input];
     MLDictionaryFeatureProvider *provider = [[MLDictionaryFeatureProvider alloc] initWithDictionary:@{@"audio": inputValue} error:&arrayError];
     id<MLFeatureProvider> prediction = provider ? [model predictionFromFeatures:provider error:&arrayError] : nil;
+    if (!prediction && (self.applicationInBackground || HTDMIsBackgroundExecutionError(arrayError))) {
+        if (error) *error = HTDMError(13, @"应用进入后台或歌曲已切换，Demucs 分析已停止。");
+        return NO;
+    }
     MLMultiArray *sources = [prediction featureValueForName:@"sources"].multiArrayValue;
     NSUInteger sourceCount = sources.shape.count >= 4 ? sources.shape[1].unsignedIntegerValue : 0;
-    if (!sources || sourceCount == 0 || sourceCount > 3 || sources.shape[2].unsignedIntegerValue != 2 ||
+    if (!sources || sourceCount == 0 || sourceCount > 4 || sources.shape[2].unsignedIntegerValue != 2 ||
         sources.shape[3].unsignedIntegerValue != segmentFrames ||
         (sources.dataType != MLMultiArrayDataTypeFloat32 && sources.dataType != MLMultiArrayDataTypeFloat16)) {
         if (error) *error = arrayError ?: HTDMError(9, @"HTDemucs 输出格式不符合预期。");
@@ -316,14 +330,14 @@ static NSError *HTDMError(NSInteger code, NSString *message) {
     NSMutableData *pcmData = [self readStereoPCMAtURL:url generation:generation sampleRate:&sampleRate error:error];
     if (!pcmData) return nil;
     if (![self isJobGenerationCurrent:generation error:error]) return nil;
-    NSUInteger totalFrames = pcmData.length / (sizeof(float) * 2);
+    NSUInteger totalFrames = pcmData.length / (sizeof(int16_t) * 2);
     const NSUInteger hop = (NSUInteger)llround(sampleRate * 0.05);
     NSUInteger curveCount = (NSUInteger)ceil((double)totalFrames / hop);
-    float *sums = calloc(curveCount * 3, sizeof(float));
+    float *sums = calloc(curveCount * 4, sizeof(float));
     float *weights = calloc(curveCount, sizeof(float));
     NSUInteger stemCount = 0;
     if (!sums || !weights) { free(sums); free(weights); if (error) *error = HTDMError(12, @"乐器曲线缓冲区分配失败。"); return nil; }
-    const float *pcm = pcmData.bytes;
+    const int16_t *pcm = pcmData.bytes;
     for (NSUInteger start = 0; start < totalFrames; start += kHTDMHopSamples) {
         if (![self isJobGenerationCurrent:generation error:error]) {
             free(sums); free(weights); return nil;
@@ -344,7 +358,7 @@ static NSError *HTDMError(NSInteger code, NSString *message) {
     // PCM is no longer needed after the final chunk; release its full-track
     // allocation before building and serializing the small envelope.
     pcmData = nil;
-    NSArray<NSString *> *stemNames = @[@"guitar", @"piano", @"drums"];
+    NSArray<NSString *> *stemNames = @[@"guitar", @"piano", @"drums", @"other"];
     NSMutableDictionary *stemCurves = [NSMutableDictionary dictionaryWithCapacity:stemCount];
     for (NSUInteger stemIndex = 0; stemIndex < stemCount; stemIndex++) {
         NSMutableArray<NSNumber *> *raw = [NSMutableArray arrayWithCapacity:curveCount];
@@ -358,7 +372,10 @@ static NSError *HTDMError(NSInteger code, NSString *message) {
         NSMutableArray<NSNumber *> *frames = [NSMutableArray arrayWithCapacity:curveCount];
         for (NSNumber *number in raw) {
             float value = ceiling > floor ? ASB_CLAMP((number.floatValue - floor) / (ceiling - floor), 0.0f, 1.0f) : 0.0f;
-            if (value < 0.08f) value = 0.0f;
+            // Match the Mac cover-dot curves: keep quieter guitar and piano
+            // phrases, and leave the drum and other noise floor unchanged.
+            float noiseFloor = (stemIndex == 0 || stemIndex == 1) ? 0.035f : 0.08f;
+            if (value < noiseFloor) value = 0.0f;
             [frames addObject:@(value)];
         }
         stemCurves[stemNames[stemIndex]] = @{@"frames": frames};
@@ -373,6 +390,7 @@ static NSError *HTDMError(NSInteger code, NSString *message) {
                                      @"frames": guitarFrames} mutableCopy];
     if (stemCount > 1) result[@"piano_frames"] = stemCurves[@"piano"][@"frames"];
     if (stemCount > 2) result[@"drums_frames"] = stemCurves[@"drums"][@"frames"];
+    if (stemCount > 3) result[@"other_frames"] = stemCurves[@"other"][@"frames"];
     if (![self isJobGenerationCurrent:generation error:error]) return nil;
     NSData *json = [NSJSONSerialization dataWithJSONObject:result options:0 error:nil];
     if (json) {

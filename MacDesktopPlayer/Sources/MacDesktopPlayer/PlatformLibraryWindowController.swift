@@ -122,8 +122,6 @@ private final class PlatformLibraryView: NSView, NSTableViewDataSource, NSTableV
         status.stringValue = "正在读取网易云歌单…"
         Task { [weak self] in
             do {
-                let bridge = await PlatformBridgeRuntime.shared.ensureRunning()
-                if case .failure(let error) = bridge { throw error }
                 let playlists = try await PlatformBridgeClient.shared.userPlaylists(for: .netease)
                 guard let self else { return }
                 self.playlists = playlists

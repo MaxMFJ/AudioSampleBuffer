@@ -350,11 +350,7 @@ static const CGFloat kDefaultEffectRenderScale = 0.85f;
             break;
 
         case VisualEffectTypeCoverDotMatrix:
-            settings[@"dotCount"] = @(112);
-            settings[@"dotSize"] = @(0.50);
             settings[@"audioSensitivity"] = @(1.0);
-            settings[@"dotGlow"] = @(0.22);
-            settings[@"dotStyle"] = @([[NSUserDefaults standardUserDefaults] integerForKey:@"coverDotMatrixStyle"]);
             break;
 
         case VisualEffectTypeCellularWormhole:
@@ -434,7 +430,8 @@ static const CGFloat kDefaultEffectRenderScale = 0.85f;
                                      effectType != VisualEffectTypeGlassResonance &&
                                      effectType != VisualEffectTypeMirrorStrata &&
                                      effectType != VisualEffectTypeLiquidPigment &&
-                                     effectType != VisualEffectTypeOpticalDarkroom);
+                                     effectType != VisualEffectTypeOpticalDarkroom &&
+                                     effectType != VisualEffectTypeCoverDotMatrix);
     if (effectType == VisualEffectTypeGlassResonance) {
         if (squareSize <= 0.0 || !isfinite(squareSize)) return;
         // Square logical camera; cap HDR allocation and fill cost on large devices.
@@ -460,6 +457,11 @@ static const CGFloat kDefaultEffectRenderScale = 0.85f;
     } else if (effectType == VisualEffectTypeOpticalDarkroom) {
         if (squareSize <= 0.0 || !isfinite(squareSize)) return;
         CGFloat side = MAX(1.0, round(MIN(960.0, squareSize * screenScale * 0.48)));
+        _metalView.drawableSize = CGSizeMake(side, side);
+    } else if (effectType == VisualEffectTypeCoverDotMatrix) {
+        if (squareSize <= 0.0 || !isfinite(squareSize)) return;
+        // Full-resolution square so the cover samples stay smaller than a phone pixel cluster.
+        CGFloat side = MAX(1.0, round(MIN(2048.0, squareSize * screenScale)));
         _metalView.drawableSize = CGSizeMake(side, side);
     } else if (effectType == VisualEffectTypeWormholeDrive) {
         // 虫洞特效本身已针对宽屏做过专门调优，保留原有低功耗缩放。

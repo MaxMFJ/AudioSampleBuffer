@@ -3,7 +3,7 @@ import AppKit
 import AVFoundation
 import ImageIO
 
-/// Platform source exposed by the local Mineradio-compatible bridge.
+/// Music provider supported by the Mac player.
 enum PlatformProvider: String, CaseIterable, Codable {
     case netease
     case qq
@@ -28,6 +28,8 @@ struct PlatformTrack: Identifiable, Codable {
     let coverURL: URL?
     let mediaID: String?
     let hash: String?
+    let albumID: String?
+    let albumAudioID: String?
 
     var displayArtist: String { artist.isEmpty ? "未知艺术家" : artist }
 }
@@ -72,27 +74,25 @@ enum PlatformBridgeError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .invalidResponse: return "平台 Bridge 返回了无法识别的数据"
+        case .invalidResponse: return "音乐平台返回了无法识别的数据"
         case .server(let message): return message
-        case .notConfigured: return "未连接本机平台 Bridge（默认地址：http://127.0.0.1:3000）"
+        case .notConfigured: return "平台请求配置无效"
         }
     }
 }
 
-/// Thin client only. Authentication and platform-specific credentials remain in
-/// the local Bridge; the Mac app never parses or uploads third-party cookies.
+/// Native provider client for the Mac app.
 actor PlatformBridgeClient {
     static let shared = PlatformBridgeClient()
 
     private let session: URLSession
-    private var baseURL: URL
+    private let kugou = KugouProviderClient()
     private let artworkMemoryCache = NSCache<NSString, NSImage>()
     private let artworkCacheLimitBytes = 32 * 1024 * 1024
     private let artworkDiskLimitBytes = 128 * 1024 * 1024
     private var audioPreparationTasks: [String: Task<(URL, URL?), Error>] = [:]
 
-    init(baseURL: URL = URL(string: "http://127.0.0.1:3000")!) {
-        self.baseURL = baseURL
+    init() {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.timeoutIntervalForRequest = 12
         configuration.timeoutIntervalForResource = 20
@@ -101,56 +101,44 @@ actor PlatformBridgeClient {
         artworkMemoryCache.totalCostLimit = artworkCacheLimitBytes
     }
 
-    func setBaseURL(_ url: URL) throws {
-        guard url.scheme == "http" || url.scheme == "https" else { throw PlatformBridgeError.notConfigured }
-        baseURL = url
-    }
-
     func search(_ provider: PlatformProvider, keywords: String, limit: Int = 20) async throws -> [PlatformTrack] {
-        let path: String
-        switch provider {
-        case .netease: path = "/api/search"
-        case .qq: path = "/api/qq/search"
-        case .kugou: path = "/api/kugou/search"
+        if provider == .netease {
+            let rows = try await NativeNetEaseClient.shared.search(keywords: keywords, limit: limit)
+            return rows.compactMap { Self.decodeNetEaseTrack($0) }
         }
-        let payload: [String: Any] = try await request(path: path, query: [
-            URLQueryItem(name: "keywords", value: keywords),
-            URLQueryItem(name: "limit", value: String(max(1, min(limit, 50))))
-        ])
-        guard let rows = payload["songs"] as? [[String: Any]] else {
-            throw PlatformBridgeError.invalidResponse
+        if provider == .qq {
+            return try await QQProviderClient.shared.search(keywords: keywords, limit: limit)
         }
-        return rows.compactMap { Self.decodeTrack($0, provider: provider) }
+        return try await kugou.search(keywords: keywords, limit: limit)
     }
 
     func userPlaylists(for provider: PlatformProvider, limit: Int = 0) async throws -> [PlatformPlaylist] {
-        guard provider == .netease else {
-            throw PlatformBridgeError.server("Mac 端当前先接入网易云用户歌单")
+        switch provider {
+        case .netease:
+            let rows = try await NativeNetEaseClient.shared.userPlaylists(limit: limit)
+            return rows.compactMap(Self.decodeNetEasePlaylist)
+        case .qq:
+            return try await QQProviderClient.shared.userPlaylists()
+        case .kugou:
+            return try await kugou.userPlaylists(limit: limit)
         }
-        var query: [URLQueryItem] = []
-        if limit > 0 { query.append(URLQueryItem(name: "limit", value: String(limit))) }
-        let response = try await request(path: "/api/user/playlists", query: query)
-        guard let rows = response["playlists"] as? [[String: Any]] else {
-            throw PlatformBridgeError.invalidResponse
-        }
-        return rows.compactMap(Self.decodePlaylist)
     }
 
     func playlistTracks(_ playlist: PlatformPlaylist, provider: PlatformProvider,
                         limit: Int? = nil, offset: Int = 0) async throws -> [PlatformTrack] {
-        guard provider == .netease else {
-            throw PlatformBridgeError.server("Mac 端当前先接入网易云用户歌单")
+        switch provider {
+        case .netease:
+            let rows = try await NativeNetEaseClient.shared.playlistTracks(
+                id: playlist.id,
+                limit: limit ?? 100,
+                offset: offset
+            )
+            return rows.compactMap { Self.decodeNetEaseTrack($0) }
+        case .qq:
+            return try await QQProviderClient.shared.playlistTracks(id: playlist.id, limit: limit ?? 40, offset: offset)
+        case .kugou:
+            return try await kugou.playlistTracks(playlist, limit: limit ?? 40, offset: offset)
         }
-        var query = [URLQueryItem(name: "id", value: playlist.id)]
-        if let limit, limit > 0 {
-            query.append(URLQueryItem(name: "limit", value: String(min(limit, 100))))
-            query.append(URLQueryItem(name: "offset", value: String(max(0, offset))))
-        }
-        let response = try await request(path: "/api/playlist/tracks", query: query)
-        guard let rows = response["tracks"] as? [[String: Any]] else {
-            throw PlatformBridgeError.invalidResponse
-        }
-        return rows.compactMap { Self.decodeTrack($0, provider: provider) }
     }
 
     /// Reuses a complete local copy before asking the provider to resolve a
@@ -203,14 +191,10 @@ actor PlatformBridgeClient {
     private func downloadAudioFile(for remoteURL: URL, in cacheDirectory: URL, key: String) async throws -> URL {
         if let cached = validAudioCache(in: cacheDirectory, key: key) { return cached }
         try FileManager.default.createDirectory(at: cacheDirectory, withIntermediateDirectories: true)
-        guard var components = URLComponents(
-            url: baseURL.appendingPathComponent("api/audio"),
-            resolvingAgainstBaseURL: false
-        ) else { throw PlatformBridgeError.notConfigured }
-        components.queryItems = [URLQueryItem(name: "url", value: remoteURL.absoluteString)]
-        guard let proxyURL = components.url else { throw PlatformBridgeError.notConfigured }
-        var request = URLRequest(url: proxyURL)
+        var request = URLRequest(url: remoteURL)
         request.timeoutInterval = 30
+        request.setValue(Self.referer(for: remoteURL), forHTTPHeaderField: "Referer")
+        request.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/124 Safari/537.36", forHTTPHeaderField: "User-Agent")
         let (temporaryURL, response) = try await session.download(for: request)
         guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
             throw PlatformBridgeError.server("平台音频地址不可用")
@@ -265,8 +249,7 @@ actor PlatformBridgeClient {
         }
     }
 
-    /// Fetches third-party artwork through the Bridge so HTTP artwork URLs and
-    /// provider referer requirements do not prevent AppKit from decoding them.
+    /// Fetches third-party artwork directly from the provider.
     func coverData(for remoteURL: URL) async throws -> Data {
         let key = artworkCacheKey(for: remoteURL)
         let diskURL = artworkDiskURL(for: key)
@@ -275,15 +258,11 @@ actor PlatformBridgeClient {
            CGImageSourceCreateWithData(cached as CFData, nil) != nil {
             return cached
         }
-        guard var components = URLComponents(
-            url: baseURL.appendingPathComponent("api/cover"),
-            resolvingAgainstBaseURL: false
-        ) else {
-            throw PlatformBridgeError.notConfigured
-        }
-        components.queryItems = [URLQueryItem(name: "url", value: remoteURL.absoluteString)]
-        guard let proxyURL = components.url else { throw PlatformBridgeError.notConfigured }
-        let (data, response) = try await session.data(from: proxyURL)
+        var request = URLRequest(url: remoteURL)
+        request.timeoutInterval = 15
+        request.setValue(Self.referer(for: remoteURL), forHTTPHeaderField: "Referer")
+        request.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/124 Safari/537.36", forHTTPHeaderField: "User-Agent")
+        let (data, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
             throw PlatformBridgeError.server("平台封面不可用")
         }
@@ -375,142 +354,72 @@ actor PlatformBridgeClient {
 
     func playbackURL(for track: PlatformTrack, quality: String? = nil) async throws -> PlatformPlayback {
         let requestedQuality = quality ?? (track.provider == .netease ? "exhigh" : "standard")
-        var query = [URLQueryItem(name: "quality", value: requestedQuality)]
-        switch track.provider {
-        case .netease:
-            query.append(URLQueryItem(name: "id", value: track.id))
-            query.append(URLQueryItem(name: "name", value: track.name))
-            query.append(URLQueryItem(name: "artist", value: track.artist))
-            let response: [String: Any] = try await request(path: "/api/song/url", query: query)
-            return try Self.decodePlayback(response, provider: .netease)
-        case .qq:
-            query.append(URLQueryItem(name: "mid", value: track.mediaID ?? track.id))
-            if let mediaID = track.mediaID { query.append(URLQueryItem(name: "mediaMid", value: mediaID)) }
-            let response: [String: Any] = try await request(path: "/api/qq/song/url", query: query)
-            return try Self.decodePlayback(response, provider: .qq)
-        case .kugou:
-            query.append(URLQueryItem(name: "hash", value: track.hash ?? track.id))
-            let response: [String: Any] = try await request(path: "/api/kugou/song/url", query: query)
-            return try Self.decodePlayback(response, provider: .kugou)
+        if track.provider == .netease {
+            return try await NativeNetEaseClient.shared.playback(trackID: track.id, quality: requestedQuality)
         }
+        if track.provider == .qq {
+            return try await QQProviderClient.shared.playback(for: track, quality: requestedQuality)
+        }
+        return try await kugou.playback(for: track, quality: requestedQuality)
     }
 
     func loginStatus(for provider: PlatformProvider) async throws -> PlatformLoginStatus {
-        let path: String
-        switch provider {
-        case .netease: path = "/api/login/status"
-        case .qq: path = "/api/qq/login/status"
-        case .kugou: path = "/api/kugou/login/status"
+        if provider == .netease {
+            return try await NativeNetEaseClient.shared.loginStatus()
         }
-        let response: [String: Any] = try await request(path: path, query: [])
-        return PlatformLoginStatus(
-            provider: provider,
-            loggedIn: response["loggedIn"] as? Bool ?? false,
-            nickname: response["nickname"] as? String,
-            userID: (response["userId"] as? String) ?? (response["uid"] as? String),
-            isVIP: response["isVip"] as? Bool,
-            isSVIP: response["isSvip"] as? Bool,
-            message: response["message"] as? String
-        )
+        if provider == .qq {
+            return try await QQProviderClient.shared.loginStatus()
+        }
+        return try kugou.loginStatus()
     }
 
     func saveLoginCookie(_ cookie: String, for provider: PlatformProvider) async throws -> PlatformLoginStatus {
-        let path: String
-        switch provider {
-        case .netease: path = "/api/login/cookie"
-        case .qq: path = "/api/qq/login/cookie"
-        case .kugou: path = "/api/kugou/login/cookie"
+        if provider == .netease {
+            return try await NativeNetEaseClient.shared.saveLoginCookie(cookie)
         }
-        let response = try await postJSON(path: path, body: ["cookie": cookie])
-        return PlatformLoginStatus(
-            provider: provider,
-            loggedIn: response["loggedIn"] as? Bool ?? false,
-            nickname: response["nickname"] as? String,
-            userID: (response["userId"] as? String) ?? (response["uid"] as? String),
-            isVIP: response["isVip"] as? Bool,
-            isSVIP: response["isSvip"] as? Bool,
-            message: response["message"] as? String
-        )
+        if provider == .qq {
+            return try await QQProviderClient.shared.saveLoginCookie(cookie)
+        }
+        return try kugou.saveCookie(cookie)
     }
 
-    private func request(path: String, query: [URLQueryItem]) async throws -> [String: Any] {
-        guard var components = URLComponents(url: baseURL.appendingPathComponent(path), resolvingAgainstBaseURL: false) else {
-            throw PlatformBridgeError.notConfigured
-        }
-        components.queryItems = query
-        guard let url = components.url else { throw PlatformBridgeError.notConfigured }
-        let (data, response) = try await session.data(from: url)
-        guard let http = response as? HTTPURLResponse else { throw PlatformBridgeError.invalidResponse }
-        guard (200..<300).contains(http.statusCode) else {
-            let message = (try? JSONSerialization.jsonObject(with: data) as? [String: Any])?["message"] as? String
-            throw PlatformBridgeError.server(message ?? "平台 Bridge 请求失败（HTTP \(http.statusCode)）")
-        }
-        guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            throw PlatformBridgeError.invalidResponse
-        }
-        return object
-    }
-
-    private func postJSON(path: String, body: [String: String]) async throws -> [String: Any] {
-        let url = baseURL.appendingPathComponent(path)
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try JSONSerialization.data(withJSONObject: body)
-        let (data, response) = try await session.data(for: request)
-        guard let http = response as? HTTPURLResponse else { throw PlatformBridgeError.invalidResponse }
-        guard (200..<300).contains(http.statusCode) else {
-            let message = (try? JSONSerialization.jsonObject(with: data) as? [String: Any])?["message"] as? String
-            throw PlatformBridgeError.server(message ?? "平台登录凭据提交失败（HTTP \(http.statusCode)）")
-        }
-        guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            throw PlatformBridgeError.invalidResponse
-        }
-        return object
-    }
-
-    private static func decodeTrack(_ row: [String: Any], provider: PlatformProvider) -> PlatformTrack? {
-        let id = string(row["id"]) ?? string(row["mid"]) ?? string(row["hash"])
-        let name = string(row["name"]) ?? string(row["title"])
-        guard let id, let name else { return nil }
+    private static func decodeNetEaseTrack(_ row: [String: Any]) -> PlatformTrack? {
+        let album = (row["al"] as? [String: Any]) ?? (row["album"] as? [String: Any]) ?? [:]
+        let artists = (row["ar"] as? [[String: Any]]) ?? (row["artists"] as? [[String: Any]]) ?? []
+        let artist = artists.compactMap { string($0["name"]) }.joined(separator: ", ")
+        let cover = string(album["picUrl"] ?? album["coverImgUrl"])
+        guard let id = string(row["id"]), let name = string(row["name"]) else { return nil }
         return PlatformTrack(
             id: id,
-            provider: provider,
+            provider: .netease,
             name: name,
-            artist: string(row["artist"]) ?? string(row["artists"]) ?? "",
-            album: string(row["album"]),
-            durationMilliseconds: number(row["duration"]) ?? number(row["dt"]),
-            coverURL: URL(string: string(row["cover"]) ?? string(row["coverUrl"]) ?? ""),
-            mediaID: string(row["mid"]) ?? string(row["songmid"]),
-            hash: string(row["hash"]) ?? string(row["fileHash"])
+            artist: artist,
+            album: string(album["name"]),
+            durationMilliseconds: number(row["dt"] ?? row["duration"]),
+            coverURL: URL(string: cover ?? ""),
+            mediaID: nil,
+            hash: nil,
+            albumID: nil,
+            albumAudioID: nil
         )
     }
 
-    private static func decodePlaylist(_ row: [String: Any]) -> PlatformPlaylist? {
+    private static func decodeNetEasePlaylist(_ row: [String: Any]) -> PlatformPlaylist? {
         guard let id = string(row["id"]), let name = string(row["name"]) else { return nil }
         return PlatformPlaylist(
             id: id,
             name: name,
-            coverURL: URL(string: string(row["cover"]) ?? string(row["coverUrl"]) ?? ""),
-            trackCount: number(row["trackCount"]) ?? number(row["track_count"])
+            coverURL: URL(string: string(row["coverImgUrl"] ?? row["cover"]) ?? ""),
+            trackCount: number(row["trackCount"] ?? row["trackNumber"])
         )
     }
 
-    private static func decodePlayback(_ response: [String: Any], provider: PlatformProvider) throws -> PlatformPlayback {
-        let url = URL(string: string(response["url"]) ?? "")
-        let restrictionObject = response["restriction"] as? [String: Any]
-        let restriction = restrictionObject.map {
-            PlaybackRestriction(category: string($0["category"]), action: string($0["action"]), message: string($0["message"]))
-        }
-        return PlatformPlayback(
-            provider: provider,
-            url: url,
-            playable: response["playable"] as? Bool,
-            trial: response["trial"] as? Bool,
-            quality: string(response["quality"]),
-            message: string(response["message"]),
-            restriction: restriction
-        )
+    private static func referer(for url: URL) -> String {
+        let host = (url.host ?? "").lowercased()
+        if host.contains("163.com") || host.contains("126.net") { return "https://music.163.com/" }
+        if host.contains("qq.com") || host.contains("gtimg.cn") { return "https://y.qq.com/" }
+        if host.contains("kugou.com") { return "https://www.kugou.com/" }
+        return "https://music.163.com/"
     }
 
     private static func string(_ value: Any?) -> String? {

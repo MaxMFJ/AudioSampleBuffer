@@ -4,6 +4,9 @@ using namespace metal;
 struct CoverDotVisualAudio {
     float time; float bass; float mid; float treble; float aspectRatio;
     float guitar; float piano; float drums; float playbackTime;
+    float electricGuitarConfidence; float vocal; float guitarPeak; float playing; float other;
+    float4 dspFeatureSignals;
+    float4 dspFeatureTexture;
 };
 struct DesktopMoodColors {
     float4 atmosphere, volumetricBeam, topLightArray, laserFanBlue, laserFanGreen;
@@ -33,7 +36,6 @@ vertex DesktopDotParticleOut desktopDotParticleVertex(
     uint gridRows = uint(max(1.0, round(grid / screenAspect)));
     float2 uv = float2((float(id % gridCount) + 0.5) / grid,
                        (float(id / gridCount) + 0.5) / float(gridRows));
-    float coverAspect = float(cover.get_width()) / max(float(cover.get_height()), 1.0);
     // Keep this effect's album-art mask square. Other desktop effects may draw
     // the separate circular record overlay, but the cover-dot field stays square.
     float coverHeight = 0.68;
@@ -42,16 +44,6 @@ vertex DesktopDotParticleOut desktopDotParticleVertex(
     float2 coverOrigin = (1.0 - coverSize) * 0.5;
     float2 coverUV = (uv - coverOrigin) / max(coverSize, float2(0.001));
     bool insideCover = controls.z > 0.5 && all(coverUV >= 0.0) && all(coverUV <= 1.0);
-    float2 imageUV = clamp(coverUV, 0.0, 1.0);
-    if (coverAspect > 1.0) imageUV.x = (imageUV.x - 0.5) / coverAspect + 0.5;
-    else imageUV.y = (imageUV.y - 0.5) * coverAspect + 0.5;
-    float3 sampledColor = cover.sample(desktopCoverSampler, imageUV, level(0.0)).rgb;
-    // MTKTextureLoader decodes sRGB textures to linear values. Convert back
-    // using the exact sRGB transfer function before writing to the non-sRGB
-    // MTKView drawable; do not apply palette grading to album-art pixels.
-    float3 coverColor = insideCover
-        ? desktopCoverDisplayColor(sampledColor)
-        : float3(0.048, 0.060, 0.086);
     float2 visualUV = insideCover ? coverUV : uv;
     float middle = saturate(audio.mid);
     float high = saturate(audio.treble);
@@ -60,6 +52,9 @@ vertex DesktopDotParticleOut desktopDotParticleVertex(
     float beat = saturate(styleControls.y);
     float pianoWave = sin(visualUV.x * 21.0 + audio.time * 2.4) * cos(visualUV.y * 17.0 - audio.time * 1.7);
     float guitarWave = sin(visualUV.x * 42.0 + visualUV.y * 35.0 + audio.time * 5.2);
+    float otherDrive = saturate(audio.other);
+    float otherWave = sin(visualUV.x * 12.0 - visualUV.y * 8.0 + audio.time * 2.8)
+                    * cos(visualUV.y * 15.0 + audio.time * 1.9);
     float idleWave = sin(visualUV.x * 9.0 + visualUV.y * 4.0 - audio.time * 0.72) * 0.035;
     // The drum wave lives only in the empty dot field outside the artwork.
     float2 coverEdge = max(abs(coverUV - 0.5) - 0.5, 0.0);
@@ -70,9 +65,21 @@ vertex DesktopDotParticleOut desktopDotParticleVertex(
     float outerBeat = insideCover ? 0.0 : beat * wave * smoothstep(0.30, 0.80, sparkle);
     // HTDemucs stem envelopes drive independent piano/guitar fields. FFT remains
     // the fallback when those model-derived envelopes are unavailable.
-    float height = idleWave + pianoWave * piano * 0.23 + guitarWave * guitar * 0.16;
+    float height = idleWave + pianoWave * piano * 0.23 + guitarWave * guitar * 0.16
+                 + otherWave * otherDrive * 0.075;
     float2 clip = float2(uv.x * 2.0 - 1.0, 1.0 - uv.y * 2.0);
     clip += height * float2(0.018, 0.064);
+    // HPSS residual + spectral flatness drive a restrained, horizontal current tear.
+    // It is isolated to the dot field and leaves the artwork and drum pulse intact.
+    float rawElectric = saturate(audio.dspFeatureSignals.y);
+    float electricTear = smoothstep(0.06, 0.38, rawElectric) * saturate(audio.playing);
+    float tearRow = floor(uv.y * 34.0 + floor(audio.time * 9.0));
+    float tearHash = fract(sin(tearRow * 127.1 + floor(audio.time * 6.0) * 311.7) * 43758.5453);
+    float tearGate = step(0.58 - electricTear * 0.32, tearHash)
+                   * (1.0 - step(0.28, abs(fract(uv.y * 34.0) - 0.5)));
+    float tearStrength = electricTear * tearGate;
+    clip.x += (tearHash - 0.5) * tearStrength * 0.22;
+    clip.y += (tearHash - 0.5) * tearStrength * 0.012;
     float pitch = controls.w / grid;
     // Fixed screen-space dots keep Retina drawable dimensions from inflating each sample.
     // Drum hits illuminate the surrounding dots without changing their size.
@@ -81,12 +88,12 @@ vertex DesktopDotParticleOut desktopDotParticleVertex(
     DesktopDotParticleOut out;
     out.position = float4(clip, 0.0, 1.0);
     out.pointSize = clamp(size, 1.5, 8.0);
-    out.color = insideCover ? coverColor : coverColor + outerBeat * mood.pulseRing.rgb;
-    // The independent artwork pass replaces only the cover samples. Keep every
-    // empty-field point, its motion, and the original drum illumination unchanged.
-    out.opacity = insideCover
-                ? (styleControls.w > 0.5 ? 0.0 : 1.0)
-                : 0.11 + outerBeat * 0.73;
+    float3 fieldColor = float3(0.048, 0.060, 0.086);
+    float3 tearColor = mix(float3(0.05, 0.82, 1.0), float3(1.0, 0.12, 0.62), tearHash);
+    out.color = fieldColor + outerBeat * mood.pulseRing.rgb + tearColor * tearStrength * 0.9;
+    // Keep a dim underlay below cover particles so the square render target
+    // cannot show through their gaps. Outside it, retain the original response.
+    out.opacity = insideCover ? 0.38 : 0.11 + outerBeat * 0.73;
     out.height = height;
     return out;
 }
@@ -191,12 +198,12 @@ vertex DesktopDotParticleOut desktopCoverReliefVertex(
 
     // Smooth local luminance creates a shallow relief; it is a heuristic depth
     // field, not an inferred semantic depth map or another Core ML job.
-    float2 step = 2.0 / float2(float(columns), float(rows));
+    float2 sampleStep = 2.0 / float2(float(columns), float(rows));
     float3 neighborhood = linearColor * 0.4
-        + (cover.sample(desktopCoverSampler, sampleUV + float2(step.x, 0), level(0.0)).rgb
-        +  cover.sample(desktopCoverSampler, sampleUV - float2(step.x, 0), level(0.0)).rgb
-        +  cover.sample(desktopCoverSampler, sampleUV + float2(0, step.y), level(0.0)).rgb
-        +  cover.sample(desktopCoverSampler, sampleUV - float2(0, step.y), level(0.0)).rgb) * 0.15;
+        + (cover.sample(desktopCoverSampler, sampleUV + float2(sampleStep.x, 0), level(0.0)).rgb
+        +  cover.sample(desktopCoverSampler, sampleUV - float2(sampleStep.x, 0), level(0.0)).rgb
+        +  cover.sample(desktopCoverSampler, sampleUV + float2(0, sampleStep.y), level(0.0)).rgb
+        +  cover.sample(desktopCoverSampler, sampleUV - float2(0, sampleStep.y), level(0.0)).rgb) * 0.15;
     float luminance = dot(desktopCoverDisplayColor(neighborhood), float3(0.2126, 0.7152, 0.0722));
     float edgeGuard = 1.0 - smoothstep(0.965, 1.0, edgeDistance);
     // Use the entire square image in cover mode; circular clipping is reserved
@@ -211,6 +218,7 @@ vertex DesktopDotParticleOut desktopCoverReliefVertex(
     // Neither stem moves the artwork samples sideways or changes their UVs.
     float guitarDrive = squareCover ? smoothstep(0.03, 0.42, saturate(stage.audio.x)) : 0.0;
     float pianoDrive = squareCover ? saturate(stage.audio.y) : 0.0;
+    float otherDrive = squareCover ? saturate(stage.audio.z) : 0.0;
     float stringAxis = uv.x * 0.88 + uv.y * 0.46;
     float stringPhase = stringAxis * 34.0 - stage.viewport.w * 6.0
                       + sin(uv.x * 8.0 - stage.viewport.w * 0.65) * 0.65;
@@ -218,8 +226,23 @@ vertex DesktopDotParticleOut desktopCoverReliefVertex(
                       - sin(uv.x * 5.0 - stage.viewport.w * 0.48) * 0.10) / 0.34, 2.0));
     float stringWave = sin(stringPhase) + 0.22 * sin(stringPhase * 1.72 + uv.x * 5.0);
     float pianoWave = sin(uv.y * 14.0 + stage.viewport.w * 1.7);
+    float otherWave = sin((uv.x * 0.68 + uv.y * 0.32) * 22.0 - stage.viewport.w * 2.2)
+                    * cos(uv.y * 10.0 + stage.viewport.w * 1.25);
     point.z += guitarDrive * stringLane * stringWave * 0.085
-             + pianoDrive * pianoWave * 0.022;
+             + pianoDrive * pianoWave * 0.022
+             + otherDrive * otherWave * 0.040;
+    // Feed the live DSP feature into the foreground cover particles too. The
+    // full-screen background field is rendered first and is mostly hidden here.
+    float electricActivity = squareCover
+        ? smoothstep(0.045, 0.30, saturate(audio.dspFeatureSignals.y)) * saturate(audio.playing)
+        : 0.0;
+    float electricRow = floor(uv.y * 30.0 + floor(stage.viewport.w * 8.0));
+    float electricHash = fract(sin(electricRow * 127.1 + floor(stage.viewport.w * 5.0) * 311.7) * 43758.5453);
+    float electricLane = step(0.60 - electricActivity * 0.34, electricHash)
+                       * (1.0 - step(0.32, abs(fract(uv.y * 30.0) - 0.5)));
+    float electricTear = electricActivity * electricLane;
+    point.x += (electricHash - 0.5) * electricTear * 0.11;
+    point.y += (electricHash - 0.5) * electricTear * 0.008;
     DesktopDotParticleOut out;
     out.position = desktopStageProject(point, stage);
     // Perspective size returns on the square 3D cover. Keep the spinning
@@ -228,8 +251,11 @@ vertex DesktopDotParticleOut desktopCoverReliefVertex(
     float resonanceLight = guitarDrive * stringLane
         * (0.5 + 0.5 * saturate(stringWave * 0.62 + 0.5)) * 0.30;
     float pianoLight = pianoDrive * (0.5 + 0.5 * pianoWave) * 0.06;
+    float otherLight = otherDrive * (0.5 + 0.5 * otherWave) * 0.16;
+    float3 electricColor = mix(float3(0.05, 0.88, 1.0), float3(1.0, 0.08, 0.62), electricHash);
     out.color = clamp(((color - 0.5) * 1.08 + 0.5)
-                * (1.0 + resonanceLight + pianoLight), 0.0, 1.0);
+                * (1.0 + resonanceLight + pianoLight + otherLight)
+                + electricColor * electricTear * 0.92, 0.0, 1.0);
     out.opacity = 0.98;
     if (!squareCover) {
         out.opacity *= 1.0 - smoothstep(0.965, 1.0, radius);

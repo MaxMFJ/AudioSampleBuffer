@@ -215,20 +215,25 @@ static NSDictionary<NSString *, NSNumber *> *ASBPhoneDemucsVisualControl(MusicIt
     NSDictionary *guitarStem = [stems[@"guitar"] isKindOfClass:NSDictionary.class] ? stems[@"guitar"] : nil;
     NSDictionary *pianoStem = [stems[@"piano"] isKindOfClass:NSDictionary.class] ? stems[@"piano"] : nil;
     NSDictionary *drumsStem = [stems[@"drums"] isKindOfClass:NSDictionary.class] ? stems[@"drums"] : nil;
+    NSDictionary *otherStem = [stems[@"other"] isKindOfClass:NSDictionary.class] ? stems[@"other"] : nil;
     NSArray<NSNumber *> *guitarFrames = [guitarStem[@"frames"] isKindOfClass:NSArray.class] ? guitarStem[@"frames"] : analysis[@"frames"];
     NSArray<NSNumber *> *pianoFrames = [pianoStem[@"frames"] isKindOfClass:NSArray.class] ? pianoStem[@"frames"] : analysis[@"piano_frames"];
     NSArray<NSNumber *> *drumsFrames = [drumsStem[@"frames"] isKindOfClass:NSArray.class] ? drumsStem[@"frames"] : analysis[@"drums_frames"];
+    NSArray<NSNumber *> *otherFrames = [otherStem[@"frames"] isKindOfClass:NSArray.class] ? otherStem[@"frames"] : analysis[@"other_frames"];
     BOOL hasGuitar = guitarFrames.count > 0;
     BOOL hasPiano = pianoFrames.count > 0;
     BOOL hasDrums = drumsFrames.count > 0;
-    if (!hasGuitar && !hasPiano && !hasDrums) return nil;
+    BOOL hasOther = otherFrames.count > 0;
+    if (!hasGuitar && !hasPiano && !hasDrums && !hasOther) return nil;
     return @{@"guitarStemControlEnabled": @(hasGuitar),
              @"guitarStemControl": @(sampleCurve(guitarFrames ?: @[])),
              @"guitarStemControlSource": @3,
              @"pianoStemControlEnabled": @(hasPiano),
              @"pianoStemControl": @(sampleCurve(pianoFrames ?: @[])),
              @"drumsStemControlEnabled": @(hasDrums),
-             @"drumsStemControl": @(sampleCurve(drumsFrames ?: @[]))};
+             @"drumsStemControl": @(sampleCurve(drumsFrames ?: @[])),
+             @"otherStemControlEnabled": @(hasOther),
+             @"otherStemControl": @(sampleCurve(otherFrames ?: @[]))};
 }
 
 static NSDictionary<NSString *, NSNumber *> *ASBMusicFeatureScopeValues(AudioFeatures *features) {
@@ -538,6 +543,12 @@ static void ASBRunImpactAnimation(CAShapeLayer *layer,
         ASBMingZiDemucsVisualControl(item, self.player.duration, playbackTime) : nil;
     NSMutableDictionary<NSString *, NSNumber *> *control = [(phoneDemucsControl ?: (self.guitarDemucsOnDeviceExperimentEnabled ?
         ASBGuitarVisualControl(playbackTime, analysis) : (demucsControl ?: ASBGuitarVisualControl(playbackTime, analysis))) ?: @{}) mutableCopy];
+    // Render parameters merge over time; explicitly clear an old track's drum
+    // stem while the current track's separated curves are still pending.
+    if (!control[@"drumsStemControlEnabled"]) {
+        control[@"drumsStemControlEnabled"] = @NO;
+        control[@"drumsStemControl"] = @0.0f;
+    }
     control[@"songPlaybackTime"] = @(playbackTime);
     control[@"songDuration"] = @(self.player.duration);
     NSString *songKey = item.fileName.length > 0 ? item.fileName : (item.displayName ?: @"");

@@ -46,6 +46,8 @@ final class LocalAudioPlayer {
     private(set) var currentArtist: String?
     private(set) var currentArtwork: NSImage?
     private(set) var levels: (Float, Float, Float) = (0, 0, 0)
+    private(set) var dspFeatureSignals = SIMD4<Float>(repeating: 0)
+    private(set) var dspFeatureTexture = SIMD4<Float>(repeating: 0)
     private(set) var currentURL: URL?
     let lyricsController = DesktopLyricsController()
     var electricGuitarConfidence: Float = 0
@@ -110,6 +112,8 @@ final class LocalAudioPlayer {
     private func beginPlayback(url: URL, title: String?, artist: String?) {
         do {
             electricGuitarConfidence = 0
+            dspFeatureSignals = SIMD4<Float>(repeating: 0)
+            dspFeatureTexture = SIMD4<Float>(repeating: 0)
             vocalCurve = []
             visualGuitarPeak = 0
             let audioFile = try AVAudioFile(forReading: url)
@@ -134,7 +138,9 @@ final class LocalAudioPlayer {
                 guard let self else { return }
                 let values = self.analyze(buffer)
                 Task { @MainActor [weak self] in
-                    self?.levels = values
+                    self?.levels = (values.low, values.mid, values.high)
+                    self?.dspFeatureSignals = values.signals
+                    self?.dspFeatureTexture = values.texture
                 }
             }
             if !engine.isRunning { try engine.start() }
@@ -307,8 +313,21 @@ final class LocalAudioPlayer {
             self.currentTrackID = next.id
             play(url: URL(fileURLWithPath: next.path), title: next.title, artist: next.artist)
         case .off:
-            activePlaybackOffset = duration
-            pausedPlaybackTime = duration
+            // Sequential playback advances within the current queue and stops
+            // naturally when there is no following track. This also routes
+            // platform playlists through their existing adjacent-track handler.
+            if onPlatformAdjacentTrack?(1) != true {
+                if let currentTrackID,
+                   let index = playbackQueue.firstIndex(where: { $0.id == currentTrackID }),
+                   playbackQueue.indices.contains(index + 1) {
+                    let next = playbackQueue[index + 1]
+                    self.currentTrackID = next.id
+                    play(url: URL(fileURLWithPath: next.path), title: next.title, artist: next.artist)
+                } else {
+                    activePlaybackOffset = duration
+                    pausedPlaybackTime = duration
+                }
+            }
         }
     }
 
@@ -343,11 +362,11 @@ final class LocalAudioPlayer {
                     if let error { NSLog("[DemucsMac] 曲线分析失败，将继续使用实时 FFT: %@", error.localizedDescription) }
                     return
                 }
-                let names = ["guitar", "piano", "drums"]
+                let names = ["guitar", "piano", "drums", "other"]
                 self.stemCurves = names.map { name in
                     (stems[name]?["frames"] as? [NSNumber] ?? []).map(\.floatValue)
                 }
-                NSLog("[DemucsMac] 吉他、钢琴、鼓分离曲线已就绪。")
+                NSLog("[DemucsMac] 吉他、钢琴、鼓、其他音源分离曲线已就绪。")
             }
         }
     }
@@ -395,7 +414,10 @@ final class LocalAudioPlayer {
                             : (isolatedInstruments ? 0 : min(max(levels.1 * 0.55, 0), 1)),
                            drums: hasDrumStem ? curve(2) : levels.0, playbackTime: playbackTime,
                            electricGuitarConfidence: electricGuitarConfidence, vocal: vocal,
-                           guitarPeak: visualGuitarPeak, playing: isPlaying ? 1 : 0)
+                           guitarPeak: visualGuitarPeak, playing: isPlaying ? 1 : 0,
+                           other: coverDotSensitivity ? curve(3) : 0,
+                           dspFeatureSignals: dspFeatureSignals,
+                           dspFeatureTexture: dspFeatureTexture)
     }
 
     private func interpolated(_ curve: [Float], at time: Float, interval: Float) -> Float {
@@ -408,21 +430,28 @@ final class LocalAudioPlayer {
 
     func setVocalCurve(_ values: [Float]) { vocalCurve = values }
 
-    private func analyze(_ buffer: AVAudioPCMBuffer) -> (Float, Float, Float) {
-        guard let channels = buffer.floatChannelData, buffer.frameLength > 0 else { return (0, 0, 0) }
+    private func analyze(_ buffer: AVAudioPCMBuffer) -> (low: Float, mid: Float, high: Float, signals: SIMD4<Float>, texture: SIMD4<Float>) {
+        guard let channels = buffer.floatChannelData, buffer.frameLength > 0 else {
+            return (0, 0, 0, SIMD4<Float>(repeating: 0), SIMD4<Float>(repeating: 0))
+        }
         analyzerLock.lock()
         defer { analyzerLock.unlock() }
-        guard let dsp else { return (0, 0, 0) }
+        guard let dsp else { return (0, 0, 0, SIMD4<Float>(repeating: 0), SIMD4<Float>(repeating: 0)) }
         var bands = [Float](repeating: 0, count: 80)
+        var categories = AnalyzerCategoryFeatures()
         bands.withUnsafeMutableBufferPointer { output in
-            AnalyzerDSP_ProcessChannel(
+            AnalyzerDSP_ProcessChannelExtended(
                 dsp,
                 channels[0],
                 Int32(buffer.frameLength),
                 0,
                 5,
                 Float(buffer.format.sampleRate),
-                output.baseAddress
+                output.baseAddress,
+                nil,
+                nil,
+                nil,
+                &categories
             )
         }
         // Match iOS Tyndall's exact FFT windows (0–9, 20–49, 50–79).
@@ -430,7 +459,17 @@ final class LocalAudioPlayer {
         let low = bands[0..<10].reduce(0, +) / 10
         let mid = bands[20..<50].reduce(0, +) / 30
         let high = bands[50..<80].reduce(0, +) / 30
-        return (low * 5, mid * 5, high * 5)
+        let clamp01: (Float) -> Float = { min(max($0, 0), 1) }
+        let transient = clamp01(categories.transient * 20)
+        // HPSS residual magnitudes are intentionally small; expand their range
+        // before mixing with flatness so ordinary tracks can visibly drive FX.
+        let noise = clamp01(categories.noise * 12)
+        let harmonic = clamp01(categories.harmonic * 5 + categories.harmonicPeakRatio * 0.06)
+        let flatness = clamp01(categories.spectralFlatness)
+        let electric = clamp01(noise * 0.52 + flatness * 0.78)
+        return (low * 5, mid * 5, high * 5,
+                SIMD4<Float>(transient, electric, flatness, harmonic),
+                SIMD4<Float>(categories.harmonicPeakRatio, categories.subBass, categories.bass, categories.lowEnergy))
     }
 }
 

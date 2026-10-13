@@ -271,9 +271,9 @@
 
     VisualEffectInfo *coverDotMatrix = [VisualEffectInfo effectWithType:VisualEffectTypeCoverDotMatrix
                                                                     name:@"封面点阵"
-                                                             description:@"专辑封面化为彩色点粒子，吉他、钢琴与鼓点分别驱动粒子起伏和脉冲"
+                                                             description:@"居中方形封面点阵，浅浮雕随吉他、钢琴和其他音源起伏，鼓点在封面外亮起"
                                                                 category:EffectCategoryExperimental
-                                                        performanceLevel:PerformanceLevelLow];
+                                                        performanceLevel:PerformanceLevelMedium];
     coverDotMatrix.requiresMetal = YES;
     [effects addObject:coverDotMatrix];
 

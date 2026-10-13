@@ -202,7 +202,9 @@ private final class CoverDotsBackgroundRenderer: DesktopEffectRenderer {
         let bassRise = max(audio.bass - previousBass, 0)
         let drumRise = max(audio.drums - previousDrums, 0)
         let hitStrength = max(bassRise * 5.5, drumRise * 3.2)
-        if hitStrength > 0.23, beatAge > 0.16 {
+        // Match the phone fallback threshold so low-frequency FFT transients
+        // remain audible as drum dots while separated drum curves are pending.
+        if hitStrength > 0.10, beatAge > 0.10 {
             beatEnvelope = max(beatEnvelope, min(1, hitStrength))
             beatAge = 0
         }

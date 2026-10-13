@@ -54,7 +54,7 @@ typedef NS_ENUM(NSUInteger, VisualEffectType) {
 
     VisualEffectTypeGlassResonance,         // 玻璃回旋 - 音乐驱动原生 3D 玻璃艺术体
     VisualEffectTypeMirrorStrata,           // 镜层回廊 - 3D 玻璃边框回廊，LLM 主题色
-    VisualEffectTypeCoverDotMatrix,          // 封面点阵 - 专辑封面像素点随分轨律动
+    VisualEffectTypeCoverDotMatrix,          // 封面点阵 - 居中方形 3D 封面与外场鼓点点阵
     VisualEffectTypeRetiredReserved,          // 保留旧水墨特效编号，避免后续类型编号变化
     VisualEffectTypeLiquidPigment,            // 液态颜料 - 旋律牵引半透明颜料，鼓点局部扩散
     VisualEffectTypeOpticalDarkroom,           // 光学暗房 - 三轨累积显影的胶片抽象照片

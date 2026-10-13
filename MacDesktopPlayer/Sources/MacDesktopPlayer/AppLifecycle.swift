@@ -23,6 +23,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let audio = LocalAudioPlayer()
     private let library = MusicLibraryStore()
     private var statusBarPlayer: StatusBarPlayerController?
+    private var windowMonitor: WindowMonitorController?
     private var controlsAwaitingActivation = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -57,6 +58,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.updateArtwork(image)
         }, onOpenSongList: { [weak self] screen in
             self?.wallpaper?.openSongList(on: screen)
+        }, onOpenWindowMonitor: { [weak self] in
+            self?.showWindowMonitor()
         })
         panel.contentView = content
         controlsView = content
@@ -93,6 +96,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApplication.shared.activate(ignoringOtherApps: true)
         controls.makeKeyAndOrderFront(nil)
         controls.orderFrontRegardless()
+    }
+
+    private func showWindowMonitor() {
+        if windowMonitor == nil { windowMonitor = WindowMonitorController() }
+        windowMonitor?.show()
     }
 
     func applicationDidBecomeActive(_ notification: Notification) {

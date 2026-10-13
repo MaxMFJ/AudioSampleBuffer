@@ -2,7 +2,7 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
-/// On-device HTDemucs6s guitar/piano/drums control curves, cached per local track.
+/// On-device HTDemucs6s guitar/piano/drums/other control curves, cached per local track.
 @interface HTDemucsMacAnalyzer : NSObject
 
 + (instancetype)sharedAnalyzer;

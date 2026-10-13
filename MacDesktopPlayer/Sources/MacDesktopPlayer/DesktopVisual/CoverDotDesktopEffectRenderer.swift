@@ -99,18 +99,20 @@ final class CoverDotDesktopEffectRenderer {
                                       input.0.w + (squareCover ? 0 : audio.playbackTime * 0.24))
         stage.pointer = input.1
         stage.layout = SIMD4<Float>(aspect, coverHeight, 1, 3.2)
-        stage.audio = SIMD4<Float>(guitarEnvelope, pianoEnvelope, min(max(audio.bass, 0), 1), min(max(audio.treble, 0), 1))
+        stage.audio = SIMD4<Float>(guitarEnvelope, pianoEnvelope, min(max(audio.other, 0), 1), min(max(audio.treble, 0), 1))
         stage.viewport = SIMD4<Float>(Float(view.drawableSize.width), Float(view.drawableSize.height),
                                      Float(view.drawableSize.width / max(view.bounds.width, 1)), audio.time)
         var mood = DesktopMoodService.shared.colors
-        encoder.setRenderPipelineState(coverPipeline)
-        encoder.setVertexBytes(&values, length: MemoryLayout<VisualAudio>.stride, index: 0)
-        encoder.setVertexBytes(&coverControls, length: MemoryLayout<SIMD4<Float>>.stride, index: 1)
-        encoder.setVertexBytes(&mood, length: MemoryLayout<DesktopMoodColors>.stride, index: 3)
-        encoder.setVertexBytes(&layout, length: MemoryLayout<SIMD4<Float>>.stride, index: 4)
-        encoder.setVertexBytes(&stage, length: MemoryLayout<DesktopCoverStageUniforms>.stride, index: 5)
-        encoder.setVertexTexture(artwork ?? placeholder, index: 0)
-        encoder.drawPrimitives(type: .point, vertexStart: 0, vertexCount: columns * coverRows)
+        if hasArtwork {
+            encoder.setRenderPipelineState(coverPipeline)
+            encoder.setVertexBytes(&values, length: MemoryLayout<VisualAudio>.stride, index: 0)
+            encoder.setVertexBytes(&coverControls, length: MemoryLayout<SIMD4<Float>>.stride, index: 1)
+            encoder.setVertexBytes(&mood, length: MemoryLayout<DesktopMoodColors>.stride, index: 3)
+            encoder.setVertexBytes(&layout, length: MemoryLayout<SIMD4<Float>>.stride, index: 4)
+            encoder.setVertexBytes(&stage, length: MemoryLayout<DesktopCoverStageUniforms>.stride, index: 5)
+            encoder.setVertexTexture(artwork ?? placeholder, index: 0)
+            encoder.drawPrimitives(type: .point, vertexStart: 0, vertexCount: columns * coverRows)
+        }
         var lyricStage = stage
         if !lyricsFollowCoverRotation {
             lyricStage.rotation.x = 0

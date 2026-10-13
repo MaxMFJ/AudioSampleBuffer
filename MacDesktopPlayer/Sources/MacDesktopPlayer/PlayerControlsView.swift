@@ -139,16 +139,19 @@ final class ControlsView: NSView {
     private let onBackgroundEffectChange: (DesktopBackgroundEffect) -> Void
     private let onArtworkChange: (NSImage?) -> Void
     private let onOpenSongList: (NSScreen?) -> Void
+    private let onOpenWindowMonitor: () -> Void
 
     init(audio: LocalAudioPlayer, library: MusicLibraryStore,
          onBackgroundEffectChange: @escaping (DesktopBackgroundEffect) -> Void,
          onArtworkChange: @escaping (NSImage?) -> Void,
-         onOpenSongList: @escaping (NSScreen?) -> Void) {
+         onOpenSongList: @escaping (NSScreen?) -> Void,
+         onOpenWindowMonitor: @escaping () -> Void) {
         self.audio = audio
         self.library = library
         self.onBackgroundEffectChange = onBackgroundEffectChange
         self.onArtworkChange = onArtworkChange
         self.onOpenSongList = onOpenSongList
+        self.onOpenWindowMonitor = onOpenWindowMonitor
         super.init(frame: NSRect(x: 0, y: 0, width: 1040, height: 700))
         appearance = NSAppearance(named: .darkAqua)
         wantsLayer = true
@@ -177,7 +180,9 @@ final class ControlsView: NSView {
 
         let glass = NSVisualEffectView()
         glass.material = .hudWindow
-        glass.blendingMode = .behindWindow
+        // Keep the control surface independent of whatever app or desktop
+        // wallpaper happens to sit behind this window during launch/activation.
+        glass.blendingMode = .withinWindow
         glass.state = .active
         glass.wantsLayer = true
         glass.layer?.cornerRadius = 28
@@ -224,12 +229,17 @@ final class ControlsView: NSView {
         songsButton.imagePosition = .imageLeading
         songsButton.bezelStyle = .rounded
         songsButton.font = .systemFont(ofSize: 13, weight: .medium)
+        let monitorButton = NSButton(title: "窗口预览", target: self, action: #selector(showWindowMonitor))
+        monitorButton.image = NSImage(systemSymbolName: "macwindow.on.rectangle", accessibilityDescription: "窗口实时预览")
+        monitorButton.imagePosition = .imageLeading
+        monitorButton.bezelStyle = .rounded
+        monitorButton.font = .systemFont(ofSize: 13, weight: .medium)
         let platformSongsButton = NSButton(title: "平台歌单", target: self, action: #selector(showPlatformLibrary))
         platformSongsButton.image = NSImage(systemSymbolName: "cloud", accessibilityDescription: "平台歌单")
         platformSongsButton.imagePosition = .imageLeading
         platformSongsButton.bezelStyle = .rounded
         platformSongsButton.font = .systemFont(ofSize: 13, weight: .medium)
-        let headerActions = NSStackView(views: [brand, songsButton, lyricsButton, accountsButton])
+        let headerActions = NSStackView(views: [brand, songsButton, lyricsButton, accountsButton, monitorButton])
         headerActions.orientation = .horizontal
         headerActions.alignment = .centerY
         headerActions.addArrangedSubview(platformSongsButton)
@@ -437,6 +447,8 @@ final class ControlsView: NSView {
         platformAccountWindow?.window?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
+
+    @objc private func showWindowMonitor() { onOpenWindowMonitor() }
     @objc private func previousTrack() { _ = audio.playAdjacentTrack(-1) }
     @objc private func nextTrack() { _ = audio.playAdjacentTrack(1) }
     @objc private func toggleRepeatMode(_ sender: NSButton) {

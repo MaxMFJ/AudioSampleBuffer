@@ -11,7 +11,7 @@ static const NSInteger kHTDMSampleRate = 44100;
 static const NSInteger kHTDMSegmentSeconds = 7;
 static const NSInteger kHTDMHopSamples = 220500; // 5 s; overlap-and-add covers the full track.
 static const NSInteger kHTDMFFTSize = 4096;
-static NSString * const kHTDMModelVersion = @"htdemucs6s-guitar-piano-drums-ios16-v1";
+static NSString * const kHTDMModelVersion = @"htdemucs6s-guitar-piano-drums-other-ios16-v2";
 #define ASB_CLAMP(value, low, high) fminf((high), fmaxf((low), (value)))
 
 static NSError *HTDMError(NSInteger code, NSString *message) {
@@ -108,7 +108,7 @@ static NSError *HTDMError(NSInteger code, NSString *message) {
     if (!compiled && package) compiled = [MLModel compileModelAtURL:package error:error];
     if (!compiled) {
         [self.modelLock unlock];
-        if (error && !*error) *error = HTDMError(2, @"工程内未找到 HTDemucs 吉他、钢琴、鼓模型。");
+        if (error && !*error) *error = HTDMError(2, @"工程内未找到 HTDemucs 吉他、钢琴、鼓、其他音源模型。");
         return nil;
     }
     MLModelConfiguration *configuration = [[MLModelConfiguration alloc] init];
@@ -197,7 +197,7 @@ static NSError *HTDMError(NSInteger code, NSString *message) {
     id<MLFeatureProvider> prediction = provider ? [model predictionFromFeatures:provider error:&arrayError] : nil;
     MLMultiArray *sources = [prediction featureValueForName:@"sources"].multiArrayValue;
     NSUInteger sourceCount = sources.shape.count >= 4 ? sources.shape[1].unsignedIntegerValue : 0;
-    if (!sources || sourceCount == 0 || sourceCount > 3 || sources.shape[2].unsignedIntegerValue != 2 ||
+    if (!sources || sourceCount == 0 || sourceCount > 4 || sources.shape[2].unsignedIntegerValue != 2 ||
         sources.shape[3].unsignedIntegerValue != segmentFrames ||
         (sources.dataType != MLMultiArrayDataTypeFloat32 && sources.dataType != MLMultiArrayDataTypeFloat16)) {
         if (error) *error = arrayError ?: HTDMError(9, @"HTDemucs 输出格式不符合预期。");
@@ -299,7 +299,7 @@ static NSError *HTDMError(NSInteger code, NSString *message) {
     NSUInteger totalFrames = pcmData.length / (sizeof(int16_t) * 2);
     const NSUInteger hop = (NSUInteger)llround(sampleRate * 0.05);
     NSUInteger curveCount = (NSUInteger)ceil((double)totalFrames / hop);
-    float *sums = calloc(curveCount * 3, sizeof(float));
+    float *sums = calloc(curveCount * 4, sizeof(float));
     float *weights = calloc(curveCount, sizeof(float));
     NSUInteger stemCount = 0;
     if (!sums || !weights) { free(sums); free(weights); if (error) *error = HTDMError(12, @"乐器曲线缓冲区分配失败。"); return nil; }
@@ -324,7 +324,7 @@ static NSError *HTDMError(NSInteger code, NSString *message) {
     // PCM is no longer needed after the final chunk; release its full-track
     // allocation before building and serializing the small envelope.
     pcmData = nil;
-    NSArray<NSString *> *stemNames = @[@"guitar", @"piano", @"drums"];
+    NSArray<NSString *> *stemNames = @[@"guitar", @"piano", @"drums", @"other"];
     NSMutableDictionary *stemCurves = [NSMutableDictionary dictionaryWithCapacity:stemCount];
     for (NSUInteger stemIndex = 0; stemIndex < stemCount; stemIndex++) {
         NSMutableArray<NSNumber *> *raw = [NSMutableArray arrayWithCapacity:curveCount];
@@ -357,6 +357,7 @@ static NSError *HTDMError(NSInteger code, NSString *message) {
                                      @"frames": guitarFrames} mutableCopy];
     if (stemCount > 1) result[@"piano_frames"] = stemCurves[@"piano"][@"frames"];
     if (stemCount > 2) result[@"drums_frames"] = stemCurves[@"drums"][@"frames"];
+    if (stemCount > 3) result[@"other_frames"] = stemCurves[@"other"][@"frames"];
     if (![self isJobGenerationCurrent:generation error:error]) return nil;
     NSData *json = [NSJSONSerialization dataWithJSONObject:result options:0 error:nil];
     if (json) {

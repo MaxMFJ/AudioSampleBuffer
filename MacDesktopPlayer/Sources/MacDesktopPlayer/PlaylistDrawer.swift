@@ -96,7 +96,10 @@ private final class DrawerToggleButton: NSButton {
     override func mouseDown(with event: NSEvent) {
         // Treat the entire handle as the target, including its empty margins.
         guard isEnabled else { return }
-        sendAction(action, to: target)
+        // Keep NSButton's normal action dispatch. Calling sendAction directly
+        // skips the button cell's click handling and can leave the floating
+        // non-activating panel visually responsive but unable to toggle.
+        performClick(nil)
     }
 
     override func updateTrackingAreas() {
@@ -164,7 +167,7 @@ final class PlaylistDrawerView: NSView, NSSearchFieldDelegate {
     private var animating = false
     private let arrowButton = DrawerToggleButton()
     private let heading = NSTextField(labelWithString: "歌曲")
-    private let sourceControl = NSSegmentedControl(labels: ["本地", "平台"], trackingMode: .selectOne, target: nil, action: nil)
+    private let sourceControl = NSSegmentedControl(labels: ["本地", "网易云", "QQ", "酷狗"], trackingMode: .selectOne, target: nil, action: nil)
     private let searchField = NSSearchField()
     private let songStack = DrawerSongStack()
     private let scrollView = NSScrollView()
@@ -181,6 +184,7 @@ final class PlaylistDrawerView: NSView, NSSearchFieldDelegate {
     private var libraryObserver: NSObjectProtocol?
     private var platformScrollObserver: NSObjectProtocol?
     private var platformPlaylists: [PlatformPlaylist] = []
+    private var selectedPlatformProvider: PlatformProvider = .netease
     private var platformTracks: [PlatformTrack] = []
     private var selectedPlatformPlaylist: PlatformPlaylist?
     private var platformLoading = false
@@ -188,6 +192,7 @@ final class PlaylistDrawerView: NSView, NSSearchFieldDelegate {
     private var platformHasMore = false
     private let platformPageSize = 40
     private var platformArtworkGeneration = 0
+    private var platformSearchGeneration = 0
     private var currentPlatformTrackID: String?
     private var currentPlatformCachedPath: String?
     private var platformTrackSwitchInProgress = false
@@ -442,7 +447,7 @@ final class PlaylistDrawerView: NSView, NSSearchFieldDelegate {
             needle.isEmpty || $0.name.localizedCaseInsensitiveContains(needle)
                 || $0.displayArtist.localizedCaseInsensitiveContains(needle)
         }
-        heading.stringValue = selectedPlatformPlaylist.map { "平台 · \($0.name) · \(tracks.count)" } ?? "平台歌曲"
+        heading.stringValue = selectedPlatformPlaylist.map { "\(selectedPlatformProvider.title) · \($0.name) · \(tracks.count)" } ?? "\(selectedPlatformProvider.title) 歌曲"
         for (index, track) in tracks.enumerated() {
             let row = PlatformDrawerRow(track: track, index: index, onSelect: { [weak self] in
                 self?.playPlatformTrack(track)
@@ -477,10 +482,10 @@ final class PlaylistDrawerView: NSView, NSSearchFieldDelegate {
         refreshPlatformRows()
         Task { [weak self] in
             do {
-                let bridge = await PlatformBridgeRuntime.shared.ensureRunning()
-                if case .failure(let error) = bridge { throw error }
-                let playlists = try await PlatformBridgeClient.shared.userPlaylists(for: .netease)
+                let provider = self?.selectedPlatformProvider ?? .netease
+                let playlists = try await PlatformBridgeClient.shared.userPlaylists(for: provider)
                 guard let self else { return }
+                guard self.selectedPlatformProvider == provider else { return }
                 self.platformLoading = false
                 self.platformPlaylists = playlists
                 self.renderPlatformPlaylists()
@@ -537,10 +542,12 @@ final class PlaylistDrawerView: NSView, NSSearchFieldDelegate {
         statusMessage("正在读取：\(playlist.name)…")
         Task { [weak self] in
             do {
-                let tracks = try await PlatformBridgeClient.shared.playlistTracks(playlist, provider: .netease,
+                let provider = self?.selectedPlatformProvider ?? .netease
+                let tracks = try await PlatformBridgeClient.shared.playlistTracks(playlist, provider: provider,
                                                                                    limit: self?.platformPageSize ?? 40,
                                                                                    offset: 0)
-                guard let self else { return }
+                guard let self, self.selectedPlatformProvider == provider,
+                      self.selectedPlatformPlaylist?.id == playlist.id else { return }
                 self.platformTracks = tracks
                 self.platformHasMore = tracks.count == self.platformPageSize
                 self.refreshPlatformRows()
@@ -556,10 +563,12 @@ final class PlaylistDrawerView: NSView, NSSearchFieldDelegate {
         let offset = platformTracks.count
         Task { [weak self] in
             do {
-                let tracks = try await PlatformBridgeClient.shared.playlistTracks(playlist, provider: .netease,
+                let provider = self?.selectedPlatformProvider ?? .netease
+                let tracks = try await PlatformBridgeClient.shared.playlistTracks(playlist, provider: provider,
                                                                                    limit: self?.platformPageSize ?? 40,
                                                                                    offset: offset)
-                guard let self, self.selectedPlatformPlaylist?.id == playlist.id else { return }
+                guard let self, self.selectedPlatformProvider == provider,
+                      self.selectedPlatformPlaylist?.id == playlist.id else { return }
                 self.platformTracks.append(contentsOf: tracks)
                 self.platformHasMore = tracks.count == self.platformPageSize
                 self.platformLoadingMore = false
@@ -574,7 +583,7 @@ final class PlaylistDrawerView: NSView, NSSearchFieldDelegate {
 
     private func loadMorePlatformTracksIfNeeded() {
         guard expanded,
-              sourceControl.selectedSegment == 1,
+              sourceControl.selectedSegment > 0,
               platformHasMore,
               !platformLoadingMore,
               let documentView = scrollView.documentView else { return }
@@ -598,7 +607,7 @@ final class PlaylistDrawerView: NSView, NSSearchFieldDelegate {
             do {
                 let cacheHit = await PlatformBridgeClient.shared.hasCachedAudioFile(for: track)
                 guard let self, self.platformPlaybackRequestGeneration == request else { return }
-                if !cacheHit, self.sourceControl.selectedSegment == 1 {
+                if !cacheHit, self.sourceControl.selectedSegment > 0 {
                     self.playbackLoadingView.present(trackName: track.name)
                 }
                 let prepared = try await PlatformBridgeClient.shared.preparedAudioFile(for: track)
@@ -650,7 +659,21 @@ final class PlaylistDrawerView: NSView, NSSearchFieldDelegate {
     }
 
     @objc private func sourceChanged(_ sender: NSSegmentedControl) {
-        let platform = sender.selectedSegment == 1
+        let platform = sender.selectedSegment > 0
+        let providers: [PlatformProvider] = [.netease, .qq, .kugou]
+        if platform, providers.indices.contains(sender.selectedSegment - 1) {
+            let provider = providers[sender.selectedSegment - 1]
+            if provider != selectedPlatformProvider {
+                selectedPlatformProvider = provider
+                platformSearchGeneration += 1
+                platformLoading = false
+                platformPlaylists = []
+                platformTracks = []
+                selectedPlatformPlaylist = nil
+                platformHasMore = false
+                renderPlatformPlaylists()
+            }
+        }
         searchField.placeholderString = platform ? "筛选平台歌曲 / 歌手" : "搜索歌曲 / 歌手"
         if platform {
             localScrollTopConstraint.isActive = false
@@ -675,7 +698,45 @@ final class PlaylistDrawerView: NSView, NSSearchFieldDelegate {
         selectPlatformPlaylist(playlist)
     }
 
-    func controlTextDidChange(_ notification: Notification) { refreshRows() }
+    func controlTextDidChange(_ notification: Notification) {
+        guard sourceControl.selectedSegment > 0 else { refreshRows(); return }
+        let query = searchField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        platformSearchGeneration += 1
+        let generation = platformSearchGeneration
+        guard !query.isEmpty else {
+            platformLoading = false
+            selectedPlatformPlaylist = nil
+            platformTracks = []
+            platformHasMore = false
+            loadPlatformPlaylists()
+            return
+        }
+        selectedPlatformPlaylist = nil
+        platformLoading = true
+        refreshPlatformRows()
+        let provider = selectedPlatformProvider
+        Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(280))
+            guard let self, self.platformSearchGeneration == generation,
+                  self.selectedPlatformProvider == provider else { return }
+            do {
+                let tracks = try await PlatformBridgeClient.shared.search(provider, keywords: query, limit: 40)
+                guard self.platformSearchGeneration == generation,
+                      self.selectedPlatformProvider == provider else { return }
+                self.platformLoading = false
+                self.platformTracks = tracks
+                self.platformHasMore = false
+                self.refreshPlatformRows()
+                self.statusMessage("\(provider.title) 搜索：\(tracks.count) 首")
+            } catch {
+                guard self.platformSearchGeneration == generation else { return }
+                self.platformLoading = false
+                self.platformTracks = []
+                self.refreshPlatformRows()
+                self.statusMessage("平台搜索失败：\(error.localizedDescription)")
+            }
+        }
+    }
     @objc private func toggleExpanded() { onExpansionChange(!expanded) }
     @objc private func openControls() { onOpenControls() }
 }

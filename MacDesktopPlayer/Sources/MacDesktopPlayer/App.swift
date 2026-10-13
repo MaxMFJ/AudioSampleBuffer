@@ -29,6 +29,10 @@ struct VisualAudio {
     var vocal: Float
     var guitarPeak: Float
     var playing: Float
+    var other: Float
+    // Aligned feature groups from the shared HPSS/FFT analyzer.
+    var dspFeatureSignals: SIMD4<Float>
+    var dspFeatureTexture: SIMD4<Float>
 }
 
 struct DesktopDotParticle {

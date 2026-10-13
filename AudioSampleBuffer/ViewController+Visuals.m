@@ -1851,44 +1851,7 @@ static UIEdgeInsets RhythmEffectiveSafeAreaInsets(UIView *view) {
         [self cyberpunkControlButtonTapped:nil];
     } else if (effectType == VisualEffectTypeCellularWormhole) {
         [self showGuitarDemucsExperimentPanel];
-    } else if (effectType == VisualEffectTypeCoverDotMatrix) {
-        [self showCoverDotMatrixStylePicker];
     }
-}
-
-- (void)showCoverDotMatrixStylePicker {
-    NSArray<NSString *> *styleNames = @[
-        @"丝绸波面 · 柔和起伏",
-        @"隧道流动 · 向中心卷入",
-        @"星球轨道 · 球面旋转",
-        @"虚空散射 · 鼓点外推",
-        @"唱片纹路 · 旋转沟槽"
-    ];
-    NSInteger selectedStyle = [[NSUserDefaults standardUserDefaults] integerForKey:@"coverDotMatrixStyle"];
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"点阵样式"
-                                                                   message:@"选择封面点阵的运动形态"
-                                                            preferredStyle:UIAlertControllerStyleActionSheet];
-    __weak typeof(self) weakSelf = self;
-    [styleNames enumerateObjectsUsingBlock:^(NSString *name, NSUInteger idx, BOOL *stop) {
-        NSString *title = [NSString stringWithFormat:@"%@%@", (NSInteger)idx == selectedStyle ? @"✓ " : @"", name];
-        UIAlertAction *action = [UIAlertAction actionWithTitle:title style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
-            NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
-            [defaults setInteger:(NSInteger)idx forKey:@"coverDotMatrixStyle"];
-            // Apply to the dot-matrix effect immediately and let the manager
-            // retain the full parameter set under the correct effect key.
-            [weakSelf.visualEffectManager setCurrentEffect:VisualEffectTypeCoverDotMatrix animated:YES];
-            [weakSelf.visualEffectManager setRenderParameters:@{@"dotStyle": @((NSInteger)idx)}];
-        }];
-        [alert addAction:action];
-    }];
-    [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
-    UIPopoverPresentationController *popover = alert.popoverPresentationController;
-    if (popover) {
-        popover.sourceView = self.view;
-        popover.sourceRect = CGRectMake(CGRectGetMidX(self.view.bounds), CGRectGetMidY(self.view.bounds), 1.0, 1.0);
-    }
-    UIViewController *presenter = self.presentedViewController ?: self;
-    [presenter presentViewController:alert animated:YES completion:nil];
 }
 
 - (void)showGuitarDemucsExperimentPanel {

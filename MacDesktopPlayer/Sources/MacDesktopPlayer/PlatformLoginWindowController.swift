@@ -7,6 +7,7 @@ final class PlatformLoginWindowController: NSWindowController, NSWindowDelegate 
     private let webView: WKWebView
     private var cookieTimer: Timer?
     private var submitting = false
+    private var lastSubmittedCookie: String?
 
     init(provider: PlatformProvider) {
         self.provider = provider
@@ -61,12 +62,15 @@ final class PlatformLoginWindowController: NSWindowController, NSWindowDelegate 
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 let cookieHeader = self.cookieHeader(from: cookies)
-                guard self.looksLoggedIn(cookieHeader) else { return }
+                guard self.looksLoggedIn(cookieHeader), cookieHeader != self.lastSubmittedCookie else { return }
                 self.submitting = true
+                self.lastSubmittedCookie = cookieHeader
                 defer { self.submitting = false }
-                _ = await PlatformBridgeRuntime.shared.ensureRunning()
                 do {
-                    _ = try await PlatformBridgeClient.shared.saveLoginCookie(cookieHeader, for: self.provider)
+                    let status = try await PlatformBridgeClient.shared.saveLoginCookie(cookieHeader, for: self.provider)
+                    if !status.loggedIn {
+                        NSLog("平台登录页已检测到 Cookie，但账号验证未通过：%@", status.message ?? "unknown error")
+                    }
                 } catch {
                     NSLog("平台登录凭据提交失败：%@", error.localizedDescription)
                 }
@@ -81,19 +85,26 @@ final class PlatformLoginWindowController: NSWindowController, NSWindowDelegate 
         case .qq: allowed = { $0 == "qq.com" || $0.hasSuffix(".qq.com") }
         case .kugou: allowed = { $0 == "kugou.com" || $0.hasSuffix(".kugou.com") }
         }
-        var values: [String: String] = [:]
+        var values: [String: HTTPCookie] = [:]
         for cookie in cookies where allowed(cookie.domain.trimmingCharacters(in: CharacterSet(charactersIn: ".")).lowercased()) {
-            values[cookie.name] = cookie.value
+            let key = cookie.name.lowercased()
+            guard !cookie.value.isEmpty else { continue }
+            if let current = values[key] {
+                let currentDomain = current.domain.trimmingCharacters(in: CharacterSet(charactersIn: "."))
+                let candidateDomain = cookie.domain.trimmingCharacters(in: CharacterSet(charactersIn: "."))
+                if candidateDomain.count < currentDomain.count { continue }
+            }
+            values[key] = cookie
         }
         return values.keys.sorted().compactMap { key in
-            guard let value = values[key] else { return nil }
-            return "\(key)=\(value)"
+            guard let cookie = values[key] else { return nil }
+            return "\(cookie.name)=\(cookie.value)"
         }.joined(separator: "; ")
     }
 
     private func looksLoggedIn(_ cookie: String) -> Bool {
         switch provider {
-        case .netease: return cookie.range(of: #"(?:^|;\s*)MUSIC_U=[^;\s]+"#, options: .regularExpression) != nil
+        case .netease: return cookie.range(of: #"(?i)(?:^|;\s*)MUSIC_U=[^;\s]+"#, options: .regularExpression) != nil
         case .qq: return cookie.range(of: #"(?:^|;\s*)(uin|wxuin|qm_keyst|qqmusic_key)=[^;\s]+"#, options: .regularExpression) != nil
         case .kugou: return cookie.range(of: #"(?:^|;\s*)(kg_mid|KugooID|userid)=[^;\s]+"#, options: .regularExpression) != nil
         }

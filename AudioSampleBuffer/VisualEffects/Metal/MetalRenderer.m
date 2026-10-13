@@ -3895,51 +3895,110 @@ static inline float MirrorStrataFollow(float current, float target, float dt,
 
 @end
 
-#pragma mark - 封面点阵 · album-cover halftone
+#pragma mark - 封面点阵 · Mac square stage
+
+typedef struct {
+    float time, bass, mid, treble, aspectRatio;
+    float guitar, piano, drums, playbackTime, other;
+} PhoneCoverAudio;
+
+typedef struct {
+    vector_float4 atmosphere;
+    vector_float4 volumetricBeam;
+    vector_float4 pulseRing;
+} PhoneCoverMood;
+
+typedef struct {
+    vector_float4 rotation;
+    vector_float4 pointer;
+    vector_float4 layout;
+    vector_float4 audio;
+    vector_float4 viewport;
+    vector_float4 screenMap;
+} PhoneCoverStageUniforms;
 
 @interface CoverDotMatrixRenderer ()
-@property (nonatomic, strong) id<MTLRenderPipelineState> coverDotPipeline;
-@property (nonatomic, strong) id<MTLRenderPipelineState> coverDotPointPipeline;
+@property (nonatomic, strong) id<MTLRenderPipelineState> coverBackdropPipeline;
+@property (nonatomic, strong) id<MTLRenderPipelineState> coverFieldPipeline;
+@property (nonatomic, strong) id<MTLRenderPipelineState> coverReliefPipeline;
 @property (nonatomic, strong) id<MTLTexture> coverTexture;
 @property (nonatomic, strong) id<MTLTexture> coverPlaceholder;
 @property (nonatomic, assign) NSUInteger coverGeneration;
 @property (nonatomic, assign) float dotBeatEnvelope;
 @property (nonatomic, assign) float dotBeatAge;
+@property (nonatomic, assign) float previousDotBass;
 @property (nonatomic, assign) float previousDotDrums;
-@property (nonatomic, assign) float previousDotTransient;
-@property (nonatomic, assign) float previousDotLow;
 @property (nonatomic, assign) float dotLastTime;
+@property (nonatomic, assign) float coverGuitarEnvelope;
+@property (nonatomic, assign) float coverPianoEnvelope;
+@property (nonatomic, assign) float coverYaw;
+@property (nonatomic, assign) float coverPitch;
+@property (nonatomic, assign) float coverVelocityX;
+@property (nonatomic, assign) float coverVelocityY;
+@property (nonatomic, assign) float coverPressDepth;
+@property (nonatomic, assign) float coverPointerX;
+@property (nonatomic, assign) float coverPointerY;
+@property (nonatomic, assign) BOOL coverTouching;
+@property (nonatomic, assign) BOOL coverRotating;
+@property (nonatomic, assign) CGPoint coverLastTouch;
+@property (nonatomic, strong) UIPanGestureRecognizer *coverPanGesture;
+@property (nonatomic, strong) UITapGestureRecognizer *coverResetGesture;
 @end
 
 @implementation CoverDotMatrixRenderer
 
-- (void)setupPipeline {
+- (MTLRenderPipelineDescriptor *)coverPipelineWithVertex:(NSString *)vertex
+                                                fragment:(NSString *)fragment
+                                                 blending:(BOOL)blending {
     MTLRenderPipelineDescriptor *descriptor = [MTLRenderPipelineDescriptor new];
-    descriptor.label = @"CoverDotMatrix";
-    descriptor.vertexFunction = [self.defaultLibrary newFunctionWithName:@"coverDotMatrixVertex"];
-    descriptor.fragmentFunction = [self.defaultLibrary newFunctionWithName:@"coverDotMatrixFragment"];
+    descriptor.vertexFunction = [self.defaultLibrary newFunctionWithName:vertex];
+    descriptor.fragmentFunction = [self.defaultLibrary newFunctionWithName:fragment];
     descriptor.colorAttachments[0].pixelFormat = self.metalView.colorPixelFormat;
     descriptor.depthAttachmentPixelFormat = self.metalView.depthStencilPixelFormat;
-    NSError *error = nil;
-    self.coverDotPipeline = [self.device newRenderPipelineStateWithDescriptor:descriptor error:&error];
-    if (!self.coverDotPipeline) NSLog(@"封面点阵 Metal 管线创建失败: %@", error);
+    if (blending) {
+        descriptor.colorAttachments[0].blendingEnabled = YES;
+        descriptor.colorAttachments[0].rgbBlendOperation = MTLBlendOperationAdd;
+        descriptor.colorAttachments[0].alphaBlendOperation = MTLBlendOperationAdd;
+        descriptor.colorAttachments[0].sourceRGBBlendFactor = MTLBlendFactorSourceAlpha;
+        descriptor.colorAttachments[0].destinationRGBBlendFactor = MTLBlendFactorOneMinusSourceAlpha;
+        descriptor.colorAttachments[0].sourceAlphaBlendFactor = MTLBlendFactorOne;
+        descriptor.colorAttachments[0].destinationAlphaBlendFactor = MTLBlendFactorOneMinusSourceAlpha;
+    }
+    return descriptor;
+}
 
-    MTLRenderPipelineDescriptor *pointDescriptor = [MTLRenderPipelineDescriptor new];
-    pointDescriptor.label = @"CoverDotMatrixParticles";
-    pointDescriptor.vertexFunction = [self.defaultLibrary newFunctionWithName:@"coverDotParticleVertex"];
-    pointDescriptor.fragmentFunction = [self.defaultLibrary newFunctionWithName:@"coverDotParticleFragment"];
-    pointDescriptor.colorAttachments[0].pixelFormat = self.metalView.colorPixelFormat;
-    pointDescriptor.depthAttachmentPixelFormat = self.metalView.depthStencilPixelFormat;
-    pointDescriptor.colorAttachments[0].blendingEnabled = YES;
-    pointDescriptor.colorAttachments[0].rgbBlendOperation = MTLBlendOperationAdd;
-    pointDescriptor.colorAttachments[0].alphaBlendOperation = MTLBlendOperationAdd;
-    pointDescriptor.colorAttachments[0].sourceRGBBlendFactor = MTLBlendFactorSourceAlpha;
-    pointDescriptor.colorAttachments[0].destinationRGBBlendFactor = MTLBlendFactorOneMinusSourceAlpha;
-    pointDescriptor.colorAttachments[0].sourceAlphaBlendFactor = MTLBlendFactorOne;
-    pointDescriptor.colorAttachments[0].destinationAlphaBlendFactor = MTLBlendFactorOneMinusSourceAlpha;
+- (void)setupPipeline {
+    NSError *error = nil;
+    MTLRenderPipelineDescriptor *backdrop = [self coverPipelineWithVertex:@"phoneCoverBackdropVertex"
+                                                                 fragment:@"phoneCoverBackdropFragment"
+                                                                 blending:NO];
+    backdrop.label = @"CoverDotBackdrop";
+    self.coverBackdropPipeline = [self.device newRenderPipelineStateWithDescriptor:backdrop error:&error];
+    if (!self.coverBackdropPipeline) NSLog(@"封面点阵背景管线创建失败: %@", error);
+
+    MTLRenderPipelineDescriptor *field = [self coverPipelineWithVertex:@"phoneCoverFieldVertex"
+                                                              fragment:@"phoneCoverFieldFragment"
+                                                              blending:YES];
+    field.label = @"CoverDotField";
     error = nil;
-    self.coverDotPointPipeline = [self.device newRenderPipelineStateWithDescriptor:pointDescriptor error:&error];
-    if (!self.coverDotPointPipeline) NSLog(@"封面点阵粒子管线创建失败: %@", error);
+    self.coverFieldPipeline = [self.device newRenderPipelineStateWithDescriptor:field error:&error];
+    if (!self.coverFieldPipeline) NSLog(@"封面点阵外场管线创建失败: %@", error);
+
+    MTLRenderPipelineDescriptor *relief = [self coverPipelineWithVertex:@"phoneCoverReliefVertex"
+                                                               fragment:@"phoneCoverReliefFragment"
+                                                               blending:YES];
+    relief.label = @"CoverDotRelief";
+    error = nil;
+    self.coverReliefPipeline = [self.device newRenderPipelineStateWithDescriptor:relief error:&error];
+    if (!self.coverReliefPipeline) NSLog(@"封面点阵浮雕管线创建失败: %@", error);
+    self.metalView.preferredFramesPerSecond = 60;
+    self.coverPointerX = self.coverPointerY = -10.0f;
+    self.metalView.userInteractionEnabled = YES;
+    self.coverPanGesture = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(coverPanned:)];
+    self.coverResetGesture = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(coverReset:)];
+    self.coverResetGesture.numberOfTapsRequired = 2;
+    [self.metalView addGestureRecognizer:self.coverPanGesture];
+    [self.metalView addGestureRecognizer:self.coverResetGesture];
 
     MTLTextureDescriptor *textureDescriptor = [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatRGBA8Unorm_sRGB
                                                                                                   width:1 height:1 mipmapped:NO];
@@ -3996,56 +4055,200 @@ static inline float MirrorStrataFollow(float current, float target, float dt,
     });
 }
 
+- (void)dealloc {
+    if (self.coverPanGesture) [self.metalView removeGestureRecognizer:self.coverPanGesture];
+    if (self.coverResetGesture) [self.metalView removeGestureRecognizer:self.coverResetGesture];
+}
+
+- (vector_float2)coverMacPointForViewPoint:(CGPoint)point mapX:(float)mapX mapY:(float)mapY {
+    CGSize bounds = self.metalView.bounds.size;
+    float drawableX = (float)(point.x / MAX(bounds.width, 1.0)) * 2.0f - 1.0f;
+    float drawableY = 1.0f - (float)(point.y / MAX(bounds.height, 1.0)) * 2.0f;
+    return (vector_float2){drawableX / MAX(mapX, 0.001f), drawableY / MAX(mapY, 0.001f)};
+}
+
+- (void)coverPanned:(UIPanGestureRecognizer *)gesture {
+    CGPoint point = [gesture locationInView:self.metalView];
+    if (gesture.state == UIGestureRecognizerStateBegan) {
+        self.coverTouching = YES;
+        self.coverRotating = NO;
+        self.coverLastTouch = point;
+        self.coverVelocityX = self.coverVelocityY = 0.0f;
+    } else if (gesture.state == UIGestureRecognizerStateChanged) {
+        CGPoint delta = CGPointMake(point.x - self.coverLastTouch.x, point.y - self.coverLastTouch.y);
+        self.coverLastTouch = point;
+        CGPoint translation = [gesture translationInView:self.metalView];
+        if (hypot(translation.x, translation.y) > 12.0) self.coverRotating = YES;
+        if (self.coverRotating) {
+            self.coverYaw += (float)delta.x * 0.006f;
+            self.coverPitch += (float)delta.y * 0.006f;
+            self.coverVelocityX = (float)delta.x * 0.16f;
+            self.coverVelocityY = (float)delta.y * 0.16f;
+        }
+    } else {
+        self.coverTouching = NO;
+        self.coverRotating = NO;
+    }
+}
+
+- (void)coverReset:(UITapGestureRecognizer *)gesture {
+    if (gesture.state != UIGestureRecognizerStateEnded) return;
+    self.coverYaw = self.coverPitch = 0.0f;
+    self.coverVelocityX = self.coverVelocityY = 0.0f;
+    self.coverPressDepth = 0.0f;
+    self.coverRotating = NO;
+}
+
 - (void)encodeRenderCommands:(id<MTLRenderCommandEncoder>)encoder {
+    if (!self.coverBackdropPipeline || !self.coverFieldPipeline || !self.coverReliefPipeline) return;
     Uniforms uniforms = *(Uniforms *)self.uniformBuffer.contents;
     NSDictionary *parameters = self.renderParameters ?: @{};
     float dt = self.dotLastTime > 0.0f ? fmaxf(0.0f, fminf(uniforms.time.x - self.dotLastTime, 0.1f)) : 0.0f;
     self.dotLastTime = uniforms.time.x;
-    float low = fmaxf(uniforms.audioData[2].x, fmaxf(uniforms.audioData[4].x, uniforms.audioData[7].x));
-    float drums = fmaxf(uniforms.instrumentStems.z, fmaxf(low * 2.2f, uniforms.categoryFeatures.x));
-    float transient = fmaxf(uniforms.categoryFeatures.y, uniforms.activityMeter1.y);
-    float onset = fmaxf(0.0f, drums - self.previousDotDrums) * 3.8f;
-    onset = fmaxf(onset, fmaxf(0.0f, transient - self.previousDotTransient) * 2.8f);
-    onset = fmaxf(onset, fmaxf(0.0f, low - self.previousDotLow) * 7.0f);
-    float trigger = fmaxf(0.0f, [parameters[@"beatTrigger"] floatValue]);
-    float impact = fminf(1.0f, fmaxf(trigger, onset));
-    self.dotBeatEnvelope *= expf(-5.0f * dt);
+
+    CGSize container = self.actualContainerSize;
+    if (container.width < 1.0 || container.height < 1.0) container = self.metalView.bounds.size;
+    float aspect = (float)(container.width / MAX(container.height, 1.0));
+    float side = (float)MAX(container.width, container.height);
+    float mapX = side > 0.0f ? (float)(container.width / side) : 1.0f;
+    float mapY = side > 0.0f ? (float)(container.height / side) : 1.0f;
+    float shorter = (float)MIN(container.width, container.height);
+    float coverPoints = 0.68f * shorter;
+    CGSize drawable = self.metalView.drawableSize;
+    float drawableSide = (float)MAX(drawable.width, drawable.height);
+    // Mac spaces samples 2.8 pt apart on a large desktop cover, which is several
+    // hundred samples across the artwork. The same point spacing on a phone cover
+    // collapses to about 90 samples and turns the picture into coarse grains.
+    float coverPixels = side > 0.0f ? coverPoints / side * drawableSide : coverPoints;
+    NSUInteger columns = (NSUInteger)MAX(2, MIN(360, (NSInteger)llroundf(coverPixels / 2.6f)));
+    float pitch = columns > 0 ? coverPixels / (float)columns : 2.6f;
+
+    float low = fminf(1.0f, fmaxf(fmaxf(uniforms.audioData[2].y, uniforms.audioData[4].y), uniforms.audioData[7].y) * 2.8f);
+    float mid = fminf(1.0f, fmaxf(fmaxf(uniforms.audioData[16].y, uniforms.audioData[23].y), uniforms.audioData[31].y) * 2.5f);
+    float high = fminf(1.0f, fmaxf(fmaxf(uniforms.audioData[46].y, uniforms.audioData[59].y), uniforms.audioData[72].y) * 3.0f);
+    BOOL hasGuitar = [parameters[@"guitarStemControlEnabled"] boolValue];
+    BOOL hasPiano = [parameters[@"pianoStemControlEnabled"] boolValue];
+    BOOL hasDrums = [parameters[@"drumsStemControlEnabled"] boolValue];
+    BOOL hasOther = [parameters[@"otherStemControlEnabled"] boolValue];
+    float fftGuitar = fminf(fmaxf(mid * 0.55f + high * 0.85f, 0.0f), 1.0f);
+    float fftPiano = fminf(fmaxf(mid * 0.55f, 0.0f), 1.0f);
+    float fftOther = fminf(fmaxf(low * 0.62f + mid * 0.38f, 0.0f), 1.0f);
+    float guitar = fminf(fmaxf(hasGuitar ? [parameters[@"guitarStemControl"] floatValue] : fftGuitar, 0.0f), 1.0f);
+    float piano = fminf(fmaxf(hasPiano ? [parameters[@"pianoStemControl"] floatValue] : fftPiano, 0.0f), 1.0f);
+    float drums = fminf(fmaxf(hasDrums ? [parameters[@"drumsStemControl"] floatValue] : low, 0.0f), 1.0f);
+    float other = fminf(fmaxf(hasOther ? [parameters[@"otherStemControl"] floatValue] : fftOther, 0.0f), 1.0f);
+    guitar = fmaxf(guitar, fftGuitar * 0.72f);
+    piano = fmaxf(piano, fftPiano * 0.72f);
+    other = fmaxf(other, fftOther * 0.64f);
+    float follow = dt > 0.0f ? 1.0f - expf(-6.0f * dt) : 1.0f;
+    self.coverGuitarEnvelope += (guitar - self.coverGuitarEnvelope) * follow;
+    self.coverPianoEnvelope += (piano - self.coverPianoEnvelope) * follow;
+
+    self.dotBeatEnvelope *= expf(-1.8f * dt);
     self.dotBeatAge += dt;
-    if (impact > 0.16f && self.dotBeatAge > 0.14f) {
-        self.dotBeatEnvelope = fmaxf(self.dotBeatEnvelope, fmaxf(0.38f, impact));
+    float fftBassLevel = 0.0f;
+    float fftBassTransient = 0.0f;
+    for (NSUInteger i = 0; i < 12; ++i) {
+        fftBassLevel += uniforms.audioData[i].y;
+        fftBassTransient += uniforms.audioData[i].w;
+    }
+    fftBassLevel /= 12.0f;
+    fftBassTransient /= 12.0f;
+    float bassRise = fmaxf(0.0f, fftBassLevel - self.previousDotBass);
+    float drumRise = fmaxf(0.0f, drums - self.previousDotDrums);
+    float hitStrength = fmaxf(bassRise * 5.5f, drumRise * 3.2f);
+    if (!hasDrums && fftBassLevel > 0.045f &&
+        (fftBassTransient > 0.012f || bassRise > 0.025f)) {
+        hitStrength = fmaxf(hitStrength, fmaxf(0.42f, fftBassLevel * 9.0f));
+    }
+    float trigger = fmaxf(0.0f, [parameters[@"beatTrigger"] floatValue]);
+    if (trigger > 0.0f) self.renderParameters[@"beatTrigger"] = @0;
+    hitStrength = fmaxf(hitStrength, trigger);
+    if (hitStrength > 0.10f && self.dotBeatAge > 0.10f) {
+        self.dotBeatEnvelope = fmaxf(self.dotBeatEnvelope, fminf(1.0f, hitStrength));
         self.dotBeatAge = 0.0f;
     }
+    self.previousDotBass = fftBassLevel;
     self.previousDotDrums = drums;
-    self.previousDotTransient = transient;
-    self.previousDotLow = low;
-    if (trigger > 0.0f) self.renderParameters[@"beatTrigger"] = @0;
-    vector_float4 controls = {
-        parameters[@"dotCount"] ? [parameters[@"dotCount"] floatValue] : 112.0f,
-        parameters[@"dotSize"] ? [parameters[@"dotSize"] floatValue] : 0.50f,
-        parameters[@"audioSensitivity"] ? [parameters[@"audioSensitivity"] floatValue] : 1.0f,
-        parameters[@"dotGlow"] ? [parameters[@"dotGlow"] floatValue] : 0.22f
-    };
-    vector_float4 styleControls = {
-        parameters[@"dotStyle"] ? [parameters[@"dotStyle"] floatValue] : 0.0f,
-        self.dotBeatEnvelope, self.dotBeatAge, drums
-    };
-    if (self.coverDotPointPipeline) {
-        [encoder setRenderPipelineState:self.coverDotPointPipeline];
-        [encoder setVertexBytes:&uniforms length:sizeof(uniforms) atIndex:0];
-        [encoder setVertexBytes:&controls length:sizeof(controls) atIndex:1];
-        [encoder setVertexBytes:&styleControls length:sizeof(styleControls) atIndex:2];
-        [encoder setVertexTexture:self.coverTexture ?: self.coverPlaceholder atIndex:0];
-        NSUInteger grid = (NSUInteger)fmaxf(72.0f, fminf(144.0f, roundf(controls.x)));
-        [encoder drawPrimitives:MTLPrimitiveTypePoint vertexStart:0 vertexCount:grid * grid];
-        return;
+
+    if (!self.coverTouching) {
+        self.coverYaw += self.coverVelocityX * dt;
+        self.coverPitch += self.coverVelocityY * dt;
+        float decay = expf(-5.5f * dt);
+        self.coverVelocityX *= decay;
+        self.coverVelocityY *= decay;
     }
-    if (!self.coverDotPipeline) return;
-    [encoder setRenderPipelineState:self.coverDotPipeline];
-    [encoder setFragmentBytes:&uniforms length:sizeof(uniforms) atIndex:0];
-    [encoder setFragmentBytes:&controls length:sizeof(controls) atIndex:1];
-    [encoder setFragmentBytes:&styleControls length:sizeof(styleControls) atIndex:2];
-    [encoder setFragmentTexture:self.coverTexture ?: self.coverPlaceholder atIndex:0];
+    float pressTarget = (self.coverTouching && !self.coverRotating) ? 1.0f : 0.0f;
+    self.coverPressDepth += (pressTarget - self.coverPressDepth) * (1.0f - expf(-15.0f * fmaxf(dt, 0.001f)));
+    if (self.coverTouching) {
+        vector_float2 pointer = [self coverMacPointForViewPoint:self.coverLastTouch mapX:mapX mapY:mapY];
+        self.coverPointerX = pointer.x;
+        self.coverPointerY = pointer.y;
+    }
+
+    PhoneCoverAudio audio = {
+        uniforms.time.x, low, mid, high, fmaxf(aspect, 0.1f),
+        guitar, piano, drums, uniforms.time.x, other
+    };
+    AIColorConfiguration *moodSource = [MusicAIAnalyzer sharedAnalyzer].currentConfiguration;
+    vector_float3 pulse = moodSource ? moodSource.pulseRingColor : (vector_float3){0.80f, 0.30f, 1.0f};
+    vector_float3 beam = moodSource ? moodSource.volumetricBeamColor : (vector_float3){0.45f, 0.62f, 1.0f};
+    PhoneCoverMood mood = {
+        (vector_float4){0.07f, 0.10f, 0.16f, 1.0f},
+        (vector_float4){beam.x, beam.y, beam.z, 1.0f},
+        (vector_float4){pulse.x, pulse.y, pulse.z, 1.0f}
+    };
+    NSUInteger fieldColumns = 256;
+    NSUInteger fieldRows = (NSUInteger)MAX(1, (NSInteger)llroundf((float)fieldColumns / fmaxf(aspect, 0.1f)));
+    float visibleWidth = (float)drawable.width * mapX;
+    float visibleHeight = (float)drawable.height * mapY;
+    vector_float4 fieldControls = {
+        (float)fieldColumns, 1.0f, self.coverTexture ? 1.0f : 0.0f,
+        fminf(visibleWidth, visibleHeight)
+    };
+    vector_float4 fieldStyle = {0.0f, self.dotBeatEnvelope, self.dotBeatAge, 1.0f};
+    vector_float4 screenMap = {mapX, mapY, (float)fieldRows, 0.0f};
+    id<MTLTexture> texture = self.coverTexture ?: self.coverPlaceholder;
+
+    [encoder setRenderPipelineState:self.coverBackdropPipeline];
     [encoder drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:3];
+
+    [encoder setRenderPipelineState:self.coverFieldPipeline];
+    [encoder setVertexBytes:&audio length:sizeof(audio) atIndex:0];
+    [encoder setVertexBytes:&fieldControls length:sizeof(fieldControls) atIndex:1];
+    [encoder setVertexBytes:&fieldStyle length:sizeof(fieldStyle) atIndex:2];
+    [encoder setVertexBytes:&mood length:sizeof(mood) atIndex:3];
+    [encoder setVertexBytes:&screenMap length:sizeof(screenMap) atIndex:4];
+    [encoder setVertexTexture:texture atIndex:0];
+    [encoder drawPrimitives:MTLPrimitiveTypePoint vertexStart:0 vertexCount:fieldColumns * fieldRows];
+
+    float coverHeight = 0.68f * fminf(fmaxf(aspect, 0.1f), 1.0f);
+    vector_float4 reliefControls = {(float)columns, (float)columns, pitch * 0.90f, self.coverTexture ? 1.0f : 0.0f};
+    vector_float4 layout = {coverHeight / fmaxf(aspect, 0.1f), coverHeight, 1.0f, 0.0f};
+    float pointerForce = self.coverTouching
+        ? (self.coverRotating ? 0.22f : -self.coverPressDepth * 1.22f)
+        : 0.0f;
+    PhoneCoverStageUniforms stage;
+    stage.rotation = (vector_float4){self.coverYaw, self.coverPitch, 1.0f, 0.0f};
+    stage.pointer = (vector_float4){self.coverTouching ? self.coverPointerX : -10.0f,
+                                    self.coverTouching ? self.coverPointerY : -10.0f,
+                                    pointerForce, 0.30f};
+    stage.layout = (vector_float4){fmaxf(aspect, 0.1f), coverHeight, 1.0f, 3.2f};
+    stage.audio = (vector_float4){self.coverGuitarEnvelope, self.coverPianoEnvelope, other, high};
+    stage.viewport = (vector_float4){(float)drawable.width, (float)drawable.height,
+                                     (float)(drawable.width / MAX(self.metalView.bounds.size.width, 1.0)),
+                                     uniforms.time.x};
+    stage.screenMap = (vector_float4){mapX, mapY, 0.0f, 0.0f};
+    if (self.coverTexture) {
+        [encoder setRenderPipelineState:self.coverReliefPipeline];
+        [encoder setVertexBytes:&audio length:sizeof(audio) atIndex:0];
+        [encoder setVertexBytes:&reliefControls length:sizeof(reliefControls) atIndex:1];
+        [encoder setVertexBytes:&mood length:sizeof(mood) atIndex:3];
+        [encoder setVertexBytes:&layout length:sizeof(layout) atIndex:4];
+        [encoder setVertexBytes:&stage length:sizeof(stage) atIndex:5];
+        [encoder setVertexTexture:texture atIndex:0];
+        [encoder drawPrimitives:MTLPrimitiveTypePoint vertexStart:0 vertexCount:columns * columns];
+    }
 }
 
 @end

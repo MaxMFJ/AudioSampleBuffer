@@ -183,8 +183,7 @@
     // 深空蜂巢的齿轮用于切换吉他控制数据源。
     BOOL shouldShowSettings = (_effectInfo.type == VisualEffectTypeGalaxy || 
                                _effectInfo.type == VisualEffectTypeCyberPunk ||
-                               _effectInfo.type == VisualEffectTypeCellularWormhole ||
-                               _effectInfo.type == VisualEffectTypeCoverDotMatrix);
+                               _effectInfo.type == VisualEffectTypeCellularWormhole);
     _configButton.hidden = !shouldShowSettings;
 }
 
@@ -324,18 +323,19 @@
 }
 
 - (void)drawCoverDotMatrixPreview:(CGContextRef)context size:(CGSize)size {
-    CGContextSetRGBFillColor(context, 0.012, 0.014, 0.022, 1.0);
+    CGContextSetRGBFillColor(context, 0.006, 0.009, 0.025, 1.0);
     CGContextFillRect(context, (CGRect){CGPointZero, size});
-    CGFloat cell = size.width / 12.0;
-    for (NSInteger y = 0; y < 12; y++) {
-        for (NSInteger x = 0; x < 12; x++) {
-            CGFloat hue = (CGFloat)(x + y * 0.45) / 16.0;
-            UIColor *color = [UIColor colorWithHue:hue saturation:0.72 brightness:0.38 + 0.5 * (CGFloat)y / 12.0 alpha:0.95];
-            CGContextSetFillColorWithColor(context, color.CGColor);
-            CGFloat radius = cell * (0.28 + 0.08 * sin((x + y) * 0.7));
-            CGContextFillEllipseInRect(context, CGRectMake(x * cell + (cell-radius)*0.5,
-                                                            y * cell + (cell-radius)*0.5,
-                                                            radius, radius));
+    CGFloat cell = size.width / 18.0;
+    for (NSInteger y = 0; y < 18; y++) {
+        for (NSInteger x = 0; x < 18; x++) {
+            CGFloat cx = (x + 0.5) * cell;
+            CGFloat cy = (y + 0.5) * cell;
+            BOOL inside = cx > size.width * 0.22 && cx < size.width * 0.78 &&
+                          cy > size.height * 0.22 && cy < size.height * 0.78;
+            CGFloat shade = inside ? 0.28 + 0.55 * ((CGFloat)(x + y) / 34.0) : 0.10;
+            CGContextSetRGBFillColor(context, shade * 0.72, shade * 0.78, shade, inside ? 0.95 : 0.35);
+            CGFloat radius = cell * (inside ? 0.42 : 0.22);
+            CGContextFillEllipseInRect(context, CGRectMake(cx - radius * 0.5, cy - radius * 0.5, radius, radius));
         }
     }
 }

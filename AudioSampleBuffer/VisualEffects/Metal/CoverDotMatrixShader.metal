@@ -1,185 +1,230 @@
 #include <metal_stdlib>
-#include "ShaderCommon.metal"
 using namespace metal;
 
-struct CoverDotMatrixControls {
-    float4 values; // grid count, dot size, audio sensitivity, halo strength
+// Phone port of the Mac cover-dot stage. Screen-space math matches the desktop
+// shaders; screenMap then places that frame inside the centered square drawable.
+struct PhoneCoverAudio {
+    float time; float bass; float mid; float treble; float aspectRatio;
+    float guitar; float piano; float drums; float playbackTime; float other;
 };
-
-vertex RasterizerData coverDotMatrixVertex(uint id [[vertex_id]]) {
-    constexpr float2 positions[3] = {float2(-1.0, -1.0), float2(3.0, -1.0), float2(-1.0, 3.0)};
-    constexpr float2 uvs[3] = {float2(0.0, 1.0), float2(2.0, 1.0), float2(0.0, -1.0)};
-    RasterizerData out;
-    out.position = float4(positions[id], 0.0, 1.0);
-    out.texCoord = uvs[id];
-    out.color = 1.0;
-    return out;
-}
-
-constexpr sampler coverDotSampler(coord::normalized, address::clamp_to_edge, filter::linear);
-
-fragment float4 coverDotMatrixFragment(RasterizerData in [[stage_in]],
-                                       constant Uniforms &u [[buffer(0)]],
-                                       constant CoverDotMatrixControls &controls [[buffer(1)]],
-                                       constant float4 &styleControls [[buffer(2)]],
-                                       texture2d<float> cover [[texture(0)]]) {
-    float2 uv = in.texCoord;
-    float time = u.time.x;
-    int style = clamp(int(round(styleControls.x)), 0, 4);
-    float sensitivity = clamp(controls.values.z, 0.35, 1.8);
-    // Fall back to the live spectrum when separated stems are unavailable;
-    // otherwise a newly selected effect can look almost frozen.
-    float audioBass = saturate(max(max(u.audioData[2].y, u.audioData[4].y), u.audioData[7].y) * 2.8);
-    float audioMid = saturate(max(max(u.audioData[16].y, u.audioData[23].y), u.audioData[31].y) * 2.5);
-    float audioTreble = saturate(max(max(u.audioData[46].y, u.audioData[59].y), u.audioData[72].y) * 3.0);
-    float audioTransient = saturate(max(max(u.audioData[2].w, u.audioData[16].w), u.audioData[46].w) * 3.5);
-    float guitar = saturate(max(u.instrumentStems.x, audioTreble * 0.72) * sensitivity);
-    float piano = saturate(max(u.instrumentStems.y, audioMid * 0.78) * sensitivity);
-    float drums = saturate(max(u.instrumentStems.z, audioBass * 0.90) * sensitivity);
-    float kick = max(max(drums, audioTransient * 0.72), max(audioBass * 0.60, saturate(u.categoryFeatures.y) * 0.78));
-    float energy = saturate((audioBass + audioMid + audioTreble) * 0.34);
-
-    // Keep every dot and every cover sample anchored to the same UV. Styles
-    // change only the brightness/size wave over the fixed dot field.
-    float2 centered = uv - 0.5;
-    float coverRadius = length(centered);
-    float angle = atan2(centered.y, centered.x);
-    float grid = clamp(controls.values.x, 72.0, 144.0);
-    float2 cellUV = fract(uv * grid) - 0.5;
-    float2 cellCenter = (floor(uv * grid) + 0.5) / grid;
-    float2 coverUV = clamp(cellCenter, 0.0, 1.0);
-    float3 sampled = cover.sample(coverDotSampler, coverUV).rgb;
-    float luma = dot(sampled, float3(0.2126, 0.7152, 0.0722));
-
-    float phase;
-    if (style == 1) { // Tunnel-like concentric brightness wave.
-        phase = coverRadius * 34.0 - time * (2.1 + kick * 1.4);
-    } else if (style == 2) { // Orbiting spiral wave, dots stay in place.
-        phase = angle * 5.0 + coverRadius * 24.0 - time * (1.25 + guitar * 1.1);
-    } else if (style == 3) { // Beat-triggered radial wave.
-        phase = coverRadius * 48.0 + sin(angle * 4.0 - time) * 2.2 - time * (1.8 + drums * 2.0);
-    } else if (style == 4) { // Record-like grooves made by brightness only.
-        phase = coverRadius * 86.0 + sin(angle * 3.0 - time * 0.7) * 1.6 - time * 0.45;
-    } else { // Silk-like diagonal wave across the fixed cover.
-        phase = (uv.y * 0.82 + uv.x * 0.28) * 30.0 - time * (1.65 + piano * 1.2);
-    }
-    float wave = 0.5 + 0.5 * sin(phase);
-    wave = saturate(wave + kick * 0.20 + energy * 0.08);
-
-    float cellAngle = atan2(cellUV.y, cellUV.x);
-    float radial = length(cellUV);
-    float directional = 0.5 + 0.5 * sin(cellAngle * 3.0 + time * 0.7 + guitar * 2.4);
-    float dotRadius = controls.values.y * (0.72 + luma * 0.22);
-    dotRadius *= 0.60 + wave * 0.78 + kick * (0.12 + 0.16 * directional) + piano * 0.08;
-    float edge = 1.0 - smoothstep(dotRadius - 0.035, dotRadius + 0.018, radial);
-    float halo = exp(-max(radial - dotRadius, 0.0) * 42.0) * (controls.values.w + kick * 0.18);
-    float visibility = 0.18 + 0.82 * smoothstep(0.08, 0.80, wave + kick * 0.16);
-    edge *= visibility;
-    halo *= visibility;
-
-    float3 stemTint = u.stemPalette[0].rgb * guitar * 0.16
-                    + u.stemPalette[1].rgb * piano * 0.14
-                    + u.stemPalette[2].rgb * drums * 0.19;
-    float3 color = sampled * (0.34 + wave * 1.05 + luma * 0.16 + piano * 0.14 + kick * 0.24);
-    color += stemTint * (0.22 + luma * 0.26);
-    color += sampled * halo;
-    color *= edge;
-
-    float background = (0.008 + kick * 0.012) * (1.0 - edge);
-    float3 bgTint = mix(float3(0.012, 0.015, 0.024), u.stemPalette[2].rgb * 0.10, kick);
-    color += bgTint * background;
-    float alpha = max(edge, background);
-    return float4(color, alpha);
-}
-
-// Every style uses one real point per fixed cover sample. Only the point's
-// position, size and light change; the source image is never warped.
-struct CoverDotParticle {
+struct PhoneCoverMood {
+    float4 atmosphere;
+    float4 volumetricBeam;
+    float4 pulseRing;
+};
+struct PhoneCoverParticle {
     float4 position [[position]];
     float pointSize [[point_size]];
     float3 color;
     float opacity;
     float height;
 };
+struct PhoneCoverStage {
+    float4 rotation; // yaw, pitch, zoom, roll
+    float4 pointer;  // screen NDC x/y, force, radius
+    float4 layout;   // screen aspect, cover height, reserved, camera distance
+    float4 audio;    // guitar, piano, other, treble
+    float4 viewport; // drawable size, pixel ratio, time
+    float4 screenMap; // visible width/square, visible height/square
+};
 
-vertex CoverDotParticle coverDotParticleVertex(uint id [[vertex_id]],
-                                               constant Uniforms &u [[buffer(0)]],
-                                               constant CoverDotMatrixControls &controls [[buffer(1)]],
-                                               constant float4 &styleControls [[buffer(2)]],
-                                               texture2d<float> cover [[texture(0)]]) {
-    float grid = clamp(round(controls.values.x), 72.0, 144.0);
+constexpr sampler phoneCoverSampler(coord::normalized, address::clamp_to_edge, filter::linear);
+
+float3 phoneCoverDisplayColor(float3 linearColor) {
+    return select(1.055 * pow(max(linearColor, float3(0.0)), float3(1.0 / 2.4)) - 0.055,
+                  linearColor * 12.92, linearColor <= 0.0031308);
+}
+
+float phoneCoverHeight(float aspect) {
+    // Landscape uses the Mac 0.68 screen-height square. Portrait uses 0.68 of
+    // the shorter side so the same square stays fully on screen.
+    return 0.68 * min(max(aspect, 0.1), 1.0);
+}
+
+vertex float4 phoneCoverBackdropVertex(uint id [[vertex_id]]) {
+    float2 positions[3] = {float2(-1.0, -1.0), float2(3.0, -1.0), float2(-1.0, 3.0)};
+    return float4(positions[id], 0.0, 1.0);
+}
+
+fragment float4 phoneCoverBackdropFragment() {
+    return float4(0.006, 0.009, 0.025, 1.0);
+}
+
+vertex PhoneCoverParticle phoneCoverFieldVertex(
+    uint id [[vertex_id]],
+    constant PhoneCoverAudio &audio [[buffer(0)]],
+    constant float4 &controls [[buffer(1)]],
+    constant float4 &styleControls [[buffer(2)]],
+    constant PhoneCoverMood &mood [[buffer(3)]],
+    constant float4 &screenMap [[buffer(4)]],
+    texture2d<float> cover [[texture(0)]]) {
+    float grid = clamp(round(controls.x), 72.0, 384.0);
     uint gridCount = uint(grid);
-    float2 uv = (float2(float(id % gridCount), float(id / gridCount)) + 0.5) / grid;
-    float3 coverColor = cover.sample(coverDotSampler, uv, level(0.0)).rgb;
-    float sensitivity = clamp(controls.values.z, 0.35, 1.8);
-    float low = saturate(max(max(max(u.audioData[2].y, u.audioData[4].y), u.audioData[7].y) * 2.8,
-                             u.categoryFeatures.x));
-    float middle = saturate(max(max(u.audioData[16].y, u.audioData[23].y), u.audioData[31].y) * 2.5);
-    float high = saturate(max(max(u.audioData[46].y, u.audioData[59].y), u.audioData[72].y) * 3.0);
-    float piano = saturate(max(u.instrumentStems.y, middle * 0.8) * sensitivity);
-    float guitar = saturate(max(u.instrumentStems.x, high * 0.75) * sensitivity);
+    float screenAspect = max(audio.aspectRatio, 0.1);
+    uint gridRows = uint(max(1.0, screenMap.z));
+    float2 uv = float2((float(id % gridCount) + 0.5) / grid,
+                       (float(id / gridCount) + 0.5) / float(gridRows));
+    float coverHeight = phoneCoverHeight(screenAspect);
+    float coverWidth = coverHeight / screenAspect;
+    float2 coverSize = float2(coverWidth, coverHeight);
+    float2 coverOrigin = (1.0 - coverSize) * 0.5;
+    float2 coverUV = (uv - coverOrigin) / max(coverSize, float2(0.001));
+    bool insideCover = controls.z > 0.5 && all(coverUV >= 0.0) && all(coverUV <= 1.0);
+    float2 visualUV = insideCover ? coverUV : uv;
+    float middle = saturate(audio.mid);
+    float high = saturate(audio.treble);
+    float piano = saturate(max(audio.piano, middle * 0.8 * controls.z));
+    float guitar = saturate(max(audio.guitar, high * 0.75 * controls.z));
     float beat = saturate(styleControls.y);
-    float beatAge = max(styleControls.z, 0.0);
-    float t = u.time.x;
-    float2 centered = uv - 0.5;
-    float radius = length(centered);
-    float angle = atan2(centered.y, centered.x);
-    int style = clamp(int(round(styleControls.x)), 0, 4);
-
-    // Piano rolls through the middle and guitar excites small local ripples.
-    // Drum hits are reserved for a brightness pulse below, so they do not
-    // disturb the movement already driven by the other stems.
-    float bassWave = sin(uv.x * 8.0 - uv.y * 5.0 - t * 1.8);
-    float pianoWave = sin(uv.x * 21.0 + t * 2.4) * cos(uv.y * 17.0 - t * 1.7);
-    float guitarWave = sin(uv.x * 42.0 + uv.y * 35.0 + t * 5.2);
-    if (style == 1) { // radial silk folds
-        bassWave = sin(radius * 29.0 - t * 2.0);
-        pianoWave = sin(radius * 45.0 - t * 2.7 + angle * 2.0);
-        guitarWave = sin(angle * 9.0 + radius * 68.0 + t * 4.2);
-    } else if (style == 2) { // tunnel: rings travel through the point field
-        bassWave = sin(radius * 38.0 - t * 3.0);
-        pianoWave = sin(radius * 54.0 + angle * 3.0 - t * 2.5);
-        guitarWave = sin(angle * 12.0 - radius * 84.0 + t * 4.7);
-    } else if (style == 3) { // orbital spiral
-        bassWave = sin(angle * 3.0 + radius * 24.0 - t * 1.9);
-        pianoWave = sin(angle * 5.0 - radius * 36.0 + t * 2.1);
-        guitarWave = sin(angle * 11.0 + radius * 72.0 - t * 4.1);
-    } else if (style == 4) { // vinyl grooves
-        bassWave = sin(radius * 52.0 - t * 1.3);
-        pianoWave = sin(radius * 77.0 + angle * 1.4 - t * 1.6);
-        guitarWave = sin(radius * 109.0 - angle * 5.0 + t * 3.6);
-    }
-    float idleWave = sin(uv.x * 9.0 + uv.y * 4.0 - t * 0.72) * 0.035;
-    float ringWidth = style == 4 ? 0.055 : 0.09;
-    float ringFront = beatAge * (style == 2 ? 0.94 : 0.78);
-    float beatRing = beat * exp(-pow((radius - ringFront) / ringWidth, 2.0));
-    float height = idleWave + pianoWave * piano * 0.21 + guitarWave * guitar * 0.11;
-    float crest = saturate(0.5 + height * 1.4);
-
+    float pianoWave = sin(visualUV.x * 21.0 + audio.time * 2.4) * cos(visualUV.y * 17.0 - audio.time * 1.7);
+    float guitarWave = sin(visualUV.x * 42.0 + visualUV.y * 35.0 + audio.time * 5.2);
+    float otherDrive = saturate(audio.other);
+    float otherWave = sin(visualUV.x * 12.0 - visualUV.y * 8.0 + audio.time * 2.8)
+                    * cos(visualUV.y * 15.0 + audio.time * 1.9);
+    float idleWave = sin(visualUV.x * 9.0 + visualUV.y * 4.0 - audio.time * 0.72) * 0.035;
+    float2 coverEdge = max(abs(coverUV - 0.5) - 0.5, 0.0);
+    float outsideDistance = length(coverEdge) * coverHeight;
+    float waveDistance = 0.025 + min(styleControls.z, 0.65) * 0.90;
+    float wave = exp(-pow((outsideDistance - waveDistance) / 0.11, 2.0));
+    float sparkle = fract(sin(dot(floor(uv * float2(grid, float(gridRows))), float2(12.9898, 78.233))) * 43758.5453);
+    float outerBeat = insideCover ? 0.0 : beat * wave * smoothstep(0.30, 0.80, sparkle);
+    float height = idleWave + pianoWave * piano * 0.23 + guitarWave * guitar * 0.16
+                 + otherWave * otherDrive * 0.075;
     float2 clip = float2(uv.x * 2.0 - 1.0, 1.0 - uv.y * 2.0);
     clip += height * float2(0.018, 0.064);
-    float pitch = u.resolution.x / grid;
-    float size = pitch * controls.values.y * 2.25 * (0.88 + height * 0.50);
+    clip *= max(screenMap.xy, float2(0.001));
+    float pitch = controls.w / grid;
+    float size = min(pitch * controls.y * 0.82, 8.0) * (0.98 + height * 0.14);
 
-    CoverDotParticle out;
+    PhoneCoverParticle out;
     out.position = float4(clip, 0.0, 1.0);
-    out.pointSize = clamp(size, 1.5, 12.0);
-    float3 stemTint = u.stemPalette[0].rgb * guitar * 0.08
-                    + u.stemPalette[1].rgb * piano * 0.06;
-    out.color = coverColor * (0.82 + crest * 0.34) + stemTint
-              + beatRing * float3(0.72, 0.68, 0.58);
-    out.opacity = 0.62 + crest * 0.28;
+    out.pointSize = clamp(size, 1.5, 8.0);
+    float3 fieldColor = float3(0.048, 0.060, 0.086);
+    out.color = fieldColor + outerBeat * mood.pulseRing.rgb;
+    // Keep a dim underlay below cover particles so the square render target
+    // cannot show through their gaps. Outside it, retain the original response.
+    out.opacity = insideCover ? 0.38 : 0.11 + outerBeat * 0.73;
     out.height = height;
     return out;
 }
 
-fragment float4 coverDotParticleFragment(CoverDotParticle in [[stage_in]],
-                                         float2 pointCoord [[point_coord]]) {
+fragment float4 phoneCoverFieldFragment(PhoneCoverParticle in [[stage_in]],
+                                        float2 pointCoord [[point_coord]]) {
     float distanceFromCenter = length(pointCoord - 0.5) * 2.0;
-    float core = 1.0 - smoothstep(0.66, 0.96, distanceFromCenter);
-    float glow = exp(-distanceFromCenter * distanceFromCenter * 4.8);
-    float alpha = saturate(core * 0.94 + glow * 0.06) * in.opacity;
+    float core = 1.0 - smoothstep(0.72, 0.98, distanceFromCenter);
+    float glow = exp(-distanceFromCenter * distanceFromCenter * 7.0);
+    float alpha = saturate(core * 0.98 + glow * 0.06) * in.opacity;
     if (alpha < 0.015) discard_fragment();
-    float3 color = in.color * (0.88 + saturate(in.height + 0.5) * 0.24);
-    return float4(color, alpha);
+    return float4(in.color, alpha);
+}
+
+float3 phoneStageRotate(float3 p, constant PhoneCoverStage &stage) {
+    float yaw = stage.rotation.x, pitch = stage.rotation.y, roll = stage.rotation.w;
+    p = float3(p.x * cos(yaw) + p.z * sin(yaw), p.y,
+               -p.x * sin(yaw) + p.z * cos(yaw));
+    p = float3(p.x, p.y * cos(pitch) - p.z * sin(pitch),
+               p.y * sin(pitch) + p.z * cos(pitch));
+    return float3(p.x * cos(roll) - p.y * sin(roll),
+                  p.x * sin(roll) + p.y * cos(roll), p.z);
+}
+
+float4 phoneStageProject(float3 p, constant PhoneCoverStage &stage) {
+    float3 rotated = phoneStageRotate(p, stage);
+    float camera = stage.layout.w;
+    float2 scale = float2(stage.layout.y * 2.0 / stage.layout.x, stage.layout.y * 2.0);
+    float2 projected = rotated.xy * scale * camera / max(camera - rotated.z, 0.3);
+    float2 delta = (projected - stage.pointer.xy) * float2(stage.layout.x, 1.0);
+    float proximity = saturate(1.0 - length(delta) / max(stage.pointer.w, 0.01));
+    float hoverBulge = proximity * proximity * max(stage.pointer.z, 0.0);
+    float pressDent = proximity * proximity * max(-stage.pointer.z, 0.0);
+    rotated.z += hoverBulge * 0.11 - pressDent * 0.42;
+    rotated.xy += delta * (hoverBulge * 0.012 - pressDent * 0.035);
+    rotated *= stage.rotation.z;
+    float w = max(camera - rotated.z, 0.3);
+    float4 position = float4(rotated.xy * scale * camera, w * 0.5, w);
+    position.xy *= max(stage.screenMap.xy, float2(0.001));
+    return position;
+}
+
+vertex PhoneCoverParticle phoneCoverReliefVertex(
+    uint id [[vertex_id]],
+    constant PhoneCoverAudio &audio [[buffer(0)]],
+    constant float4 &controls [[buffer(1)]],
+    constant PhoneCoverMood &mood [[buffer(3)]],
+    constant float4 &layout [[buffer(4)]],
+    constant PhoneCoverStage &stage [[buffer(5)]],
+    texture2d<float> cover [[texture(0)]]) {
+    uint columns = uint(controls.x);
+    uint rows = uint(controls.y);
+    float2 uv = (float2(float(id % columns), float(id / columns)) + 0.5)
+              / float2(float(columns), float(rows));
+    float2 discUV = (uv - 0.5) * 2.0;
+    float radius = length(discUV);
+    bool squareCover = layout.z > 0.5;
+    float edgeDistance = squareCover ? max(abs(discUV.x), abs(discUV.y)) : radius;
+    float imageAspect = float(cover.get_width()) / max(float(cover.get_height()), 1.0);
+    float2 sampleUV = uv;
+    if (imageAspect > 1.0) sampleUV.x = (uv.x - 0.5) / imageAspect + 0.5;
+    else sampleUV.y = (uv.y - 0.5) * imageAspect + 0.5;
+    float3 linearColor = cover.sample(phoneCoverSampler, sampleUV, level(0.0)).rgb;
+    float3 color = phoneCoverDisplayColor(linearColor);
+
+    float2 step = 2.0 / float2(float(columns), float(rows));
+    float3 neighborhood = linearColor * 0.4
+        + (cover.sample(phoneCoverSampler, sampleUV + float2(step.x, 0), level(0.0)).rgb
+        +  cover.sample(phoneCoverSampler, sampleUV - float2(step.x, 0), level(0.0)).rgb
+        +  cover.sample(phoneCoverSampler, sampleUV + float2(0, step.y), level(0.0)).rgb
+        +  cover.sample(phoneCoverSampler, sampleUV - float2(0, step.y), level(0.0)).rgb) * 0.15;
+    float luminance = dot(phoneCoverDisplayColor(neighborhood), float3(0.2126, 0.7152, 0.0722));
+    float edgeGuard = 1.0 - smoothstep(0.965, 1.0, edgeDistance);
+    color = controls.w > 0.5 ? color : mix(float3(0.07, 0.10, 0.16), mood.atmosphere.rgb, 0.18);
+    float rim = squareCover ? 0.0 : exp(-pow((radius - 0.975) / 0.012, 2.0));
+    color += mood.volumetricBeam.rgb * rim * (0.055 + saturate(audio.bass) * 0.07);
+    float z = (luminance - 0.5) * 0.12 * edgeGuard;
+    float3 point = float3(discUV.x * 0.5, -discUV.y * 0.5, z);
+    // Stems lead, but live FFT keeps the same waves moving when a stem is quiet.
+    // The stem curve reaches full strength earlier than the desktop 0.42 gate.
+    float fftGuitar = smoothstep(0.02, 0.42, saturate(audio.treble));
+    float fftPiano = smoothstep(0.02, 0.40, saturate(audio.mid));
+    float fftOther = smoothstep(0.02, 0.38, saturate(max(audio.bass, audio.mid * 0.45)));
+    float guitarDrive = squareCover ? max(smoothstep(0.0, 0.16, saturate(stage.audio.x)), fftGuitar * 0.82) : 0.0;
+    float pianoDrive = squareCover ? max(smoothstep(0.0, 0.14, saturate(stage.audio.y)), fftPiano * 0.72) : 0.0;
+    float otherDrive = squareCover ? max(smoothstep(0.0, 0.12, saturate(stage.audio.z)), fftOther * 0.68) : 0.0;
+    float stringAxis = uv.x * 0.88 + uv.y * 0.46;
+    float stringPhase = stringAxis * 34.0 - stage.viewport.w * 6.0
+                      + sin(uv.x * 8.0 - stage.viewport.w * 0.65) * 0.65;
+    float stringLane = exp(-pow((uv.y - 0.50
+                      - sin(uv.x * 5.0 - stage.viewport.w * 0.48) * 0.10) / 0.34, 2.0));
+    float stringWave = sin(stringPhase) + 0.22 * sin(stringPhase * 1.72 + uv.x * 5.0);
+    float pianoWave = sin(uv.y * 14.0 + stage.viewport.w * 1.7);
+    float otherWave = sin((uv.x * 0.68 + uv.y * 0.32) * 22.0 - stage.viewport.w * 2.2)
+                    * cos(uv.y * 10.0 + stage.viewport.w * 1.25);
+    point.z += guitarDrive * stringLane * stringWave * 0.085
+             + pianoDrive * pianoWave * 0.022
+             + otherDrive * otherWave * 0.040;
+    PhoneCoverParticle out;
+    out.position = phoneStageProject(point, stage);
+    out.pointSize = max(1.0, controls.z * (squareCover ? stage.layout.w / out.position.w : 1.0));
+    float resonanceLight = guitarDrive * stringLane
+        * (0.5 + 0.5 * saturate(stringWave * 0.62 + 0.5)) * 0.30;
+    float pianoLight = pianoDrive * (0.5 + 0.5 * pianoWave) * 0.06;
+    float otherLight = otherDrive * (0.5 + 0.5 * otherWave) * 0.16;
+    out.color = clamp(((color - 0.5) * 1.08 + 0.5)
+                * (1.0 + resonanceLight + pianoLight + otherLight), 0.0, 1.0);
+    out.opacity = 0.98;
+    if (!squareCover) {
+        out.opacity *= 1.0 - smoothstep(0.965, 1.0, radius);
+        if (radius > 1.0) out.opacity = 0.0;
+    }
+    out.height = z;
+    return out;
+}
+
+fragment float4 phoneCoverReliefFragment(PhoneCoverParticle in [[stage_in]],
+                                         float2 pointCoord [[point_coord]]) {
+    float r = length(pointCoord - 0.5) * 2.0;
+    float feather = clamp(fwidth(r), 0.035, 0.12);
+    float alpha = (1.0 - smoothstep(1.0 - feather, 1.0, r)) * in.opacity;
+    if (alpha < 0.01) discard_fragment();
+    return float4(in.color, alpha);
 }

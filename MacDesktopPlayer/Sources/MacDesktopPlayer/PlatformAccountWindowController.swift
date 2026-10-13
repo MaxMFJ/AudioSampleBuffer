@@ -35,7 +35,7 @@ private final class PlatformAccountView: NSView {
 
         let title = NSTextField(labelWithString: "第三方平台账号")
         title.font = .systemFont(ofSize: 24, weight: .semibold)
-        let subtitle = NSTextField(labelWithString: "登录状态保存在本机 Bridge；不会上传平台 Cookie。")
+        let subtitle = NSTextField(labelWithString: "登录凭据保存在 macOS 钥匙串；不会上传平台 Cookie。")
         subtitle.font = .systemFont(ofSize: 12)
         subtitle.textColor = .secondaryLabelColor
 
@@ -121,22 +121,8 @@ private final class PlatformAccountView: NSView {
     }
 
     @objc private func refreshAll() {
-        status.stringValue = "正在启动并读取本机 Bridge…"
-        Task { [weak self] in
-            let result = await PlatformBridgeRuntime.shared.ensureRunning()
-            guard let self else { return }
-            switch result {
-            case .success:
-                self.status.stringValue = "Bridge 已连接，正在读取平台状态…"
-                for provider in PlatformProvider.allCases { self.refresh(provider) }
-            case .failure(let error):
-                self.status.stringValue = error.localizedDescription
-                for provider in PlatformProvider.allCases {
-                    self.rows[provider]?.stringValue = "Bridge 未启动"
-                    self.rows[provider]?.textColor = .systemOrange
-                }
-            }
-        }
+        status.stringValue = "正在读取平台账号状态…"
+        for provider in PlatformProvider.allCases { refresh(provider) }
     }
 
     private func refresh(_ provider: PlatformProvider) {
@@ -148,10 +134,10 @@ private final class PlatformAccountView: NSView {
                 let account = info.nickname ?? info.userID ?? "已连接"
                 self.rows[provider]?.stringValue = info.loggedIn ? "已登录 · \(account)" : "未登录"
                 self.rows[provider]?.textColor = info.loggedIn ? .systemGreen : .secondaryLabelColor
-                self.status.stringValue = "状态来自本机 Bridge"
+                self.status.stringValue = info.message ?? "凭据保存在本机钥匙串"
             } catch {
                 guard let self else { return }
-                self.rows[provider]?.stringValue = "Bridge 未连接"
+                self.rows[provider]?.stringValue = "读取失败"
                 self.rows[provider]?.textColor = .systemOrange
                 self.status.stringValue = error.localizedDescription
             }

@@ -1,33 +1,11 @@
 #!/bin/sh
 set -eu
 cd "$(dirname "$0")"
-BRIDGE_DIR="Sources/MacDesktopPlayer/Bridge"
-BRIDGE_DEPENDENCY="$BRIDGE_DIR/node_modules/NeteaseCloudMusicApi/main.js"
-if [ ! -f "$BRIDGE_DEPENDENCY" ]; then
-  echo "Installing Mineradio Bridge dependencies..."
-  (cd "$BRIDGE_DIR" && npm ci --omit=dev --ignore-scripts)
-fi
-if [ ! -x "$BRIDGE_DIR/runtime/node" ]; then
-  NODE_RUNTIME="$(command -v node || true)"
-  if [ -z "$NODE_RUNTIME" ]; then
-    echo "Node.js is required to package the local Bridge" >&2
-    exit 1
-  fi
-  mkdir -p "$BRIDGE_DIR/runtime"
-  cp "$NODE_RUNTIME" "$BRIDGE_DIR/runtime/node"
-  chmod +x "$BRIDGE_DIR/runtime/node"
-fi
-NODE_LIBRARY_NAME="$(otool -L "$BRIDGE_DIR/runtime/node" | awk '/libnode\..*dylib/{print $1; exit}' | xargs basename)"
-NODE_LIBRARY=""
-if [ -n "$NODE_LIBRARY_NAME" ]; then
-  NODE_REAL="$(realpath "$(command -v node)")"
-  NODE_LIBRARY="$(cd "$(dirname "$NODE_REAL")/.." && pwd)/lib/$NODE_LIBRARY_NAME"
-fi
-if [ -n "$NODE_LIBRARY" ] && [ -f "$NODE_LIBRARY" ] && [ ! -f "$BRIDGE_DIR/runtime/$NODE_LIBRARY_NAME" ]; then
-  cp "$NODE_LIBRARY" "$BRIDGE_DIR/runtime/$NODE_LIBRARY_NAME"
-fi
 swift build -c release
 BIN_DIR="$(swift build -c release --show-bin-path)"
+# Remove a stale Bridge bundle left by older builds. The provider clients now
+# run in Swift, and the source Bridge remains in the repository for reference.
+rm -rf "$BIN_DIR/MacDesktopPlayer_MacDesktopPlayer.bundle/Bridge"
 APP_DIR=".build/MacDesktopPlayer.app"
 mkdir -p "$APP_DIR/Contents/MacOS" "$APP_DIR/Contents/Resources"
 cp .build/release/MacDesktopPlayer "$APP_DIR/Contents/MacOS/MacDesktopPlayer"
@@ -48,6 +26,15 @@ cat > "$APP_DIR/Contents/Info.plist" <<'PLIST'
 <key>LSMinimumSystemVersion</key><string>13.0</string>
 <key>LSUIElement</key><true/>
 <key>NSHighResolutionCapable</key><true/>
+<key>NSAppTransportSecurity</key><dict>
+  <key>NSExceptionDomains</key><dict>
+    <key>126.net</key><dict><key>NSIncludesSubdomains</key><true/><key>NSExceptionAllowsInsecureHTTPLoads</key><true/></dict>
+    <key>163.com</key><dict><key>NSIncludesSubdomains</key><true/><key>NSExceptionAllowsInsecureHTTPLoads</key><true/></dict>
+    <key>qq.com</key><dict><key>NSIncludesSubdomains</key><true/><key>NSExceptionAllowsInsecureHTTPLoads</key><true/></dict>
+    <key>gtimg.cn</key><dict><key>NSIncludesSubdomains</key><true/><key>NSExceptionAllowsInsecureHTTPLoads</key><true/></dict>
+    <key>kugou.com</key><dict><key>NSIncludesSubdomains</key><true/><key>NSExceptionAllowsInsecureHTTPLoads</key><true/></dict>
+  </dict>
+</dict>
 </dict></plist>
 PLIST
 echo "Built $APP_DIR"
