@@ -32,7 +32,7 @@ public sealed class DesktopWallpaperSurface : FrameworkElement
         if (artwork is BitmapSource source && source.PixelWidth > 0 && source.PixelHeight > 0)
         {
             const int width = 48;
-            const int height = 28;
+            const int height = 48;
             var target = new RenderTargetBitmap(width, height, 96, 96, PixelFormats.Pbgra32);
             var visual = new DrawingVisual();
             using (var context = visual.RenderOpen()) context.DrawImage(source, new Rect(0, 0, width, height));
@@ -61,8 +61,8 @@ public sealed class DesktopWallpaperSurface : FrameworkElement
         {
             case 1: DrawTyndall(drawingContext, bounds, spectrum, time); break;
             case 2: DrawCoverDots(drawingContext, bounds, spectrum, time); break;
-            case 3: DrawCellularHive(drawingContext, bounds, spectrum, time); break;
-            default: DrawAurora(drawingContext, bounds, spectrum, time); break;
+            case 3: DrawHexagonMorph(drawingContext, bounds, spectrum, time); break;
+            default: DrawMacCellularHive(drawingContext, bounds, spectrum, time); break;
         }
     }
 
@@ -128,27 +128,99 @@ public sealed class DesktopWallpaperSurface : FrameworkElement
     private void DrawCoverDots(DrawingContext dc, Rect bounds, float[] spectrum, double time)
     {
         const int columns = 48;
-        const int rows = 28;
+        var rows = Math.Max(1, (int)Math.Round(columns / (bounds.Width / bounds.Height)));
         var cell = Math.Min(bounds.Width / columns, bounds.Height / rows);
         var left = (bounds.Width - columns * cell) / 2;
         var top = (bounds.Height - rows * cell) / 2;
+        var coverHeight = bounds.Height * 0.68;
+        var coverWidth = coverHeight;
+        var coverLeft = (bounds.Width - coverWidth) / 2;
+        var coverTop = (bounds.Height - coverHeight) / 2;
         for (var row = 0; row < rows; row++)
         for (var column = 0; column < columns; column++)
         {
             var band = spectrum.Length == 0 ? 0 : spectrum[(column * spectrum.Length / columns) % spectrum.Length];
-            var wave = (Math.Sin(column * 0.19 + time * 0.7 + row * 0.11) + 1) * 0.5;
-            var radius = cell * (0.12 + wave * 0.13 + band * 0.38);
-            var color = _coverColors is { Length: > 0 } cover
-                ? cover[row * columns + column]
-                : Palette[(column / 16 + row / 9) % Palette.Length];
-            var alpha = (byte)(18 + wave * 38 + band * 120);
+            var point = new Point(left + (column + 0.5) * cell, top + (row + 0.5) * cell);
+            var inCover = _coverColors is { Length: > 0 } && point.X >= coverLeft && point.X < coverLeft + coverWidth
+                && point.Y >= coverTop && point.Y < coverTop + coverHeight;
+            var u = Math.Clamp((point.X - coverLeft) / coverWidth, 0, 0.9999);
+            var v = Math.Clamp((point.Y - coverTop) / coverHeight, 0, 0.9999);
+            var coverIndex = (int)(v * 48) * 48 + (int)(u * 48);
+            var seed = Math.Abs(Math.Sin(column * 12.9898 + row * 78.233) * 43758.5453) % 1;
+            var beat = Math.Clamp(Average(spectrum, 0, 6) * 2.8, 0, 1);
+            var wave = (Math.Sin((inCover ? u * 21 : column * 0.12) + time * 2.4)
+                * Math.Cos((inCover ? v * 17 : row * 0.17) - time * 1.7) + 1) * 0.5;
+            var radius = cell * (inCover ? 0.31 + wave * 0.08 + band * 0.10 : 0.12 + beat * 0.25 * seed);
+            var color = inCover && _coverColors is { } cover
+                ? cover[Math.Clamp(coverIndex, 0, cover.Length - 1)]
+                : Color.FromRgb(12, 15, 22);
+            var alpha = (byte)(inCover ? 220 : 24 + beat * seed * 150);
             var brush = new SolidColorBrush(Color.FromArgb(alpha, color.R, color.G, color.B));
             brush.Freeze();
-            dc.DrawEllipse(brush, null, new Point(left + (column + 0.5) * cell, top + (row + 0.5) * cell), radius, radius);
+            dc.DrawEllipse(brush, null, point, radius, radius);
         }
     }
 
-    private static void DrawCellularHive(DrawingContext dc, Rect bounds, float[] spectrum, double time)
+    private static void DrawMacCellularHive(DrawingContext dc, Rect bounds, float[] spectrum, double time)
+    {
+        var center = new Point(bounds.Width * 0.5, bounds.Height * 0.5);
+        var scale = Math.Min(bounds.Width, bounds.Height);
+        var bass = Average(spectrum, 0, Math.Max(1, spectrum.Length / 8));
+        var energy = Average(spectrum, 0, spectrum.Length);
+        var core = scale * (0.285 + bass * 0.022);
+        var outer = scale * 0.49;
+        var rings = 18;
+        // Mac 蜂窝的主视觉是带透视和细胞孔洞的放射状膜，不是平铺蜂格。
+        for (var ring = rings; ring >= 0; ring--)
+        {
+            var ratio = ring / (double)rings;
+            var radius = core + (outer - core) * ratio;
+            var segments = Math.Max(16, (int)(ratio * 88));
+            for (var segment = 0; segment < segments; segment++)
+            {
+                var angle = Math.Tau * segment / segments;
+                var depth = -Math.Log(Math.Max(ratio, 0.018)) * 2.15;
+                var cellPhase = angle * 19 + depth * 0.52 + time * 0.31;
+                var breathe = Math.Sin(cellPhase + time * 0.46) * (1.4 + energy * 3.0);
+                var point = new Point(center.X + Math.Cos(angle) * (radius + breathe), center.Y + Math.Sin(angle) * (radius + breathe));
+                var cell = Math.Max(2.0, scale * (0.006 + ratio * 0.004));
+                var hue = (segment % 19 + ring * 0.18) % 1;
+                var color = ColorFromHue(0.49 + hue * 0.2);
+                var pulse = 0.45 + 0.55 * Math.Sin(time * 0.8 + segment * 0.37 + ring * 0.23);
+                var alpha = (byte)Math.Clamp(11 + pulse * 24 + energy * 42, 0, 90);
+                var brush = new SolidColorBrush(Color.FromArgb(alpha, color.R, color.G, color.B));
+                brush.Freeze();
+                var cellShape = new StreamGeometry();
+                using (var context = cellShape.Open())
+                {
+                    for (var vertex = 0; vertex < 6; vertex++)
+                    {
+                        var cellAngle = Math.Tau * vertex / 6 + Math.PI / 6 + Math.Sin(time * 0.2 + segment) * 0.08;
+                        var vertexPoint = new Point(point.X + Math.Cos(cellAngle) * cell, point.Y + Math.Sin(cellAngle) * cell);
+                        if (vertex == 0) context.BeginFigure(vertexPoint, true, true);
+                        else context.LineTo(vertexPoint, true, false);
+                    }
+                }
+                cellShape.Freeze();
+                var outline = new Pen(new SolidColorBrush(Color.FromArgb((byte)(alpha + 18), color.R, color.G, color.B)), 0.8);
+                outline.Freeze();
+                dc.DrawGeometry(brush, outline, cellShape);
+            }
+        }
+        var coreBrush = new RadialGradientBrush(Color.FromArgb(95, 44, 151, 207), Color.FromArgb(0, 3, 8, 25));
+        coreBrush.Freeze();
+        dc.DrawEllipse(coreBrush, null, center, core * 1.25, core * 1.25);
+        for (var wave = 0; wave < 3; wave++)
+        {
+            var phase = (time * (0.08 + wave * 0.012) + wave / 3d) % 1;
+            var radius = core + phase * scale * 0.40;
+            var pen = new Pen(new SolidColorBrush(Color.FromArgb((byte)(55 * (1 - phase)), 67, 210, 255)), 1.2);
+            pen.Freeze();
+            dc.DrawEllipse(null, pen, center, radius * bounds.Width / scale, radius);
+        }
+    }
+
+    private static void DrawHexagonMorph(DrawingContext dc, Rect bounds, float[] spectrum, double time)
     {
         var radius = Math.Clamp(Math.Min(bounds.Width / 31, bounds.Height / 18) * 0.47, 8, 40);
         var dx = radius * 1.78;
@@ -178,6 +250,19 @@ public sealed class DesktopWallpaperSurface : FrameworkElement
             fill.Freeze(); stroke.Brush.Freeze(); stroke.Freeze();
             dc.DrawGeometry(fill, stroke, shape);
         }
+    }
+
+    private static Color ColorFromHue(double hue)
+    {
+        var sector = (hue % 1) * 6;
+        var chroma = 0.75;
+        var x = chroma * (1 - Math.Abs(sector % 2 - 1));
+        var (r, g, b) = sector switch
+        {
+            < 1 => (chroma, x, 0d), < 2 => (x, chroma, 0d), < 3 => (0d, chroma, x),
+            < 4 => (0d, x, chroma), < 5 => (x, 0d, chroma), _ => (chroma, 0d, x)
+        };
+        return Color.FromRgb((byte)(r * 255), (byte)(g * 255), (byte)(b * 255));
     }
 
     private static void DrawSpectrumHorizon(DrawingContext dc, Rect bounds, float[] spectrum, double time, double yRatio)

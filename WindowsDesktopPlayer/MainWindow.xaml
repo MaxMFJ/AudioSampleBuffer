@@ -40,10 +40,10 @@
                         <Button x:Name="LyricsButton" Content="▤  桌面歌词" HorizontalContentAlignment="Left" Click="Lyrics_Click" />
                         <TextBlock Text="音频响应效果" Style="{StaticResource SectionLabel}" Margin="4,18,0,7" />
                         <ComboBox x:Name="EffectSelector" SelectedIndex="0" SelectionChanged="EffectSelector_SelectionChanged" Height="34" Background="#202B3E" Foreground="#F4F5FF">
-                            <ComboBoxItem Content="极光波纹" />
-                            <ComboBoxItem Content="丁达尔光束" />
-                            <ComboBoxItem Content="封面点阵" />
-                            <ComboBoxItem Content="深空蜂巢" />
+                            <ComboBoxItem Content="蜂窝（Mac）" />
+                            <ComboBoxItem Content="丁达尔（Mac）" />
+                            <ComboBoxItem Content="点阵封面（Mac）" />
+                            <ComboBoxItem Content="六边形变形（保留）" />
                         </ComboBox>
                         <Button Content="☷  平台账号" HorizontalContentAlignment="Left" Margin="0,5,0,0" Click="Accounts_Click" />
                     </StackPanel>
