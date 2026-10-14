@@ -173,6 +173,34 @@ float4 desktopStageProject(float3 p, constant DesktopCoverStageUniforms &stage) 
     return float4(rotated.xy * scale * camera, w * 0.5, w);
 }
 
+struct DesktopCoverBackingOut {
+    float4 position [[position]];
+    float2 discPosition;
+};
+
+// An opaque record-sized surface beneath the dots stops stage lights from
+// showing through their gaps. Share the cover's camera and interaction transform.
+vertex DesktopCoverBackingOut desktopCoverBackingVertex(
+    uint id [[vertex_id]],
+    constant DesktopCoverStageUniforms &stage [[buffer(5)]]) {
+    const float2 corners[4] = {
+        float2(-1, -1), float2(1, -1), float2(-1, 1), float2(1, 1)
+    };
+    DesktopCoverBackingOut out;
+    out.discPosition = corners[id];
+    // A small margin covers the outer dots without creating a visible rim.
+    out.position = desktopStageProject(float3(corners[id] * 0.505, 0), stage);
+    return out;
+}
+
+fragment float4 desktopCoverBackingFragment(DesktopCoverBackingOut in [[stage_in]]) {
+    float radius = length(in.discPosition);
+    float feather = max(fwidth(radius), 0.001);
+    float alpha = 1.0 - smoothstep(1.0 - feather, 1.0, radius);
+    if (alpha <= 0.0) discard_fragment();
+    return float4(0, 0, 0, alpha);
+}
+
 vertex DesktopDotParticleOut desktopCoverReliefVertex(
     uint id [[vertex_id]],
     constant CoverDotVisualAudio &audio [[buffer(0)]],

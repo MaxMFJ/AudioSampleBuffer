@@ -1,0 +1,4 @@
+# Local Windows-target builds and self-contained test packages
+bin/
+obj/
+artifacts/

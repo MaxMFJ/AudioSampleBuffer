@@ -79,7 +79,7 @@ final class PlatformLoginWindowController: NSWindowController, NSWindowDelegate 
     }
 
     private func cookieHeader(from cookies: [HTTPCookie]) -> String {
-        let allowed: (String) -> Bool
+        let allowed: (String) -> Bool`
         switch provider {
         case .netease: allowed = { $0 == "163.com" || $0.hasSuffix(".163.com") || $0 == "netease.com" || $0.hasSuffix(".netease.com") }
         case .qq: allowed = { $0 == "qq.com" || $0.hasSuffix(".qq.com") }

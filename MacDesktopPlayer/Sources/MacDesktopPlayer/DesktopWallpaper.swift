@@ -10,6 +10,7 @@ final class WallpaperController {
     private let onArtworkChange: (NSImage?) -> Void
     private var windows: [WallpaperPanel] = []
     private var playlistDrawers: [PlaylistDrawerController] = []
+    private var cachedArtwork: NSImage?
     private(set) var effect = DesktopBackgroundEffect.saved
 
     init(audio: LocalAudioPlayer, library: MusicLibraryStore, onOpenControls: @escaping () -> Void,
@@ -38,6 +39,7 @@ final class WallpaperController {
             window.level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.desktopIconWindow)) - 1)
             window.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle, .fullScreenNone]
             window.contentView = view
+            view.setArtwork(cachedArtwork)
             window.orderFrontRegardless()
             windows.append(window)
             let drawer = PlaylistDrawerController(audio: audio, library: library, onOpenControls: onOpenControls,
@@ -60,6 +62,7 @@ final class WallpaperController {
     }
 
     func setArtwork(_ image: NSImage?) {
+        cachedArtwork = image
         windows.compactMap { $0.contentView as? DesktopMetalView }.forEach { $0.setArtwork(image) }
     }
 }
@@ -173,7 +176,7 @@ final class DesktopRenderer: NSObject, MTKViewDelegate {
                                        isolatedInstruments: effectRenderer.effect == .tyndall,
                                        coverDotSensitivity: effectRenderer.effect == .coverDots)
         let squareCover = effectRenderer.effect == .coverDots
-        let showCoverStage = squareCover || centerRecordVisible
+        let showCoverStage = squareCover || effectRenderer.effect == .tyndall || centerRecordVisible
         if let desktopView = view as? DesktopMetalView {
             let frame = audio.lyricsController.frame(at: Double(values.playbackTime),
                 surface: showCoverStage ? .coverStage : .overlay, viewport: view.bounds.size)
@@ -193,7 +196,8 @@ final class DesktopRenderer: NSObject, MTKViewDelegate {
                                  enabled: audio.guitarSurgeEnabled && effectRenderer.effect != .tyndall,
                                  drumOverlayEnabled: true)
         if showCoverStage {
-            coverRecordRenderer.draw(encoder: encoder, view: view, audio: values, squareCover: squareCover)
+            coverRecordRenderer.draw(encoder: encoder, view: view, audio: values, squareCover: squareCover,
+                                     circularBacking: effectRenderer.effect == .tyndall)
         }
         encoder.endEncoding()
         command.present(drawable)

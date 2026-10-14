@@ -250,9 +250,37 @@ private struct TyndallActivation {
 }
 
 private struct TyndallAnimationUniforms {
-    var starts = SIMD4<Float>(repeating: -1) // vocal, treble, piano, guitar
+    var starts = SIMD4<Float>(repeating: -1) // mid-driven floor lights, treble, piano, guitar
     var strengths = SIMD4<Float>(repeating: 0)
     var peak = SIMD4<Float>(-1, 0, 0, 0) // guitar peak start and strength
+}
+
+private struct DesktopLaserTunnelUniforms {
+    var geometry = SIMD4<Float>(12, 0.60, 8, 12) // beam count, fan angle, depth, beam length
+    var motion = SIMD4<Float>(7, 0.90, 0.24, 0.17) // approach speed, camera aim, yaw, pitch
+    var appearance = SIMD4<Float>(1, 0.12, 0.90, 1) // glow, near plane, vertical FOV, mode
+
+    init(defaults: UserDefaults = .standard) {
+        geometry.x = Self.value(defaults, key: "tyndallLaserBeamCount", fallback: geometry.x, range: 1...64)
+        geometry.y = Self.value(defaults, key: "tyndallLaserFanAngle", fallback: geometry.y, range: 0...1.4)
+        geometry.z = Self.value(defaults, key: "tyndallLaserDepth", fallback: geometry.z, range: 0.62...100)
+        geometry.w = Self.value(defaults, key: "tyndallLaserBeamLength", fallback: geometry.w, range: 0.01...100)
+        motion.x = Self.value(defaults, key: "tyndallLaserApproachSpeed", fallback: motion.x, range: 0...100)
+        motion.y = Self.value(defaults, key: "tyndallLaserCameraAimStrength", fallback: motion.y, range: 0...1)
+        motion.z = Self.value(defaults, key: "tyndallLaserYawAmplitude", fallback: motion.z, range: 0...Float.pi)
+        motion.w = Self.value(defaults, key: "tyndallLaserPitchAmplitude", fallback: motion.w, range: 0...Float.pi / 2)
+        appearance.x = Self.value(defaults, key: "tyndallLaserGlowIntensity", fallback: appearance.x, range: 0...10)
+        appearance.y = Self.value(defaults, key: "tyndallLaserNearPlane", fallback: appearance.y, range: 0.01...1)
+        appearance.z = Self.value(defaults, key: "tyndallLaserVerticalFOV", fallback: appearance.z, range: 0.35...2.2)
+        appearance.w = Self.value(defaults, key: "tyndallLaserMode", fallback: appearance.w, range: 0...1)
+    }
+
+    private static func value(_ defaults: UserDefaults, key: String, fallback: Float, range: ClosedRange<Float>) -> Float {
+        guard let object = defaults.object(forKey: key) else { return fallback }
+        let value = (object as? NSNumber)?.floatValue ?? fallback
+        guard value.isFinite else { return fallback }
+        return min(max(value, range.lowerBound), range.upperBound)
+    }
 }
 
 @MainActor
@@ -283,6 +311,7 @@ private final class FullscreenDesktopEffectRenderer: DesktopEffectRenderer {
         var values = audio
         var mood = DesktopMoodService.shared.colors
         var animation = TyndallAnimationUniforms()
+        var laser = DesktopLaserTunnelUniforms()
         if effect == .tyndall {
             let playing = audio.playing > 0.5
             let dt = lastTyndallTime >= 0 ? min(max(audio.time - lastTyndallTime, 0), 0.1) : 1.0 / 60.0
@@ -302,9 +331,10 @@ private final class FullscreenDesktopEffectRenderer: DesktopEffectRenderer {
             values.mid = tyndallBands.y
             values.treble = tyndallBands.z
 
-            let inputs = [audio.vocal, audio.treble, audio.piano, audio.guitar, audio.guitarPeak]
-            let thresholds: [Float] = [0.06, 0.045, 0.12, 0.13, 0.48]
-            let minimums: [Float] = [0.32, 0.13, 0.20, 0.20, 0.85]
+            // The four iOS floor lights respond to FFT mid, not vocal/stem analysis.
+            let inputs = [values.mid, audio.treble, audio.piano, audio.guitar, audio.guitarPeak]
+            let thresholds: [Float] = [0.02, 0.045, 0.12, 0.13, 0.48]
+            let minimums: [Float] = [0.08, 0.13, 0.20, 0.20, 0.85]
             let durations: [Float] = [12, 14, 15.384615, 9, 13]
             for index in tyndallActivations.indices {
                 tyndallActivations[index].update(input: inputs[index], threshold: thresholds[index],
@@ -322,6 +352,7 @@ private final class FullscreenDesktopEffectRenderer: DesktopEffectRenderer {
         encoder.setFragmentBytes(&mood, length: MemoryLayout<DesktopMoodColors>.stride, index: 1)
         if effect == .tyndall {
             encoder.setFragmentBytes(&animation, length: MemoryLayout<TyndallAnimationUniforms>.stride, index: 2)
+            encoder.setFragmentBytes(&laser, length: MemoryLayout<DesktopLaserTunnelUniforms>.stride, index: 3)
         }
         encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
     }

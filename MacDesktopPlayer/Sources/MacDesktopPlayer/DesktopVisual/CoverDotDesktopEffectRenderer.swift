@@ -4,6 +4,7 @@ import MetalKit
 @MainActor
 final class CoverDotDesktopEffectRenderer {
     private let coverPipeline: MTLRenderPipelineState
+    private let backingPipeline: MTLRenderPipelineState
     private let placeholder: MTLTexture
     private var artwork: MTLTexture?
     private var hasArtwork = false
@@ -31,6 +32,22 @@ final class CoverDotDesktopEffectRenderer {
             fatalError("无法创建封面 3D 点阵 Metal 渲染管线")
         }
         self.coverPipeline = coverPipeline
+        let backingDescriptor = MTLRenderPipelineDescriptor()
+        backingDescriptor.label = "DesktopCoverCircularBacking"
+        backingDescriptor.vertexFunction = library.makeFunction(name: "desktopCoverBackingVertex")
+        backingDescriptor.fragmentFunction = library.makeFunction(name: "desktopCoverBackingFragment")
+        backingDescriptor.colorAttachments[0].pixelFormat = pixelFormat
+        backingDescriptor.colorAttachments[0].isBlendingEnabled = true
+        backingDescriptor.colorAttachments[0].rgbBlendOperation = .add
+        backingDescriptor.colorAttachments[0].alphaBlendOperation = .add
+        backingDescriptor.colorAttachments[0].sourceRGBBlendFactor = .sourceAlpha
+        backingDescriptor.colorAttachments[0].destinationRGBBlendFactor = .oneMinusSourceAlpha
+        backingDescriptor.colorAttachments[0].sourceAlphaBlendFactor = .one
+        backingDescriptor.colorAttachments[0].destinationAlphaBlendFactor = .oneMinusSourceAlpha
+        guard let backingPipeline = try? device.makeRenderPipelineState(descriptor: backingDescriptor) else {
+            fatalError("无法创建封面圆形黑色底渲染管线")
+        }
+        self.backingPipeline = backingPipeline
         self.lyricRenderer = CoverStageLyrics(device: device, pixelFormat: pixelFormat, library: library)
 
         let textureDescriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .rgba8Unorm_srgb, width: 1, height: 1, mipmapped: false)
@@ -67,7 +84,8 @@ final class CoverDotDesktopEffectRenderer {
         lyricsFollowCoverRotation = followsCoverRotation
     }
 
-    func draw(encoder: MTLRenderCommandEncoder, view: MTKView, audio: VisualAudio, squareCover: Bool) {
+    func draw(encoder: MTLRenderCommandEncoder, view: MTKView, audio: VisualAudio, squareCover: Bool,
+              circularBacking: Bool = false) {
         let now = audio.time
         let dt = lastTime > 0 ? min(max(now - lastTime, 0), 0.1) : 0
         lastTime = now
@@ -103,6 +121,12 @@ final class CoverDotDesktopEffectRenderer {
         stage.viewport = SIMD4<Float>(Float(view.drawableSize.width), Float(view.drawableSize.height),
                                      Float(view.drawableSize.width / max(view.bounds.width, 1)), audio.time)
         var mood = DesktopMoodService.shared.colors
+        // Keep the light shield present while a new song's artwork is loading.
+        if circularBacking && !squareCover {
+            encoder.setRenderPipelineState(backingPipeline)
+            encoder.setVertexBytes(&stage, length: MemoryLayout<DesktopCoverStageUniforms>.stride, index: 5)
+            encoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
+        }
         if hasArtwork {
             encoder.setRenderPipelineState(coverPipeline)
             encoder.setVertexBytes(&values, length: MemoryLayout<VisualAudio>.stride, index: 0)

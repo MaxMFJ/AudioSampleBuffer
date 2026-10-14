@@ -88,7 +88,8 @@ static float3 atmosphereField(float2 uv, float bass, float hazeVal, constant Des
 //    优化：内联 volumetricCone，减少函数调用
 // ============================================================================
 
-static float3 volumetricBeamSystem(float2 p, float time, float bass, float hazeVal, constant DesktopMoodColors &mood) {
+static float3 volumetricBeamSystem(float2 p, float time, float bass, float hazeVal, float aspectRatio,
+                                   constant DesktopMoodColors &mood) {
     float volume = 0.5 + hazeVal * 0.5;
     float brightness = 0.45 + bass * 0.35;
     float coneW = 0.52 + bass * 0.15;
@@ -101,14 +102,17 @@ static float3 volumetricBeamSystem(float2 p, float time, float bass, float hazeV
     }
     color *= brightness;
     
-    // 左侧光束
-    float2 toL = p - float2(-0.42, 0.48);
+    // Two large fixtures sit just beyond the left and right screen edges,
+    // sweeping upward and inward like the iOS stage rig.
+    float edgeX = aspectRatio * 0.5 + 0.12;
+    float inwardAim = atan2(edgeX, 0.42);
+    float2 toL = p - float2(-edgeX, 0.42);
     float distLSq = dot(toL, toL);
     float distL = sqrt(distLSq);
     float beamL = 0.0;
     if (distL > 0.001) {
         float2 dL = toL / distL;
-        float sweepL_angle = sin(time * 0.35) * 1.1;
+        float sweepL_angle = inwardAim + sin(time * 0.35) * 0.24;
         float2 dirLn = float2(sin(sweepL_angle), -cos(sweepL_angle));
         float alignL = dot(dL, dirLn);
         float coneL = smoothstep(cosThresh, 0.94, alignL);
@@ -119,14 +123,13 @@ static float3 volumetricBeamSystem(float2 p, float time, float bass, float hazeV
         beamL = coneL * falloffL * volume * axialFadeL;
     }
     
-    // 右侧光束
-    float2 toR = p - float2(0.42, 0.48);
+    float2 toR = p - float2(edgeX, 0.42);
     float distRSq = dot(toR, toR);
     float distR = sqrt(distRSq);
     float beamR = 0.0;
     if (distR > 0.001) {
         float2 dR = toR / distR;
-        float sweepR_angle = sin(time * 0.28 + 2.1) * 1.1;
+        float sweepR_angle = -inwardAim + sin(time * 0.28 + 2.1) * 0.24;
         float2 dirRn = float2(sin(sweepR_angle), -cos(sweepR_angle));
         float alignR = dot(dR, dirRn);
         float coneR = smoothstep(cosThresh, 0.94, alignR);
@@ -157,11 +160,12 @@ static float3 edgeLight(float2 uv, float mid, constant DesktopMoodColors &mood) 
 }
 
 // ============================================================================
-// 4. TopLightArray - 顶部灯光阵列 3D 照射（优化版：4 盏灯 + 锁定包络）
+// 4. FloorLightArray - 中音触发的底部四盏雾灯（iOS UV 的 +Y 为屏幕下方）
 //    性能优化：减少灯数 7→4，触发后锁定包络期间不再计算 DSP
 // ============================================================================
 
-static float3 topLightArray(float2 p, float time, float vocal, constant DesktopMoodColors &mood) {
+static float3 floorLightArray(float2 p, float time, float mid, float aspectRatio,
+                              constant DesktopMoodColors &mood) {
     float cycleDuration = 12.0;  // 完整周期 12 秒（更长展示时间）
     float cyclePhase = fract(time / cycleDuration);
     
@@ -188,7 +192,7 @@ static float3 topLightArray(float2 p, float time, float vocal, constant DesktopM
     
     // 只在渐显阶段检查触发条件（节省 smoothstep 计算）
     if (needTriggerCheck) {
-        float trigger = smoothstep(0.02, 0.08, vocal);
+        float trigger = smoothstep(0.02, 0.08, mid);
         envelope *= trigger;
     }
     
@@ -202,19 +206,23 @@ static float3 topLightArray(float2 p, float time, float vocal, constant DesktopM
     blueBeam *= 0.75 * envelope;  // 亮度从 0.52 提升到 0.65
     
     float3 arrayOut = float3(0.0);
+    float screenWidth = max(aspectRatio, 0.1);
+    float wideFactor = saturate((screenWidth - 1.0) / 1.4);
+    float fanSpread = atan(screenWidth * 0.10);
+    float scanAmplitude = mix(0.18, 0.28, wideFactor);
     
-    // 优化：4 盏灯（从 7 减少），调整间距保持覆盖范围
+    // Four floor fixtures span 68% of the screen width, independent of aspect.
     for (int i = 0; i < 4; i++) {
         float iFloat = float(i);
-        // 间距从 0.05 增加到 0.08，总跨度从 0.3 减少到 0.24
-        float xPos = -0.12 + iFloat * 0.08;  // [-0.12, -0.04, 0.04, 0.12]
+        float fanPosition = (iFloat - 1.5) / 1.5;
+        float xPos = fanPosition * screenWidth * 0.34;
         float yPos = 0.56 + stageHash(float2(iFloat, 0.0)) * 0.03;
         float2 lightPos = float2(xPos, yPos);
         
-        float randomAngle = stageHash(float2(iFloat, 1.0)) * 0.15 - 0.075;
-        float tiltAngle = (iFloat - 1.5) * 0.03 + randomAngle;  // 中心为 i=1.5
+        float randomAngle = stageHash(float2(iFloat, 1.0)) * 0.08 - 0.04;
+        float tiltAngle = fanPosition * fanSpread + randomAngle;
         float scanSpeed = 0.40 + stageHash(float2(iFloat, 2.0)) * 0.12;  // 摆动速度从 0.1~0.16 提升到 0.24~0.36
-        float scanOffset = sin(time * scanSpeed + iFloat * 0.7) * 0.15;
+        float scanOffset = sin(time * scanSpeed + iFloat * 0.7) * scanAmplitude;
         float beamAngle = tiltAngle + scanOffset;
         
         float2 toP = p - lightPos;
@@ -230,12 +238,13 @@ static float3 topLightArray(float2 p, float time, float vocal, constant DesktopM
         
         float perpDistSq = dot(toP, toP) - along * along;
         
-        float beamWidth = 0.018 + along * 0.022;
+        // A wider volumetric cone spreads from each distinct floor aperture.
+        float beamWidth = 0.022 + along * mix(0.055, 0.08, wideFactor);
         float bwSq = beamWidth * beamWidth;
         float beamCore = exp(-perpDistSq / bwSq);
         
         float lengthFade = exp(-along * 1.2);
-        // 沿光轴体积积分：顶部灯阵的光穿过烟雾，近亮远暗
+        // 底部雾灯向上照射，沿光轴保留近亮远暗的纵深。
         float axialFade = exp(-along * along * 0.12);
         
         float3 beam = blueBeam * (beamCore * lengthFade * axialFade);
@@ -273,8 +282,155 @@ static inline float laserLineInline(float2 toP, float2 dir, float thickness) {
     return intensity * axialFade;
 }
 
-static float3 laserSystem(float2 p, float time, float treble, float piano, float guitar, float guitarPeak,
-                          float4 elapsed, float peakElapsed, constant DesktopMoodColors &mood) {
+// Finite 3D laser volumes. Coordinates and radii are world-space units;
+// the fullscreen pass ray-renders the volumes rather than enlarging 2D lines.
+struct DesktopLaserTunnelUniforms {
+    float4 geometry;   // beamCount (total), fanAngle, depth, beamLength
+    float4 motion;     // approachSpeed, cameraAimStrength, yawAmplitude, pitchAmplitude
+    float4 appearance; // glowIntensity, nearPlane, verticalFOV, mode (0=legacy, 1=tunnel)
+};
+struct LaserCamera {
+    float3 position, right, up, forward;
+    float nearPlane, tanHalfFOV;
+};
+
+static float3x3 laserYawPitch(float yaw, float pitch) {
+    float cy = cos(yaw), sy = sin(yaw), cp = cos(pitch), sp = sin(pitch);
+    float3x3 yawRotation(float3(cy, 0, -sy), float3(0, 1, 0), float3(sy, 0, cy));
+    float3x3 pitchRotation(float3(1, 0, 0), float3(0, cp, sp), float3(0, -sp, cp));
+    return yawRotation * pitchRotation;
+}
+
+// Perspective projection into the existing aspect-correct p coordinates.
+// Camera-local Y is up; the iOS-compatible stage coordinates use Y down.
+static float2 laserProject(float3 point, thread const LaserCamera &camera) {
+    float3 relative = point - camera.position;
+    float z = max(dot(relative, camera.forward), camera.nearPlane);
+    return float2(dot(relative, camera.right), -dot(relative, camera.up))
+         / (2.0 * z * camera.tanHalfFOV);
+}
+
+static float laserVolume(float2 p, float3 origin, float3 direction, float beamLength,
+                         float scanTravel, float pixelStep, thread const LaserCamera &camera) {
+    // Clip the actual spatial segment against the camera near plane BEFORE projection.
+    float zOrigin = dot(origin - camera.position, camera.forward);
+    float zDirection = dot(direction, camera.forward);
+    float startTravel = 0.0, endTravel = beamLength;
+    if (abs(zDirection) < 0.00001) {
+        if (zOrigin < camera.nearPlane) return 0.0;
+    } else {
+        float crossing = (camera.nearPlane - zOrigin) / zDirection;
+        if (zDirection < 0.0) endTravel = min(endTravel, crossing);
+        else startTravel = max(startTravel, crossing);
+    }
+    if (endTravel <= startTravel) return 0.0;
+    float3 a = origin + direction * startTravel;
+    float3 b = origin + direction * endTravel;
+    float2 screenA = laserProject(a, camera), screenB = laserProject(b, camera);
+
+    const float radius = 0.006;
+    float nearestZ = max(min(dot(a - camera.position, camera.forward),
+                            dot(b - camera.position, camera.forward)), camera.nearPlane);
+    // Conservative projected bounds for the cylinder and its emissive halo.
+    float projectedHalo = radius * 18.0 / (2.0 * nearestZ * camera.tanHalfFOV);
+    float2 edge = screenB - screenA;
+    float screenT = saturate(dot(p - screenA, edge) / max(dot(edge, edge), 0.000001));
+    if (distance(p, screenA + edge * screenT) > projectedHalo) return 0.0;
+
+    // Inverse perspective: a camera ray through this pixel, in the local camera basis.
+    float3 rayDirection = normalize(camera.forward
+        + camera.right * (p.x * 2.0 * camera.tanHalfFOV)
+        - camera.up * (p.y * 2.0 * camera.tanHalfFOV));
+    float3 rayOrigin = camera.position + rayDirection
+        * (camera.nearPlane / max(dot(rayDirection, camera.forward), 0.00001));
+    float3 relative = rayOrigin - a;
+    float rayBeamDot = dot(rayDirection, direction);
+    float rayOffset = dot(rayDirection, relative);
+    float beamOffset = dot(direction, relative);
+    float denominator = 1.0 - rayBeamDot * rayBeamDot;
+    float clippedLength = endTravel - startTravel;
+    float travel = denominator > 0.00001
+        ? clamp((beamOffset - rayBeamDot * rayOffset) / denominator, 0.0, clippedLength)
+        : clamp(beamOffset, 0.0, clippedLength);
+    float rayTravel = max(rayBeamDot * travel - rayOffset, 0.0);
+    travel = clamp(beamOffset + rayBeamDot * rayTravel, 0.0, clippedLength);
+    rayTravel = max(rayBeamDot * travel - rayOffset, 0.0);
+    float3 beamPoint = a + direction * travel;
+    float radialDistance = distance(rayOrigin + rayDirection * rayTravel, beamPoint);
+    float viewDepth = max(dot(beamPoint - camera.position, camera.forward), camera.nearPlane);
+    float pixelRadius = 2.0 * viewDepth * camera.tanHalfFOV
+                      * pixelStep;
+    float core = 1.0 - smoothstep(max(radius - pixelRadius, 0.0), radius + pixelRadius, radialDistance);
+    float halo = exp(-radialDistance / (radius * 3.0));
+    float bloom = exp(-radialDistance / (radius * 6.0));
+
+    // The head and its trailing streak move along the original world-space beam,
+    // including the part beyond the near plane. It never sticks to the clipped tip.
+    float headDistance = startTravel + travel - scanTravel;
+    float head = exp(-headDistance * headDistance / (0.22 * 0.22));
+    float trail = exp(-max(-headDistance, 0.0) / 0.55)
+                * (1.0 - smoothstep(0.0, 0.18, headDistance));
+    float scan = max(head, trail * 0.65);
+    float scattering = exp(-viewDepth * 0.035);
+    return (core * (0.32 + scan * 2.4) + halo * (0.24 + scan * 1.1)
+            + bloom * (0.045 + scan * 0.20)) * scattering;
+}
+
+static float cameraDirectedLaser(float2 p, float pixelStep, float time, float treble, float horizontalSweep,
+                                 constant DesktopLaserTunnelUniforms &settings) {
+    if (settings.appearance.x <= 0.0) return 0.0;
+    LaserCamera camera;
+    camera.position = float3(0.0);
+    camera.forward = normalize(float3(0, 0, 1));
+    camera.right = normalize(cross(float3(0, 1, 0), camera.forward));
+    camera.up = normalize(cross(camera.forward, camera.right));
+    camera.nearPlane = clamp(settings.appearance.y, 0.01, 1.0);
+    camera.tanHalfFOV = tan(clamp(settings.appearance.z, 0.35, 2.2) * 0.5);
+    float3x3 cameraBasis(camera.right, camera.up, camera.forward);
+    int beamCount = clamp(int(settings.geometry.x), 1, 64);
+    int firstGroupCount = (beamCount + 1) / 2;
+    float fanAngle = clamp(settings.geometry.y, 0.0, 1.4);
+    float depth = max(settings.geometry.z, camera.nearPlane + 0.5);
+    float beamLength = max(settings.geometry.w, 0.01);
+    float sum = 0.0;
+    for (int i = 0; i < beamCount; ++i) {
+        bool firstGroup = i < firstGroupCount;
+        int groupCount = firstGroup ? firstGroupCount : beamCount - firstGroupCount;
+        int groupIndex = firstGroup ? i : i - firstGroupCount;
+        float row = firstGroup ? 1.0 : -1.0;
+        float fanPosition = groupCount > 1 ? float(groupIndex) / float(groupCount - 1) * 2.0 - 1.0 : 0.35;
+        // Preserve the original fan emitters at screen p.y = +/-0.56.
+        // Unproject those screen-edge anchors onto the distant emission plane.
+        float3 origin = camera.position + camera.forward * depth
+                      + camera.up * (row * 0.56 * 2.0 * depth * camera.tanHalfFOV);
+        float3 centerDirection = normalize(camera.position - origin);
+        float3 aimedDirection = normalize(mix(-camera.forward, centerDirection, saturate(settings.motion.y)));
+        // Apertures have distinct spatial offsets. No beam is aimed exactly at the
+        // camera center, even with fanAngle=0 or an odd beam count.
+        origin += camera.right * (fanPosition * 0.12) + camera.up * (row * 0.06);
+        float3 direction = normalize(aimedDirection
+            + camera.right * tan(fanPosition * fanAngle * 0.5)
+            - camera.up * tan(row * max(fanAngle * 0.18, 0.035)));
+        // Alternate the incoming tunnel and a wide side-to-side sweep. Both
+        // poses rotate the same finite 3D beams in the camera's local basis.
+        float depthYaw = sin(time * 0.31 + row * 0.45) * settings.motion.z;
+        float sweepYaw = sin(time * 0.62 + row * 0.85)
+                       * min(settings.motion.z * 1.7, 0.75);
+        float yaw = mix(depthYaw, sweepYaw, horizontalSweep);
+        float pitch = sin(time * 0.23 + row * 1.2) * settings.motion.w
+                    * mix(1.0, 0.18, horizontalSweep);
+        float3 localDirection = transpose(cameraBasis) * direction;
+        direction = normalize(cameraBasis * (laserYawPitch(yaw, pitch) * localDirection));
+        float speed = max(settings.motion.x, 0.0) * (1.0 + saturate(treble) * 0.12);
+        float scanTravel = fract(time * speed / beamLength - float(i) * 0.071) * beamLength;
+        sum += laserVolume(p, origin, direction, beamLength, scanTravel, pixelStep, camera);
+    }
+    return sum * max(settings.appearance.x, 0.0);
+}
+
+static float3 laserSystem(float2 p, float pixelStep, float time, float treble, float piano,
+                          float fftMid, float guitarPeak, float liveGuitarPeak,
+                          constant DesktopMoodColors &mood, constant DesktopLaserTunnelUniforms &laserSettings) {
     float3 laserOut = float3(0.0);
     float distSq = dot(p, p);
     float dist = sqrt(distSq);
@@ -282,7 +438,9 @@ static float3 laserSystem(float2 p, float time, float treble, float piano, float
     // ====== A. Laser Fan Top + Bottom（蓝色激光扇形，优化版：12 条总 + 锁定包络）======
     // 性能优化：顶+底合并为 12 条（原 14），触发后锁定包络期间不计算 DSP
     float fanCycleDuration = 14.0;  // 完整周期 14 秒
-    float fanPhase = fract(elapsed.y / fanCycleDuration);
+    // Match iOS: the fan's motion cycle follows the shared animation clock.
+    // The latched activation envelope controls visibility independently.
+    float fanPhase = fract(time / fanCycleDuration);
     
     // 三阶段包络（超柔和渐显，完全避免突然出现）：
     // [0, 0.28): 渐渐出现 + DSP 触发监听（约 3.9s 渐显，更长更柔和）
@@ -311,75 +469,90 @@ static float3 laserSystem(float2 p, float time, float treble, float piano, float
         fanEnvelope *= fanTrigger;
     }
     
-    fanEnvelope *= smoothstep(0.02, 0.12, treble);
+    float regularFan = fanEnvelope * smoothstep(0.02, 0.12, treble);
+    // A guitar crest keeps the blue fan sweeping throughout its latched
+    // activation, including quiet treble passages and the fan cycle's fade.
+    float guitarClimax = smoothstep(0.28, 0.62, max(guitarPeak, liveGuitarPeak));
+    fanEnvelope = max(regularFan, guitarClimax);
     if (fanEnvelope > 0.01) {
         float3 blueColor = mood.laserFanBlue.rgb;
         if (!colorIsSet(blueColor)) {
             blueColor = float3(0.25, 0.55, 1.0);
         }
         
-        // ====== Top 6 条 ======
-        float2 fanOrigin = float2(0.0, 0.56);
-        // 多频率叠加运动：组合快慢不同的正弦波，形成不规则、有机的运动感
-        float planeRotation = time * 0.15 + sin(time * 0.06) * 0.4;  // 主旋转 + 缓慢摆动
-        float cosPlane = cos(planeRotation);
-        float sinPlane = sin(planeRotation);
-        // 复合摆动：3 个频率叠加（主频 + 快频 + 慢频）→ 类似真人操作灯光的不规则感
-        float baseSwing = sin(time * 0.28) * 0.42        // 主摆动
-                        + sin(time * 0.17) * 0.18        // 慢摆动（增加"呼吸感"）
-                        + sin(time * 0.51) * 0.08;       // 快抖动（微小抖动，更生动）
-        float blueMul = 0.38 * fanEnvelope;
-        
-        float2 toP = p - fanOrigin;
-        
-        for (int i = 0; i < 6; i++) {  // 7→6
-            float iF = float(i);
-            // 调整分布：6 条均匀分布，保持扇形覆盖
-            float spreadInPlane = (iF - 2.5) * 0.095;  // 中心为 i=2.5
-            float angleInPlane = baseSwing + spreadInPlane;
-            
-            float worldAngle = angleInPlane * cosPlane;
-            float depthAngle = angleInPlane * sinPlane;
-            
-            float2 dir = float2(sin(worldAngle), -cos(worldAngle));
-            float beam = laserLineInline(toP, dir, 0.0012);  // 细激光（原 0.002）
-            float depthFade = (1.0 - abs(depthAngle) * 0.3) * exp(-depthAngle * depthAngle * 2.5);
-            
-            laserOut += blueColor * (beam * blueMul * depthFade);
-        }
-        
-        // ====== Bottom 6 条 ======
-        float2 fanBottomOrigin = float2(0.0, -0.56);
-        // 底部扇形：使用不同的频率组合，与顶部形成对比和呼应
-        float planeRotationBottom = time * 0.18 + 1.57 + sin(time * 0.08) * 0.35;
-        float cosPlaneB = cos(planeRotationBottom);
-        float sinPlaneB = sin(planeRotationBottom);
-        // 底部摆动：频率与顶部错开，避免同步（更自然）
-        float baseSwingBottom = sin(time * 0.32 + 1.0) * 0.38
-                               + sin(time * 0.21 + 0.5) * 0.2   // 慢频，相位偏移
-                               + sin(time * 0.58 + 0.8) * 0.09; // 快频，相位偏移
-        float blueMulB = 0.35 * fanEnvelope;
-        
-        float2 toPB = p - fanBottomOrigin;
-        
-        for (int i = 0; i < 6; i++) {  // 7→6
-            float iF = float(i);
-            float spreadInPlane = (iF - 2.5) * 0.095;
-            float angleInPlane = baseSwingBottom + spreadInPlane;
-            
-            float worldAngle = 3.14159 + angleInPlane * cosPlaneB;
-            float depthAngle = angleInPlane * sinPlaneB;
-            
-            float2 dir = float2(sin(worldAngle), -cos(worldAngle));
-            float beam = laserLineInline(toPB, dir, 0.0012);  // 细激光（原 0.002）
-            float depthFade = (1.0 - abs(depthAngle) * 0.3) * exp(-depthAngle * depthAngle * 2.5);
-            
-            laserOut += blueColor * (beam * blueMulB * depthFade);
+        if (laserSettings.appearance.w > 0.5) {
+            float sweepPhase = fract(time / 16.0);
+            float horizontalSweep = smoothstep(0.40, 0.49, sweepPhase)
+                                  * (1.0 - smoothstep(0.90, 0.99, sweepPhase));
+            horizontalSweep = max(horizontalSweep, guitarClimax * 0.8);
+            float blueBrightness = 1.0 + guitarClimax * 1.15;
+            laserOut += blueColor * (cameraDirectedLaser(p, pixelStep, time, treble,
+                                                         horizontalSweep, laserSettings)
+                                     * 0.38 * fanEnvelope * blueBrightness);
+        } else {
+            // ====== Top 6 条 ======
+            float2 fanOrigin = float2(0.0, 0.56);
+            // 多频率叠加运动：组合快慢不同的正弦波，形成不规则、有机的运动感
+            float planeRotation = time * 0.15 + sin(time * 0.06) * 0.4;  // 主旋转 + 缓慢摆动
+            float cosPlane = cos(planeRotation);
+            float sinPlane = sin(planeRotation);
+            // 复合摆动：3 个频率叠加（主频 + 快频 + 慢频）→ 类似真人操作灯光的不规则感
+            float baseSwing = sin(time * 0.28) * 0.42        // 主摆动
+                            + sin(time * 0.17) * 0.18        // 慢摆动（增加"呼吸感"）
+                            + sin(time * 0.51) * 0.08;       // 快抖动（微小抖动，更生动）
+            float blueMul = 0.38 * fanEnvelope;
+
+            float2 toP = p - fanOrigin;
+
+            for (int i = 0; i < 6; i++) {  // 7→6
+                float iF = float(i);
+                // 调整分布：6 条均匀分布，保持扇形覆盖
+                float spreadInPlane = (iF - 2.5) * 0.095;  // 中心为 i=2.5
+                float angleInPlane = baseSwing + spreadInPlane;
+
+                float worldAngle = angleInPlane * cosPlane;
+                float depthAngle = angleInPlane * sinPlane;
+
+                float2 dir = float2(sin(worldAngle), -cos(worldAngle));
+                float beam = laserLineInline(toP, dir, 0.0012);  // 细激光（原 0.002）
+                float depthFade = (1.0 - abs(depthAngle) * 0.3) * exp(-depthAngle * depthAngle * 2.5);
+
+                laserOut += blueColor * (beam * blueMul * depthFade);
+            }
+
+            // ====== Bottom 6 条 ======
+            float2 fanBottomOrigin = float2(0.0, -0.56);
+            // 底部扇形：使用不同的频率组合，与顶部形成对比和呼应
+            float planeRotationBottom = time * 0.18 + 1.57 + sin(time * 0.08) * 0.35;
+            float cosPlaneB = cos(planeRotationBottom);
+            float sinPlaneB = sin(planeRotationBottom);
+            // 底部摆动：频率与顶部错开，避免同步（更自然）
+            float baseSwingBottom = sin(time * 0.32 + 1.0) * 0.38
+                                   + sin(time * 0.21 + 0.5) * 0.2   // 慢频，相位偏移
+                                   + sin(time * 0.58 + 0.8) * 0.09; // 快频，相位偏移
+            float blueMulB = 0.35 * fanEnvelope;
+
+            float2 toPB = p - fanBottomOrigin;
+
+            for (int i = 0; i < 6; i++) {  // 7→6
+                float iF = float(i);
+                float spreadInPlane = (iF - 2.5) * 0.095;
+                float angleInPlane = baseSwingBottom + spreadInPlane;
+
+                float worldAngle = 3.14159 + angleInPlane * cosPlaneB;
+                float depthAngle = angleInPlane * sinPlaneB;
+
+                float2 dir = float2(sin(worldAngle), -cos(worldAngle));
+                float beam = laserLineInline(toPB, dir, 0.0012);  // 细激光（原 0.002）
+                float depthFade = (1.0 - abs(depthAngle) * 0.3) * exp(-depthAngle * depthAngle * 2.5);
+
+                laserOut += blueColor * (beam * blueMulB * depthFade);
+            }
         }
     }
-    
+
     // ====== B. Green Laser Patterns（绿色激光多样式）- 渐入渐出 + DSP 展示 ======
-    float greenPhase = fract(elapsed.z * 0.11);   // 周期略慢，便于看清
+    float greenPhase = fract(time * 0.11);   // Match iOS global pattern timing.
     // The iOS green pattern geometry follows the separated piano envelope.
     float greenTrigger = smoothstep(0.04, 0.12, piano) * 0.88;
     float greenEnvelope = fadeEnvelope(greenPhase, 0.28, 0.28);
@@ -388,7 +561,7 @@ static float3 laserSystem(float2 p, float time, float treble, float piano, float
     greenEnvelope *= saturate(dspBreath);
     
     if (greenEnvelope > 0.01) {
-        float patternSwitch = fract(elapsed.z * 0.065);  // 5 种样式轮换
+        float patternSwitch = fract(time * 0.065);  // Match iOS pattern rotation.
         float patternPhase = fract(patternSwitch * 5.0);
         greenEnvelope *= smoothstep(0.0, 0.08, patternPhase)
                        * (1.0 - smoothstep(0.92, 1.0, patternPhase));
@@ -418,7 +591,7 @@ static float3 laserSystem(float2 p, float time, float treble, float piano, float
         } else if (patternSwitch < 0.4) {
             // Pattern 2: 单条聚光灯从左扫到右（DSP：扫速略随 piano）
             float scanSpeed = 1.2 + piano * 0.4;
-            float scanAngle = -0.7 + patternPhase * scanSpeed * 1.4;
+            float scanAngle = -0.7 + fract(time * 0.08) * scanSpeed * 1.4;
             float2 greenScanOrigin = float2(0.0, 0.58);
             float2 toP = p - greenScanOrigin;
             float2 dir = float2(sin(scanAngle), -cos(scanAngle));
@@ -470,12 +643,14 @@ static float3 laserSystem(float2 p, float time, float treble, float piano, float
     }
     
     // ====== C. 旋转光束（粉色/品红）- 渐显-保持-渐消 ======
-    float beamPhase = fract(elapsed.w / 9.0);
+    float beamPhase = fract(time / 9.0);
     float beamEnvelope = fadeEnvelope(beamPhase, 0.2, 0.2);
-    float beamTrigger = smoothstep(0.04, 0.15, guitar);
+    // Match iOS: center beams follow the current FFT mid band, rather than a
+    // separated guitar stem held at its activation strength for nine seconds.
+    float beamTrigger = smoothstep(0.04, 0.15, fftMid);
     beamEnvelope *= beamTrigger;
     
-    if ((beamEnvelope > 0.01 || guitarPeak > 0.01) && dist > 0.01) {
+    if (beamEnvelope > 0.01 && dist > 0.01) {
         // 延迟 atan2 到这里（只有需要时才计算）
         float angle = atan2(p.y, p.x);
         float distFade = exp(-dist * 2.0);
@@ -496,7 +671,7 @@ static float3 laserSystem(float2 p, float time, float treble, float piano, float
         }
         
         // 额外 6 条细丝
-        float climaxFade = smoothstep(0.45, 0.78, guitarPeak);
+        float climaxFade = smoothstep(0.12, 0.28, fftMid);
         if (climaxFade > 0.01) {
             float3 rotExtraColor = mood.rotatingBeamExtra.rgb;
             if (!colorIsSet(rotExtraColor)) {
@@ -515,9 +690,9 @@ static float3 laserSystem(float2 p, float time, float treble, float piano, float
         }
         
         // ====== D. 外围长丝（粉紫）- 渐显-保持-渐消 ======
-        float longBeamPhase = fract(peakElapsed / 11.0);
+        float longBeamPhase = fract(time / 11.0);
         float longBeamEnvelope = fadeEnvelope(longBeamPhase, 0.18, 0.18);
-        float longBeamTrigger = smoothstep(0.42, 0.72, guitarPeak);
+        float longBeamTrigger = smoothstep(0.05, 0.18, fftMid);
         longBeamEnvelope *= longBeamTrigger;
         
         if (longBeamEnvelope > 0.01) {
@@ -540,7 +715,7 @@ static float3 laserSystem(float2 p, float time, float treble, float piano, float
         }
         
         // ====== E. 放射状日冕丝 - 渐显-保持-渐消 ======
-        float coronaPhase = fract(peakElapsed / 13.0);
+        float coronaPhase = fract(time / 13.0);
         float coronaEnvelope = fadeEnvelope(coronaPhase, 0.15, 0.15);
         float coronaTrigger = smoothstep(0.06, 0.2, guitarPeak);
         coronaEnvelope *= coronaTrigger;
@@ -567,7 +742,7 @@ static float3 laserSystem(float2 p, float time, float treble, float piano, float
     }
     
     // ====== F. 脉冲环（紫色）- 渐显-保持-渐消 ======
-    float ringPhase = fract(peakElapsed / 7.0);
+    float ringPhase = fract(time / 7.0);
     float ringEnvelope = fadeEnvelope(ringPhase, 0.2, 0.2);
     float ringTrigger = smoothstep(0.05, 0.15, guitarPeak);
     ringEnvelope *= ringTrigger;
@@ -588,11 +763,15 @@ static float3 laserSystem(float2 p, float time, float treble, float piano, float
 fragment float4 desktopTyndallFragment(TyndallVertexOut in [[stage_in]],
                                      constant TyndallVisualAudio &uniforms [[buffer(0)]],
                                      constant DesktopMoodColors &mood [[buffer(1)]],
-                                     constant TyndallAnimationUniforms &animation [[buffer(2)]]) {
-    float2 uv = in.uv;
+                                     constant TyndallAnimationUniforms &animation [[buffer(2)]],
+                                     constant DesktopLaserTunnelUniforms &laserSettings [[buffer(3)]]) {
+    // CommonVertexShader on iOS maps the top of the screen to uv.y = 0.
+    // The fullscreen triangle's interpolated UV runs in the opposite direction.
+    float2 uv = float2(in.uv.x, 1.0 - in.uv.y);
     float time = uniforms.time;
     float2 p = uv - 0.5;
     p.x *= uniforms.aspectRatio;
+    float pixelStep = max(length(dfdx(p)), length(dfdy(p)));
 
     // Keep the iOS light geometry, layer unlocks, rhythm and color processing.
     float aiBpm = 120.0;
@@ -608,8 +787,7 @@ fragment float4 desktopTyndallFragment(TyndallVertexOut in [[stage_in]],
     float high = uniforms.treble * aiTrigSens * uniforms.playing;
     float4 elapsed = max(float4(time) - animation.starts, 0.0);
     float peakElapsed = max(time - animation.peak.x, 0.0);
-    float vocal = smoothstep(0.04, 0.32, animation.strengths.x)
-                * activationEnvelope(elapsed.x, 12.0);
+    float floorMid = animation.strengths.x * activationEnvelope(elapsed.x, 12.0);
     float treble = animation.strengths.y * activationEnvelope(elapsed.y, 14.0);
     float piano = animation.strengths.z * activationEnvelope(elapsed.z, 15.384615);
     float guitar = animation.strengths.w * activationEnvelope(elapsed.w, 9.0);
@@ -635,22 +813,26 @@ fragment float4 desktopTyndallFragment(TyndallVertexOut in [[stage_in]],
     float unlock1 = smoothstep(0.02, 0.08, energy);
     if (unlock1 > 0.01) {
         float volBright = aiBright * (1.0 + beatPulse * 0.2 * aiEnergy);
-        finalColor += volumetricBeamSystem(p, animTime, bass, hazeVal, mood) * unlock1 * volBright;
+        finalColor += volumetricBeamSystem(p, animTime, bass, hazeVal, uniforms.aspectRatio, mood)
+                    * unlock1 * volBright;
         finalColor += edgeLight(uv, piano, mood) * unlock1 * aiBright;
     }
 
-    float unlock2 = smoothstep(0.02, 0.08, max(energy, vocal * 0.12));
-    if (unlock2 > 0.01 && vocal > 0.01) {
-        float3 topLight = topLightArray(p, elapsed.x, vocal * 0.15, mood) * unlock2 * aiBright;
-        topLight *= (1.0 + beatPulse * 0.25 * aiEnergy) * vocal;
-        finalColor += topLight;
+    float floorActivity = smoothstep(0.02, 0.08, floorMid);
+    float unlock2 = smoothstep(0.02, 0.08, max(energy, floorActivity * 0.12));
+    if (unlock2 > 0.01 && floorMid > 0.001) {
+        float3 floorLight = floorLightArray(p, animTime, floorMid, uniforms.aspectRatio, mood)
+                          * unlock2 * aiBright;
+        floorLight *= (1.0 + beatPulse * 0.25 * aiEnergy);
+        finalColor += floorLight;
     }
 
-    float laserActivity = max(max(treble, piano), max(guitar, guitarPeak));
+    float liveGuitarPeak = uniforms.guitarPeak * uniforms.playing;
+    float laserActivity = max(max(treble, piano), max(guitar, max(guitarPeak, liveGuitarPeak)));
     float unlock3 = smoothstep(0.03, 0.12, max(energy, laserActivity * 0.16));
     if (unlock3 > 0.01) {
-        float3 laser = laserSystem(p, animTime, treble, piano, guitar, guitarPeak,
-                                   elapsed, peakElapsed, mood) * unlock3 * aiBright;
+        float3 laser = laserSystem(p, pixelStep, animTime, treble, piano, mid, guitarPeak, liveGuitarPeak,
+                                   mood, laserSettings) * unlock3 * aiBright;
         laser *= (1.0 + beatPulse * 0.35 * aiEnergy);
         finalColor += laser;
     }
