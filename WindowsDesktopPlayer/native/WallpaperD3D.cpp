@@ -271,10 +271,10 @@ extern "C" __declspec(dllexport) int __cdecl WallpaperD3D_SetArtwork(void* handl
     return 1;
 }
 
-extern "C" __declspec(dllexport) void __cdecl WallpaperD3D_Render(void* handle, const WallpaperFrame* frame)
+extern "C" __declspec(dllexport) int __cdecl WallpaperD3D_Render(void* handle, const WallpaperFrame* frame)
 {
     auto* renderer = static_cast<Renderer*>(handle);
-    if (!renderer || !frame || !IsWindowVisible(renderer->window)) return;
+    if (!renderer || !frame || !IsWindowVisible(renderer->window)) return 0;
     renderer->frame = *frame;
     RECT parentRect{};
     const HWND parent = GetParent(renderer->window);
@@ -287,7 +287,7 @@ extern "C" __declspec(dllexport) void __cdecl WallpaperD3D_Render(void* handle, 
         if (childRect.right - childRect.left != width || childRect.bottom - childRect.top != height)
             SetWindowPos(renderer->window, nullptr, 0, 0, width, height, SWP_NOACTIVATE | SWP_NOZORDER);
     }
-    if (renderer->resizePending && !CreateBackBuffer(renderer)) return;
+    if (renderer->resizePending && !CreateBackBuffer(renderer)) return 0;
     const float clear[4] = { 0.003f, 0.007f, 0.018f, 1.0f };
     renderer->context->OMSetRenderTargets(1, renderer->renderTarget.GetAddressOf(), nullptr);
     D3D11_VIEWPORT viewport{};
@@ -308,7 +308,9 @@ extern "C" __declspec(dllexport) void __cdecl WallpaperD3D_Render(void* handle, 
     renderer->context->PSSetSamplers(0, 1, &sampler);
     renderer->context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
     renderer->context->Draw(3, 0);
-    renderer->swapChain->Present(0, 0);
+    const HRESULT present = renderer->swapChain->Present(0, 0);
+    if (present != S_OK) { SetError(L"IDXGISwapChain::Present", present); return 0; }
+    return 1;
 }
 
 extern "C" __declspec(dllexport) int __cdecl WallpaperD3D_GetLastError(wchar_t* destination, int capacity)

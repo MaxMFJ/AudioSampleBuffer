@@ -23,6 +23,7 @@ public sealed class DesktopWallpaperController : IDisposable
 
     public int EffectIndex { get; private set; }
     public bool IsVisible => _window?.IsVisible == true;
+    public string? Error { get; private set; }
 
     public DesktopWallpaperController(AudioReactiveMonitor audio)
     {
@@ -35,8 +36,8 @@ public sealed class DesktopWallpaperController : IDisposable
         catch (IOException) { }
         _timer.Tick += (_, _) =>
         {
-            if (_nativeRenderer is not null) _nativeRenderer.Render(EffectIndex, _audio.Spectrum);
-            else _window?.Surface.InvalidateVisual();
+            if (_nativeRenderer?.Render(EffectIndex, _audio.Spectrum) != true)
+                _window?.Surface.InvalidateVisual();
         };
     }
 
@@ -62,13 +63,15 @@ public sealed class DesktopWallpaperController : IDisposable
     public void Show()
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
+        Error = null;
         if (_window is null)
         {
             _window = new WallpaperWindow(_audio, EffectIndex);
             _window.Show();
             if (!AttachBehindDesktopIcons(_window))
             {
-                Debug.WriteLine("Could not attach the desktop wallpaper window to Explorer's WorkerW host.");
+                Error = "无法把动态桌面窗口挂载到 Windows 桌面层（WorkerW/Progman）。";
+                Debug.WriteLine(Error);
                 _window.Close();
                 _window = null;
                 return;
@@ -108,20 +111,31 @@ public sealed class DesktopWallpaperController : IDisposable
         var hwnd = new WindowInteropHelper(window).Handle;
         if (hwnd == IntPtr.Zero) return false;
         var host = FindDesktopWallpaperHost();
-        if (host == IntPtr.Zero) return false;
+        var programManager = FindWindow("Progman", null);
+        if (host != IntPtr.Zero && TryAttach(hwnd, host)) return true;
+        return programManager != IntPtr.Zero && programManager != host && TryAttach(hwnd, programManager);
+    }
 
+    private static bool TryAttach(IntPtr hwnd, IntPtr host)
+    {
+        var oldParent = GetParent(hwnd);
         var style = GetWindowLongPtr(hwnd, GwlStyle).ToInt64();
-        style = (style | WsChild | WsVisible) & ~WsPopup;
-        SetWindowLongPtr(hwnd, GwlStyle, new IntPtr(style));
         var exStyle = GetWindowLongPtr(hwnd, GwlExStyle).ToInt64();
-        exStyle |= WsExTransparent | WsExNoActivate | WsExToolWindow;
-        SetWindowLongPtr(hwnd, GwlExStyle, new IntPtr(exStyle));
+        var childStyle = (style | WsChild | WsVisible) & ~WsPopup;
+        var clickThroughStyle = exStyle | WsExTransparent | WsExNoActivate | WsExToolWindow;
+        SetWindowLongPtr(hwnd, GwlStyle, new IntPtr(childStyle));
+        SetWindowLongPtr(hwnd, GwlExStyle, new IntPtr(clickThroughStyle));
         SetParent(hwnd, host);
-        if (GetParent(hwnd) != host) return false;
-        if (!SetWindowPos(hwnd, IntPtr.Zero, GetSystemMetrics(SmX), GetSystemMetrics(SmY),
+        var attached = GetParent(hwnd) == host && SetWindowPos(hwnd, IntPtr.Zero, GetSystemMetrics(SmX), GetSystemMetrics(SmY),
             GetSystemMetrics(SmCxVirtualScreen), GetSystemMetrics(SmCyVirtualScreen),
-            SwpNoActivate | SwpFrameChanged | SwpShowWindow)) return false;
-        return true;
+            SwpNoActivate | SwpFrameChanged | SwpShowWindow);
+        if (attached) return true;
+
+        SetParent(hwnd, oldParent);
+        SetWindowLongPtr(hwnd, GwlStyle, new IntPtr(style));
+        SetWindowLongPtr(hwnd, GwlExStyle, new IntPtr(exStyle));
+        SetWindowPos(hwnd, IntPtr.Zero, 0, 0, 0, 0, SwpNoActivate | SwpNoMove | SwpNoSize | SwpFrameChanged | SwpShowWindow);
+        return false;
     }
 
     private static IntPtr FindDesktopWallpaperHost()
@@ -150,6 +164,8 @@ public sealed class DesktopWallpaperController : IDisposable
     private const long WsExToolWindow = 0x00000080L;
     private const long WsExNoActivate = 0x08000000L;
     private const uint SwpNoActivate = 0x0010;
+    private const uint SwpNoMove = 0x0002;
+    private const uint SwpNoSize = 0x0001;
     private const uint SwpFrameChanged = 0x0020;
     private const uint SwpShowWindow = 0x0040;
     private const int SmX = 76;

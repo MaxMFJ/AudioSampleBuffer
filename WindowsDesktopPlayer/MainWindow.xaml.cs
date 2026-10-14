@@ -93,6 +93,8 @@ public partial class MainWindow : Window
             _songListDrawer.Show();
             _reactiveMonitor.Start();
             _desktopWallpaper.Show();
+            if (_desktopWallpaper.Error is { } wallpaperError)
+                MessageBox.Show(this, wallpaperError, "动态桌面启动失败", MessageBoxButton.OK, MessageBoxImage.Warning);
             _visualTimer.Start();
         };
         LoadLibrary();

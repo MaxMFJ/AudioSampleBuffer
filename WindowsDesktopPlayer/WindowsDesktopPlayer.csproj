@@ -20,7 +20,7 @@
   <ItemGroup>
     <Content Include="native\WallpaperShaders.hlsl" Link="WallpaperShaders.hlsl" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
-  <Target Name="BuildNativeWallpaperRenderer" BeforeTargets="Build" Condition="'$(OS)' == 'Windows_NT'">
+  <Target Name="BuildNativeWallpaperRenderer" BeforeTargets="Build" Condition="'$(OS)' == 'Windows_NT' and '$(SkipNativeBuild)' != 'true'">
     <MSBuild Projects="$(MSBuildProjectDirectory)\native\WallpaperD3D.vcxproj" Targets="Build"
              Properties="Configuration=$(Configuration);Platform=x64;OutDir=$(TargetDir)" />
   </Target>

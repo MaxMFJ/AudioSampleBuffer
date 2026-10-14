@@ -51,7 +51,7 @@ public sealed class WindowsStatusBarPlayer : IDisposable
     private readonly Action _exit;
     private readonly Action<double> _seek;
     private readonly HwndSource _source;
-    private readonly NOTIFYICONDATA _icon;
+    private NOTIFYICONDATA _icon;
     private bool _isPlaying;
     private bool _repeatEnabled;
     private string _trackTitle = "Sound Desk";

@@ -15,5 +15,5 @@ extern "C" __declspec(dllexport) void* __cdecl WallpaperD3D_Create(HWND parent, 
 extern "C" __declspec(dllexport) void __cdecl WallpaperD3D_Destroy(void* handle);
 extern "C" __declspec(dllexport) void __cdecl WallpaperD3D_Show(void* handle, int show);
 extern "C" __declspec(dllexport) int __cdecl WallpaperD3D_SetArtwork(void* handle, const std::uint8_t* pixels, int width, int height, int stride);
-extern "C" __declspec(dllexport) void __cdecl WallpaperD3D_Render(void* handle, const WallpaperFrame* frame);
+extern "C" __declspec(dllexport) int __cdecl WallpaperD3D_Render(void* handle, const WallpaperFrame* frame);
 extern "C" __declspec(dllexport) int __cdecl WallpaperD3D_GetLastError(wchar_t* destination, int capacity);

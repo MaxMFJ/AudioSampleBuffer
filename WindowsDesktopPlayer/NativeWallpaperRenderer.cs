@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Windows;
@@ -14,6 +15,7 @@ internal sealed class NativeWallpaperRenderer : IDisposable
     private readonly WallpaperFrame _frame = new();
     private IntPtr _handle;
     private bool _hasArtwork;
+    private bool _failed;
 
     public static NativeWallpaperRenderer? TryCreate(IntPtr parent, int width, int height, out string error)
     {
@@ -33,12 +35,12 @@ internal sealed class NativeWallpaperRenderer : IDisposable
 
     public void SetVisible(bool visible)
     {
-        if (_handle != IntPtr.Zero) Native.Show(_handle, visible ? 1 : 0);
+        if (_handle != IntPtr.Zero) Native.Show(_handle, visible && !_failed ? 1 : 0);
     }
 
-    public void Render(int effectIndex, float[] spectrum)
+    public bool Render(int effectIndex, float[] spectrum)
     {
-        if (_handle == IntPtr.Zero) return;
+        if (_handle == IntPtr.Zero || _failed) return false;
         _frame.Time = (float)_clock.Elapsed.TotalSeconds;
         _frame.EffectIndex = (uint)Math.Clamp(effectIndex, 0, 3);
         _frame.HasArtwork = _hasArtwork ? 1 : 0;
@@ -50,7 +52,11 @@ internal sealed class NativeWallpaperRenderer : IDisposable
         _frame.Guitar = Math.Clamp(_frame.High * 0.78f, 0, 1);
         _frame.Piano = Math.Clamp(_frame.Mid * 0.72f, 0, 1);
         _frame.Drums = Math.Clamp(_frame.Low * 0.92f, 0, 1);
-        Native.Render(_handle, _frame);
+        if (Native.Render(_handle, _frame) != 0) return true;
+        _failed = true;
+        Native.Show(_handle, 0);
+        Debug.WriteLine($"Direct3D wallpaper render failed: {Native.GetLastError()}");
+        return false;
     }
 
     public void SetArtwork(ImageSource? image)
@@ -113,17 +119,17 @@ internal sealed class NativeWallpaperRenderer : IDisposable
     {
         private const string Library = "WallpaperD3D.dll";
 
-        [DllImport(Library, EntryPoint = "WallpaperD3D_Create", CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Unicode)]
+        [DllImport(Library, EntryPoint = "WallpaperD3D_Create", ExactSpelling = true, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Unicode)]
         internal static extern IntPtr Create(IntPtr parent, int width, int height, string shaderPath);
-        [DllImport(Library, EntryPoint = "WallpaperD3D_Destroy", CallingConvention = CallingConvention.Cdecl)]
+        [DllImport(Library, EntryPoint = "WallpaperD3D_Destroy", ExactSpelling = true, CallingConvention = CallingConvention.Cdecl)]
         internal static extern void Destroy(IntPtr handle);
-        [DllImport(Library, EntryPoint = "WallpaperD3D_Show", CallingConvention = CallingConvention.Cdecl)]
+        [DllImport(Library, EntryPoint = "WallpaperD3D_Show", ExactSpelling = true, CallingConvention = CallingConvention.Cdecl)]
         internal static extern void Show(IntPtr handle, int visible);
-        [DllImport(Library, EntryPoint = "WallpaperD3D_SetArtwork", CallingConvention = CallingConvention.Cdecl)]
+        [DllImport(Library, EntryPoint = "WallpaperD3D_SetArtwork", ExactSpelling = true, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int SetArtwork(IntPtr handle, IntPtr pixels, int width, int height, int stride);
-        [DllImport(Library, EntryPoint = "WallpaperD3D_Render", CallingConvention = CallingConvention.Cdecl)]
-        internal static extern void Render(IntPtr handle, [In] WallpaperFrame frame);
-        [DllImport(Library, EntryPoint = "WallpaperD3D_GetLastError", CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Unicode)]
+        [DllImport(Library, EntryPoint = "WallpaperD3D_Render", ExactSpelling = true, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern int Render(IntPtr handle, [In] WallpaperFrame frame);
+        [DllImport(Library, EntryPoint = "WallpaperD3D_GetLastError", ExactSpelling = true, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Unicode)]
         private static extern int GetLastError(StringBuilder destination, int capacity);
 
         internal static string GetLastError()
