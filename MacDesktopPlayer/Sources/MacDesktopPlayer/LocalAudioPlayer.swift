@@ -32,7 +32,10 @@ enum PlaybackRepeatMode: Int {
 final class LocalAudioPlayer {
     private let engine = AVAudioEngine()
     private let player = AVAudioPlayerNode()
-    private let audioControlQueue = DispatchQueue(label: "app.audiosamplebuffer.audio-control", qos: .userInitiated)
+    // AVAudioPlayerNode.stop() can synchronously wait for AVAudioEngine's
+    // default-QoS render/control threads. Keep teardown at matching QoS so a
+    // user-initiated worker does not block behind lower-priority audio work.
+    private let audioControlQueue = DispatchQueue(label: "app.audiosamplebuffer.audio-control", qos: .default)
     private let analyzerLock = NSLock()
     private var dsp: OpaquePointer?
     private var file: AVAudioFile?

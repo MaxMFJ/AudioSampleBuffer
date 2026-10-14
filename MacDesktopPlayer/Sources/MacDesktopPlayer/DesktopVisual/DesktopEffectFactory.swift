@@ -234,18 +234,27 @@ private struct TyndallActivation {
     var strength: Float = 0
 
     mutating func update(input: Float, threshold: Float, minimumStrength: Float,
-                         duration: Float, time: Float, playing: Bool) {
+                         duration: Float, time: Float, deltaTime: Float, playing: Bool) {
         guard playing else {
             self = TyndallActivation()
             return
         }
-        if startedAt >= 0, time - startedAt < duration { return }
-        if input >= threshold {
+        let isActive = startedAt >= 0 && time - startedAt < duration
+        if !isActive && input >= threshold {
             startedAt = time
             strength = max(input, minimumStrength)
-        } else {
-            self = TyndallActivation()
+            return
         }
+        guard isActive else {
+            self = TyndallActivation()
+            return
+        }
+
+        // Keep the activation window, but let its brightness follow the live FFT.
+        let target = max(input, minimumStrength)
+        let rate: Float = target > strength ? 10 : 4
+        let follow = 1 - exp(-rate * deltaTime)
+        strength += (target - strength) * follow
     }
 }
 
@@ -257,7 +266,7 @@ private struct TyndallAnimationUniforms {
 
 private struct DesktopLaserTunnelUniforms {
     var geometry = SIMD4<Float>(12, 0.60, 8, 12) // beam count, fan angle, depth, beam length
-    var motion = SIMD4<Float>(7, 0.90, 0.24, 0.17) // approach speed, camera aim, yaw, pitch
+    var motion = SIMD4<Float>(7, 0.90, 0.24, 0.28) // approach speed, camera aim, yaw, pitch
     var appearance = SIMD4<Float>(1, 0.12, 0.90, 1) // glow, near plane, vertical FOV, mode
 
     init(defaults: UserDefaults = .standard) {
@@ -324,22 +333,24 @@ private final class FullscreenDesktopEffectRenderer: DesktopEffectRenderer {
             lastTyndallTime = audio.time
             lastTyndallPlaybackTime = audio.playbackTime
 
-            let source = SIMD3<Float>(audio.bass, audio.mid, audio.treble)
-            let follow: Float = 1 - exp(-(playing ? 9.0 : 15.0) * dt)
+            // The Mac analyzer scales its FFT bands by 5; iOS Tyndall consumes
+            // the normalized 0...1 bands directly.
+            let source = SIMD3<Float>(audio.bass, audio.mid, audio.treble) / 5
+            let follow: Float = 1 - exp(-(playing ? 14.0 : 15.0) * dt)
             tyndallBands += (source - tyndallBands) * follow
             values.bass = tyndallBands.x
             values.mid = tyndallBands.y
             values.treble = tyndallBands.z
 
             // The four iOS floor lights respond to FFT mid, not vocal/stem analysis.
-            let inputs = [values.mid, audio.treble, audio.piano, audio.guitar, audio.guitarPeak]
-            let thresholds: [Float] = [0.02, 0.045, 0.12, 0.13, 0.48]
+            let inputs = [values.mid, values.treble, audio.piano, audio.guitar, audio.guitarPeak]
+            let thresholds: [Float] = [0.02, 0.02, 0.12, 0.13, 0.48]
             let minimums: [Float] = [0.08, 0.13, 0.20, 0.20, 0.85]
             let durations: [Float] = [12, 14, 15.384615, 9, 13]
             for index in tyndallActivations.indices {
                 tyndallActivations[index].update(input: inputs[index], threshold: thresholds[index],
                                                  minimumStrength: minimums[index], duration: durations[index],
-                                                 time: audio.time, playing: playing)
+                                                 time: audio.time, deltaTime: dt, playing: playing)
             }
             animation.starts = SIMD4<Float>(tyndallActivations[0].startedAt, tyndallActivations[1].startedAt,
                                             tyndallActivations[2].startedAt, tyndallActivations[3].startedAt)

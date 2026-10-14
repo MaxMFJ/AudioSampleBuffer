@@ -2448,6 +2448,9 @@ typedef struct {
 
 @interface TyndallBeamRenderer ()
 @property (nonatomic, strong) AIColorConfiguration *currentAIConfig;
+@property (nonatomic) float guitarLaserEnvelope;
+@property (nonatomic) NSTimeInterval guitarLaserHoldUntil;
+@property (nonatomic) NSTimeInterval guitarLaserLastUpdate;
 @end
 
 @implementation TyndallBeamRenderer
@@ -2455,10 +2458,11 @@ typedef struct {
 - (instancetype)initWithMetalView:(MTKView *)metalView {
     self = [super initWithMetalView:metalView];
     if (self) {
-        // 重新创建更大的 uniformBuffer 来容纳 UniformsAI
-        self.uniformBuffer = [self.device newBufferWithLength:sizeof(UniformsAI)
+        // Base updateUniforms writes the full Uniforms layout before the AI
+        // fields are populated, so the buffer must fit both layouts.
+        self.uniformBuffer = [self.device newBufferWithLength:MAX(sizeof(UniformsAI), sizeof(Uniforms))
                                                       options:MTLResourceStorageModeShared];
-        NSLog(@"✅ 丁达尔光束渲染器使用 UniformsAI，缓冲区大小: %lu 字节", sizeof(UniformsAI));
+        NSLog(@"✅ 丁达尔光束渲染器使用 UniformsAI，缓冲区大小: %lu 字节", (unsigned long)self.uniformBuffer.length);
         
         // 监听 AI 配置变化（播放新歌时 MusicAIAnalyzer 会发送通知）
         [[NSNotificationCenter defaultCenter] addObserver:self
@@ -2480,6 +2484,8 @@ typedef struct {
     AIColorConfiguration *config = notification.userInfo[kAIConfigurationKey];
     if (config) {
         self.currentAIConfig = config;
+        self.guitarLaserEnvelope = 0.0f;
+        self.guitarLaserHoldUntil = 0.0;
         NSLog(@"🎨 丁达尔: 已应用 AI 配色 %@ - %@", config.songName, config.artist ?: @"");
     }
 }
@@ -2516,6 +2522,21 @@ typedef struct {
     
     UniformsAI *uniforms = (UniformsAI *)[self.uniformBuffer contents];
     AIColorConfiguration *config = self.currentAIConfig;
+
+    // Hold a separated-guitar crest long enough for the 3D blue sweep to read
+    // as one musical gesture, then release smoothly between phrases.
+    NSDictionary *renderParams = self.renderParameters ?: @{};
+    float guitarLevel = [renderParams[@"guitarStemControlEnabled"] boolValue]
+        ? fminf(fmaxf([renderParams[@"guitarStemControl"] floatValue], 0.0f), 1.0f) : 0.0f;
+    if (guitarLevel >= 0.72f) self.guitarLaserHoldUntil = time + 1.2;
+    float target = time < self.guitarLaserHoldUntil ? fmaxf(guitarLevel, 0.85f) : 0.0f;
+    float dt = self.guitarLaserLastUpdate > 0.0 && time >= self.guitarLaserLastUpdate
+             ? (float)fmin(time - self.guitarLaserLastUpdate, 0.1) : (1.0f / 30.0f);
+    self.guitarLaserLastUpdate = time;
+    float rate = target > self.guitarLaserEnvelope ? 7.0f : 1.4f;
+    self.guitarLaserEnvelope += (target - self.guitarLaserEnvelope) * (1.0f - expf(-rate * dt));
+    // Tyndall alone owns this otherwise-unused UniformsAI slot.
+    uniforms->galaxyParams3.x = self.guitarLaserEnvelope;
     
     if (config) {
         // 使用 AI 分析返回的配色

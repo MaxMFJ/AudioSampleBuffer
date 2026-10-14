@@ -287,19 +287,12 @@ static inline float laserLineInline(float2 toP, float2 dir, float thickness) {
 struct DesktopLaserTunnelUniforms {
     float4 geometry;   // beamCount (total), fanAngle, depth, beamLength
     float4 motion;     // approachSpeed, cameraAimStrength, yawAmplitude, pitchAmplitude
-    float4 appearance; // glowIntensity, nearPlane, verticalFOV, mode (0=legacy, 1=tunnel)
+    float4 appearance; // glowIntensity, nearPlane, verticalFOV, mode (0=legacy, 1=dual fan)
 };
 struct LaserCamera {
     float3 position, right, up, forward;
     float nearPlane, tanHalfFOV;
 };
-
-static float3x3 laserYawPitch(float yaw, float pitch) {
-    float cy = cos(yaw), sy = sin(yaw), cp = cos(pitch), sp = sin(pitch);
-    float3x3 yawRotation(float3(cy, 0, -sy), float3(0, 1, 0), float3(sy, 0, cy));
-    float3x3 pitchRotation(float3(1, 0, 0), float3(0, cp, sp), float3(0, -sp, cp));
-    return yawRotation * pitchRotation;
-}
 
 // Perspective projection into the existing aspect-correct p coordinates.
 // Camera-local Y is up; the iOS-compatible stage coordinates use Y down.
@@ -371,13 +364,18 @@ static float laserVolume(float2 p, float3 origin, float3 direction, float beamLe
     float trail = exp(-max(-headDistance, 0.0) / 0.55)
                 * (1.0 - smoothstep(0.0, 0.18, headDistance));
     float scan = max(head, trail * 0.65);
+    // Hide the cyclic wrap at the beam ends instead of snapping the head back.
+    float scanPhase = scanTravel / max(beamLength, 0.001);
+    float wrapFade = smoothstep(0.0, 0.045, scanPhase)
+                   * (1.0 - smoothstep(0.955, 1.0, scanPhase));
+    scan *= wrapFade;
     float scattering = exp(-viewDepth * 0.035);
     return (core * (0.32 + scan * 2.4) + halo * (0.24 + scan * 1.1)
             + bloom * (0.045 + scan * 0.20)) * scattering;
 }
 
-static float cameraDirectedLaser(float2 p, float pixelStep, float time, float treble, float horizontalSweep,
-                                 constant DesktopLaserTunnelUniforms &settings) {
+static float dualFanLaserPitchCrossing(float2 p, float pixelStep, float time, float treble,
+                                      float horizontalSweep, constant DesktopLaserTunnelUniforms &settings) {
     if (settings.appearance.x <= 0.0) return 0.0;
     LaserCamera camera;
     camera.position = float3(0.0);
@@ -386,42 +384,46 @@ static float cameraDirectedLaser(float2 p, float pixelStep, float time, float tr
     camera.up = normalize(cross(camera.forward, camera.right));
     camera.nearPlane = clamp(settings.appearance.y, 0.01, 1.0);
     camera.tanHalfFOV = tan(clamp(settings.appearance.z, 0.35, 2.2) * 0.5);
-    float3x3 cameraBasis(camera.right, camera.up, camera.forward);
     int beamCount = clamp(int(settings.geometry.x), 1, 64);
     int firstGroupCount = (beamCount + 1) / 2;
     float fanAngle = clamp(settings.geometry.y, 0.0, 1.4);
     float depth = max(settings.geometry.z, camera.nearPlane + 0.5);
-    float beamLength = max(settings.geometry.w, 0.01);
+    // Keep both fixed emitter points fully outside the visible screen.
+    // The beams enter from beyond the edge; their source hardware is hidden.
+    const float emitterEdge = 0.62;
+    float height = emitterEdge * 2.0 * depth * camera.tanHalfFOV;
+    float crossingDepth = depth * 0.43;
+    float basePitch = atan2(height, depth - crossingDepth);
+    float minimumVisiblePitch = atan2(height, max(depth - camera.nearPlane, 0.01));
+    float pitchAmplitude = min(max(settings.motion.w, 0.0), max(basePitch - minimumVisiblePitch, 0.0));
+    float minimumPitch = max(basePitch - pitchAmplitude, 0.12);
+    float travelToCross = height / sin(minimumPitch);
+    float safeLength = (depth - camera.nearPlane * 1.8) / cos(minimumPitch);
+    float beamLength = max(0.01, min(max(settings.geometry.w, travelToCross + depth * 0.12), safeLength));
     float sum = 0.0;
+    // One fixed emitter per row; yaw opens each fan while pitch moves the
+    // entire upper and lower fans in opposite directions.
+    // Quadrature pan/tilt keeps the beam moving through vertical turning points.
+    float scanPhase = time * 0.55;
+    float pitchScan = sin(scanPhase) * pitchAmplitude;
+    float yawScan = cos(scanPhase) * settings.motion.z
+                  * mix(0.40, 1.80, horizontalSweep);
     for (int i = 0; i < beamCount; ++i) {
         bool firstGroup = i < firstGroupCount;
         int groupCount = firstGroup ? firstGroupCount : beamCount - firstGroupCount;
         int groupIndex = firstGroup ? i : i - firstGroupCount;
         float row = firstGroup ? 1.0 : -1.0;
         float fanPosition = groupCount > 1 ? float(groupIndex) / float(groupCount - 1) * 2.0 - 1.0 : 0.35;
-        // Preserve the original fan emitters at screen p.y = +/-0.56.
-        // Unproject those screen-edge anchors onto the distant emission plane.
-        float3 origin = camera.position + camera.forward * depth
-                      + camera.up * (row * 0.56 * 2.0 * depth * camera.tanHalfFOV);
-        float3 centerDirection = normalize(camera.position - origin);
-        float3 aimedDirection = normalize(mix(-camera.forward, centerDirection, saturate(settings.motion.y)));
-        // Apertures have distinct spatial offsets. No beam is aimed exactly at the
-        // camera center, even with fanAngle=0 or an odd beam count.
-        origin += camera.right * (fanPosition * 0.12) + camera.up * (row * 0.06);
-        float3 direction = normalize(aimedDirection
-            + camera.right * tan(fanPosition * fanAngle * 0.5)
-            - camera.up * tan(row * max(fanAngle * 0.18, 0.035)));
-        // Alternate the incoming tunnel and a wide side-to-side sweep. Both
-        // poses rotate the same finite 3D beams in the camera's local basis.
-        float depthYaw = sin(time * 0.31 + row * 0.45) * settings.motion.z;
-        float sweepYaw = sin(time * 0.62 + row * 0.85)
-                       * min(settings.motion.z * 1.7, 0.75);
-        float yaw = mix(depthYaw, sweepYaw, horizontalSweep);
-        float pitch = sin(time * 0.23 + row * 1.2) * settings.motion.w
-                    * mix(1.0, 0.18, horizontalSweep);
-        float3 localDirection = transpose(cameraBasis) * direction;
-        direction = normalize(cameraBasis * (laserYawPitch(yaw, pitch) * localDirection));
-        float speed = max(settings.motion.x, 0.0) * (1.0 + saturate(treble) * 0.12);
+        // Preserve the upper/lower screen anchors, but keep one origin per
+        // group so the fan is created by direction rather than moving emitters.
+        float3 origin = camera.position + camera.forward * depth + camera.up * (row * height);
+        float yaw = fanPosition * fanAngle * 0.5 + yawScan;
+        float pitch = -row * (basePitch + pitchScan);
+        float3 direction = normalize(camera.right * (sin(yaw) * cos(pitch))
+                                   + camera.up * sin(pitch)
+                                   - camera.forward * (cos(yaw) * cos(pitch)));
+        // Keep scan velocity independent of per-frame FFT changes.
+        float speed = max(settings.motion.x, 0.0);
         float scanTravel = fract(time * speed / beamLength - float(i) * 0.071) * beamLength;
         sum += laserVolume(p, origin, direction, beamLength, scanTravel, pixelStep, camera);
     }
@@ -481,13 +483,13 @@ static float3 laserSystem(float2 p, float pixelStep, float time, float treble, f
         }
         
         if (laserSettings.appearance.w > 0.5) {
-            float sweepPhase = fract(time / 16.0);
-            float horizontalSweep = smoothstep(0.40, 0.49, sweepPhase)
-                                  * (1.0 - smoothstep(0.90, 0.99, sweepPhase));
+            float sweepPhase = fract(time / 18.0);
+            float horizontalSweep = smoothstep(0.34, 0.39, sweepPhase)
+                                  * (1.0 - smoothstep(0.55, 0.60, sweepPhase));
             horizontalSweep = max(horizontalSweep, guitarClimax * 0.8);
             float blueBrightness = 1.0 + guitarClimax * 1.15;
-            laserOut += blueColor * (cameraDirectedLaser(p, pixelStep, time, treble,
-                                                         horizontalSweep, laserSettings)
+            laserOut += blueColor * (dualFanLaserPitchCrossing(p, pixelStep, time, treble,
+                                                               horizontalSweep, laserSettings)
                                      * 0.38 * fanEnvelope * blueBrightness);
         } else {
             // ====== Top 6 条 ======

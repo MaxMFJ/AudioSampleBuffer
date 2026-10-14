@@ -428,6 +428,7 @@ static const CGFloat kDefaultEffectRenderScale = 0.85f;
     // layout resize must not briefly replace it with a full-resolution surface.
     _metalView.autoResizeDrawable = (effectType != VisualEffectTypeCellularWormhole &&
                                      effectType != VisualEffectTypeGlassResonance &&
+                                     effectType != VisualEffectTypeTyndallBeam &&
                                      effectType != VisualEffectTypeMirrorStrata &&
                                      effectType != VisualEffectTypeLiquidPigment &&
                                      effectType != VisualEffectTypeOpticalDarkroom &&
@@ -436,6 +437,11 @@ static const CGFloat kDefaultEffectRenderScale = 0.85f;
         if (squareSize <= 0.0 || !isfinite(squareSize)) return;
         // Square logical camera; cap HDR allocation and fill cost on large devices.
         CGFloat side = MAX(1.0, round(MIN(1440.0, squareSize * screenScale * 0.62)));
+        _metalView.drawableSize = CGSizeMake(side, side);
+    } else if (effectType == VisualEffectTypeTyndallBeam) {
+        if (squareSize <= 0.0 || !isfinite(squareSize)) return;
+        // Twelve finite 3D laser volumes are fragment-heavy on iPhone.
+        CGFloat side = MAX(1.0, round(MIN(1200.0, squareSize * screenScale * 0.60)));
         _metalView.drawableSize = CGSizeMake(side, side);
     } else if (effectType == VisualEffectTypeCellularWormhole) {
         if (squareSize <= 0.0 || !isfinite(squareSize)) return;

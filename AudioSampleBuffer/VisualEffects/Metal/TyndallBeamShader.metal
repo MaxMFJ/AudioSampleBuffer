@@ -274,13 +274,142 @@ static inline float laserLineInline(float2 toP, float2 dir, float thickness) {
     return intensity * axialFade;
 }
 
-static float3 laserSystem(float2 p, float time, float high, float mid, float bass, constant UniformsAI &uniforms) {
+struct LaserCamera {
+    float3 position, right, up, forward;
+    float nearPlane, tanHalfFOV;
+};
+
+static float2 laserProject(float3 point, thread const LaserCamera &camera) {
+    float3 relative = point - camera.position;
+    float z = max(dot(relative, camera.forward), camera.nearPlane);
+    return float2(dot(relative, camera.right), -dot(relative, camera.up))
+         / (2.0 * z * camera.tanHalfFOV);
+}
+
+static float laserVolume(float2 p, float3 origin, float3 direction, float beamLength,
+                         float scanTravel, float pixelStep, thread const LaserCamera &camera) {
+    float zOrigin = dot(origin - camera.position, camera.forward);
+    float zDirection = dot(direction, camera.forward);
+    float startTravel = 0.0, endTravel = beamLength;
+    if (abs(zDirection) < 0.00001) {
+        if (zOrigin < camera.nearPlane) return 0.0;
+    } else {
+        float crossing = (camera.nearPlane - zOrigin) / zDirection;
+        if (zDirection < 0.0) endTravel = min(endTravel, crossing);
+        else startTravel = max(startTravel, crossing);
+    }
+    if (endTravel <= startTravel) return 0.0;
+    float3 a = origin + direction * startTravel;
+    float3 b = origin + direction * endTravel;
+    float2 screenA = laserProject(a, camera), screenB = laserProject(b, camera);
+    const float radius = 0.006;
+    float nearestZ = max(min(dot(a - camera.position, camera.forward),
+                            dot(b - camera.position, camera.forward)), camera.nearPlane);
+    float projectedHalo = radius * 18.0 / (2.0 * nearestZ * camera.tanHalfFOV);
+    float2 edge = screenB - screenA;
+    float screenT = saturate(dot(p - screenA, edge) / max(dot(edge, edge), 0.000001));
+    if (distance(p, screenA + edge * screenT) > projectedHalo) return 0.0;
+    float3 rayDirection = normalize(camera.forward
+        + camera.right * (p.x * 2.0 * camera.tanHalfFOV)
+        - camera.up * (p.y * 2.0 * camera.tanHalfFOV));
+    float3 rayOrigin = camera.position + rayDirection
+        * (camera.nearPlane / max(dot(rayDirection, camera.forward), 0.00001));
+    float3 relative = rayOrigin - a;
+    float rayBeamDot = dot(rayDirection, direction);
+    float rayOffset = dot(rayDirection, relative);
+    float beamOffset = dot(direction, relative);
+    float denominator = 1.0 - rayBeamDot * rayBeamDot;
+    float clippedLength = endTravel - startTravel;
+    float travel = denominator > 0.00001
+        ? clamp((beamOffset - rayBeamDot * rayOffset) / denominator, 0.0, clippedLength)
+        : clamp(beamOffset, 0.0, clippedLength);
+    float rayTravel = max(rayBeamDot * travel - rayOffset, 0.0);
+    travel = clamp(beamOffset + rayBeamDot * rayTravel, 0.0, clippedLength);
+    rayTravel = max(rayBeamDot * travel - rayOffset, 0.0);
+    float3 beamPoint = a + direction * travel;
+    float radialDistance = distance(rayOrigin + rayDirection * rayTravel, beamPoint);
+    float viewDepth = max(dot(beamPoint - camera.position, camera.forward), camera.nearPlane);
+    float pixelRadius = 2.0 * viewDepth * camera.tanHalfFOV * pixelStep;
+    float core = 1.0 - smoothstep(max(radius - pixelRadius, 0.0), radius + pixelRadius, radialDistance);
+    float halo = exp(-radialDistance / (radius * 3.0));
+    float bloom = exp(-radialDistance / (radius * 6.0));
+    float headDistance = startTravel + travel - scanTravel;
+    float head = exp(-headDistance * headDistance / (0.22 * 0.22));
+    float trail = exp(-max(-headDistance, 0.0) / 0.55)
+                * (1.0 - smoothstep(0.0, 0.18, headDistance));
+    float scan = max(head, trail * 0.65);
+    // The scan head loops forward at a fixed rate. Fade its wrap so it never
+    // appears to jump backward from the beam tip to the emitter.
+    float scanPhase = scanTravel / max(beamLength, 0.001);
+    float wrapFade = smoothstep(0.0, 0.045, scanPhase)
+                   * (1.0 - smoothstep(0.955, 1.0, scanPhase));
+    scan *= wrapFade;
+    float scattering = exp(-viewDepth * 0.035);
+    return (core * (0.32 + scan * 2.4) + halo * (0.24 + scan * 1.1)
+            + bloom * (0.045 + scan * 0.20)) * scattering;
+}
+
+static float dualFanLaserPitchCrossing(float2 p, float pixelStep, float time, float high,
+                                      float horizontalSweep, float aspectRatio) {
+    LaserCamera camera;
+    camera.position = float3(0.0);
+    // This shader's camera looks along +Z; the two fan rows are in front of it.
+    camera.forward = normalize(float3(0, 0, 1));
+    camera.right = normalize(cross(float3(0, 1, 0), camera.forward));
+    camera.up = normalize(cross(camera.forward, camera.right));
+    camera.nearPlane = 0.12;
+    camera.tanHalfFOV = tan(0.9 * 0.5);
+    const int beamCount = 12;
+    const int firstGroupCount = 6;
+    float aspectScale = min(max(aspectRatio, 0.35), 1.0);
+    // Yaw spreads each six-beam fan; pitch moves the complete fan as one unit.
+    // Keep the same 0.60 rad total fan aperture as the Mac renderer. The old
+    // 0.09 rad aperture made the iOS rays look almost parallel after projection.
+    const float fanAngle = 0.60;
+    const float depth = 8.0;
+    // Place both fixed emitter points just inside the screen edge (p.y = ±0.49).
+    float height = 0.49 * 2.0 * depth * camera.tanHalfFOV;
+    float crossingDepth = depth * 0.43;
+    float basePitch = atan2(height, depth - crossingDepth);
+    // A wider pitch arc makes the opposing upper/lower scans read clearly.
+    const float pitchAmplitude = 0.28;
+    float minimumPitch = max(basePitch - pitchAmplitude, 0.12);
+    float travelToCross = height / sin(minimumPitch);
+    float beamLength = min(travelToCross + depth * 0.12,
+                           (depth - camera.nearPlane * 1.8) / cos(minimumPitch));
+    // Quadrature pan/tilt keeps the beam moving through vertical turning points.
+    float scanPhase = time * 0.55;
+    float pitchScan = sin(scanPhase) * pitchAmplitude;
+    float yawScan = cos(scanPhase) * (0.24 * aspectScale)
+                  * mix(0.40, 1.80, horizontalSweep);
+    float sum = 0.0;
+    for (int i = 0; i < beamCount; ++i) {
+        bool firstGroup = i < firstGroupCount;
+        int groupIndex = firstGroup ? i : i - firstGroupCount;
+        float row = firstGroup ? 1.0 : -1.0;
+        float fanPosition = (float(groupIndex) - 2.5) / 2.5;
+        // All six rays in a row share this fixed physical emitter.
+        float3 origin = camera.position + camera.forward * depth + camera.up * (row * height);
+        float yaw = fanPosition * fanAngle * 0.5 + yawScan;
+        float pitch = -row * (basePitch + pitchScan);
+        float3 direction = normalize(camera.right * (sin(yaw) * cos(pitch))
+                                   + camera.up * sin(pitch)
+                                   - camera.forward * (cos(yaw) * cos(pitch)));
+        // FFT controls activation/brightness only; it must not change scan velocity.
+        const float speed = 7.0;
+        float scanTravel = fract(time * speed / beamLength - float(i) * 0.071) * beamLength;
+        sum += laserVolume(p, origin, direction, beamLength, scanTravel, pixelStep, camera);
+    }
+    return sum;
+}
+
+static float3 laserSystem(float2 p, float pixelStep, float time, float high, float mid, float bass,
+                          float aspectRatio, constant UniformsAI &uniforms) {
     float3 laserOut = float3(0.0);
     float distSq = dot(p, p);
     float dist = sqrt(distSq);
     
-    // ====== A. Laser Fan Top + Bottom（蓝色激光扇形，优化版：12 条总 + 锁定包络）======
-    // 性能优化：顶+底合并为 12 条（原 14），触发后锁定包络期间不计算 DSP
+    // ====== A. 上下两组 3D 蓝色激光（沿用 iOS 每组 6 条的紧密间距）======
     float fanCycleDuration = 14.0;  // 完整周期 14 秒
     float fanPhase = fract(time / fanCycleDuration);
     
@@ -311,72 +440,24 @@ static float3 laserSystem(float2 p, float time, float high, float mid, float bas
         fanEnvelope *= fanTrigger;
     }
     
+    float guitarClimax = smoothstep(0.28, 0.62, saturate(uniforms.galaxyParams3.x));
+    float regularFan = fanEnvelope * smoothstep(0.02, 0.12, high);
+    fanEnvelope = max(regularFan, guitarClimax);
     if (fanEnvelope > 0.01) {
         float3 blueColor = uniforms.aiColorLaserFanBlue.rgb;
         if (!colorIsSet(blueColor)) {
             blueColor = float3(0.25, 0.55, 1.0);
         }
-        
-        // ====== Top 6 条 ======
-        float2 fanOrigin = float2(0.0, 0.56);
-        // 多频率叠加运动：组合快慢不同的正弦波，形成不规则、有机的运动感
-        float planeRotation = time * 0.15 + sin(time * 0.06) * 0.4;  // 主旋转 + 缓慢摆动
-        float cosPlane = cos(planeRotation);
-        float sinPlane = sin(planeRotation);
-        // 复合摆动：3 个频率叠加（主频 + 快频 + 慢频）→ 类似真人操作灯光的不规则感
-        float baseSwing = sin(time * 0.28) * 0.42        // 主摆动
-                        + sin(time * 0.17) * 0.18        // 慢摆动（增加"呼吸感"）
-                        + sin(time * 0.51) * 0.08;       // 快抖动（微小抖动，更生动）
-        float blueMul = 0.38 * fanEnvelope;
-        
-        float2 toP = p - fanOrigin;
-        
-        for (int i = 0; i < 6; i++) {  // 7→6
-            float iF = float(i);
-            // 调整分布：6 条均匀分布，保持扇形覆盖
-            float spreadInPlane = (iF - 2.5) * 0.095;  // 中心为 i=2.5
-            float angleInPlane = baseSwing + spreadInPlane;
-            
-            float worldAngle = angleInPlane * cosPlane;
-            float depthAngle = angleInPlane * sinPlane;
-            
-            float2 dir = float2(sin(worldAngle), -cos(worldAngle));
-            float beam = laserLineInline(toP, dir, 0.0012);  // 细激光（原 0.002）
-            float depthFade = (1.0 - abs(depthAngle) * 0.3) * exp(-depthAngle * depthAngle * 2.5);
-            
-            laserOut += blueColor * (beam * blueMul * depthFade);
-        }
-        
-        // ====== Bottom 6 条 ======
-        float2 fanBottomOrigin = float2(0.0, -0.56);
-        // 底部扇形：使用不同的频率组合，与顶部形成对比和呼应
-        float planeRotationBottom = time * 0.18 + 1.57 + sin(time * 0.08) * 0.35;
-        float cosPlaneB = cos(planeRotationBottom);
-        float sinPlaneB = sin(planeRotationBottom);
-        // 底部摆动：频率与顶部错开，避免同步（更自然）
-        float baseSwingBottom = sin(time * 0.32 + 1.0) * 0.38
-                               + sin(time * 0.21 + 0.5) * 0.2   // 慢频，相位偏移
-                               + sin(time * 0.58 + 0.8) * 0.09; // 快频，相位偏移
-        float blueMulB = 0.35 * fanEnvelope;
-        
-        float2 toPB = p - fanBottomOrigin;
-        
-        for (int i = 0; i < 6; i++) {  // 7→6
-            float iF = float(i);
-            float spreadInPlane = (iF - 2.5) * 0.095;
-            float angleInPlane = baseSwingBottom + spreadInPlane;
-            
-            float worldAngle = 3.14159 + angleInPlane * cosPlaneB;
-            float depthAngle = angleInPlane * sinPlaneB;
-            
-            float2 dir = float2(sin(worldAngle), -cos(worldAngle));
-            float beam = laserLineInline(toPB, dir, 0.0012);  // 细激光（原 0.002）
-            float depthFade = (1.0 - abs(depthAngle) * 0.3) * exp(-depthAngle * depthAngle * 2.5);
-            
-            laserOut += blueColor * (beam * blueMulB * depthFade);
-        }
+
+        float sweepPhase = fract(time / 18.0);
+        float horizontalSweep = smoothstep(0.34, 0.39, sweepPhase)
+                              * (1.0 - smoothstep(0.55, 0.60, sweepPhase));
+        horizontalSweep = max(horizontalSweep, guitarClimax * 0.8);
+        float blueBrightness = 1.0 + guitarClimax * 1.15;
+        laserOut += blueColor * (dualFanLaserPitchCrossing(p, pixelStep, time, high,
+                                                          horizontalSweep, aspectRatio)
+                                 * 0.38 * fanEnvelope * blueBrightness);
     }
-    
     // ====== B. Green Laser Patterns（绿色激光多样式）- 渐入渐出 + DSP 展示 ======
     float greenPhase = fract(time * 0.11);   // 周期略慢，便于看清
     // 触发：mid / high / bass 任一达标即可，易触发
@@ -618,7 +699,8 @@ fragment float4 tyndallBeamFragment(VertexOut in [[stage_in]],
     bass *= 0.2;
     for (int i = 20; i < 50; i += 2) mid  += uniforms.audioData[i].x;
     mid  /= 15.0;
-    for (int i = 50; i < 80; i += 2) high += uniforms.audioData[i].x;
+    // Use the renderer's smoothed FFT band for stable laser triggering.
+    for (int i = 50; i < 80; i += 2) high += uniforms.audioData[i].y;
     high /= 15.0;
 
     // AI 触发灵敏度：放大或缩小音频数据的有效范围
@@ -671,9 +753,11 @@ fragment float4 tyndallBeamFragment(VertexOut in [[stage_in]],
     }
     
     // Layer 3: Laser System
-    float unlock3 = smoothstep(0.03, 0.12, energy);
+    float guitarClimax = smoothstep(0.28, 0.62, saturate(uniforms.galaxyParams3.x));
+    float unlock3 = smoothstep(0.03, 0.12, max(energy, guitarClimax * 0.16));
     if (unlock3 > 0.01) {
-        float3 laser = laserSystem(p, animTime, high, mid, bass, uniforms) * unlock3 * aiBright;
+        float pixelStep = max(fwidth(p.x), fwidth(p.y));
+        float3 laser = laserSystem(p, pixelStep, animTime, high, mid, bass, aspectRatio, uniforms) * unlock3 * aiBright;
         // 激光在拍点处有短促增亮（模拟灯光师卡点）
         laser *= (1.0 + beatPulse * 0.35 * aiEnergy);
         finalColor += laser;
