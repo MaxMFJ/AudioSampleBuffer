@@ -4,16 +4,7 @@
         Width="960" Height="154" WindowStyle="None" AllowsTransparency="True"
         Background="Transparent" ShowInTaskbar="False" Topmost="True"
         ResizeMode="NoResize" ShowActivated="False">
-    <Grid>
-        <Grid.RowDefinitions><RowDefinition Height="32"/><RowDefinition Height="42"/><RowDefinition Height="32"/></Grid.RowDefinitions>
-        <TextBlock x:Name="PreviousLine" Grid.Row="0" Text="" Foreground="#99DCE4F5" FontSize="18"
-                   HorizontalAlignment="Center" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
-        <TextBlock x:Name="CurrentLine" Grid.Row="1" Text="暂无歌词" Foreground="White" FontSize="27"
-                   FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center"
-                   TextTrimming="CharacterEllipsis">
-            <TextBlock.Effect><DropShadowEffect Color="#9E68C7FF" BlurRadius="22" ShadowDepth="0" Opacity="0.9" /></TextBlock.Effect>
-        </TextBlock>
-        <TextBlock x:Name="NextLine" Grid.Row="2" Text="" Foreground="#99DCE4F5" FontSize="18"
-                   HorizontalAlignment="Center" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+    <Grid x:Name="LyricsRoot" Background="Transparent">
+        <StackPanel x:Name="LyricsStack" HorizontalAlignment="Center" VerticalAlignment="Center" />
     </Grid>
 </Window>

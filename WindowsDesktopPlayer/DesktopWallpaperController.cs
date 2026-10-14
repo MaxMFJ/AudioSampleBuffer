@@ -1,4 +1,5 @@
 using System.IO;
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Interop;
@@ -16,6 +17,8 @@ public sealed class DesktopWallpaperController : IDisposable
     private readonly string _settingsPath = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "SoundDesk", "desktop-effect.txt");
     private WallpaperWindow? _window;
+    private NativeWallpaperRenderer? _nativeRenderer;
+    private ImageSource? _artwork;
     private bool _disposed;
 
     public int EffectIndex { get; private set; }
@@ -30,7 +33,11 @@ public sealed class DesktopWallpaperController : IDisposable
                 EffectIndex = Math.Clamp(saved, 0, DesktopEffectCount - 1);
         }
         catch (IOException) { }
-        _timer.Tick += (_, _) => _window?.Surface.InvalidateVisual();
+        _timer.Tick += (_, _) =>
+        {
+            if (_nativeRenderer is not null) _nativeRenderer.Render(EffectIndex, _audio.Spectrum);
+            else _window?.Surface.InvalidateVisual();
+        };
     }
 
     public void SetEffect(int effectIndex)
@@ -45,7 +52,12 @@ public sealed class DesktopWallpaperController : IDisposable
         catch (IOException) { }
     }
 
-    public void SetArtwork(ImageSource? artwork) => _window?.Surface.SetArtwork(artwork);
+    public void SetArtwork(ImageSource? artwork)
+    {
+        _artwork = artwork;
+        _window?.Surface.SetArtwork(artwork);
+        _nativeRenderer?.SetArtwork(artwork);
+    }
 
     public void Show()
     {
@@ -54,15 +66,29 @@ public sealed class DesktopWallpaperController : IDisposable
         {
             _window = new WallpaperWindow(_audio, EffectIndex);
             _window.Show();
-            AttachBehindDesktopIcons(_window);
+            if (!AttachBehindDesktopIcons(_window))
+            {
+                Debug.WriteLine("Could not attach the desktop wallpaper window to Explorer's WorkerW host.");
+                _window.Close();
+                _window = null;
+                return;
+            }
+            var hwnd = new WindowInteropHelper(_window).Handle;
+            GetClientRect(hwnd, out var client);
+            _nativeRenderer = NativeWallpaperRenderer.TryCreate(hwnd,
+                Math.Max(1, client.Right - client.Left), Math.Max(1, client.Bottom - client.Top), out var rendererError);
+            if (_nativeRenderer is not null) _nativeRenderer.SetArtwork(_artwork);
+            else Debug.WriteLine($"Direct3D wallpaper unavailable; using WPF fallback: {rendererError}");
         }
         else _window.Show();
+        _nativeRenderer?.SetVisible(true);
         _timer.Start();
     }
 
     public void Hide()
     {
         _timer.Stop();
+        _nativeRenderer?.SetVisible(false);
         _window?.Hide();
     }
 
@@ -71,16 +97,18 @@ public sealed class DesktopWallpaperController : IDisposable
         if (_disposed) return;
         _disposed = true;
         _timer.Stop();
+        _nativeRenderer?.Dispose();
+        _nativeRenderer = null;
         _window?.Close();
         _window = null;
     }
 
-    private static void AttachBehindDesktopIcons(Window window)
+    private static bool AttachBehindDesktopIcons(Window window)
     {
         var hwnd = new WindowInteropHelper(window).Handle;
-        if (hwnd == IntPtr.Zero) return;
+        if (hwnd == IntPtr.Zero) return false;
         var host = FindDesktopWallpaperHost();
-        if (host == IntPtr.Zero) return;
+        if (host == IntPtr.Zero) return false;
 
         var style = GetWindowLongPtr(hwnd, GwlStyle).ToInt64();
         style = (style | WsChild | WsVisible) & ~WsPopup;
@@ -89,9 +117,11 @@ public sealed class DesktopWallpaperController : IDisposable
         exStyle |= WsExTransparent | WsExNoActivate | WsExToolWindow;
         SetWindowLongPtr(hwnd, GwlExStyle, new IntPtr(exStyle));
         SetParent(hwnd, host);
-        SetWindowPos(hwnd, IntPtr.Zero, GetSystemMetrics(SmX), GetSystemMetrics(SmY),
+        if (GetParent(hwnd) != host) return false;
+        if (!SetWindowPos(hwnd, IntPtr.Zero, GetSystemMetrics(SmX), GetSystemMetrics(SmY),
             GetSystemMetrics(SmCxVirtualScreen), GetSystemMetrics(SmCyVirtualScreen),
-            SwpNoActivate | SwpFrameChanged | SwpShowWindow);
+            SwpNoActivate | SwpFrameChanged | SwpShowWindow)) return false;
+        return true;
     }
 
     private static IntPtr FindDesktopWallpaperHost()
@@ -127,6 +157,10 @@ public sealed class DesktopWallpaperController : IDisposable
     private const int SmCxVirtualScreen = 78;
     private const int SmCyVirtualScreen = 79;
 
+    [StructLayout(LayoutKind.Sequential)]
+    private struct NativeRect { public int Left, Top, Right, Bottom; }
+    [DllImport("user32.dll", SetLastError = true)] private static extern bool GetClientRect(IntPtr hwnd, out NativeRect rect);
+
     private delegate bool EnumWindowsProc(IntPtr hwnd, IntPtr lParam);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern IntPtr FindWindow(string className, string? title);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern IntPtr FindWindowEx(IntPtr parent, IntPtr after, string className, string? title);
@@ -135,6 +169,7 @@ public sealed class DesktopWallpaperController : IDisposable
     [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW", SetLastError = true)] private static extern IntPtr GetWindowLongPtr(IntPtr hwnd, int index);
     [DllImport("user32.dll", EntryPoint = "SetWindowLongPtrW", SetLastError = true)] private static extern IntPtr SetWindowLongPtr(IntPtr hwnd, int index, IntPtr value);
     [DllImport("user32.dll", SetLastError = true)] private static extern IntPtr SetParent(IntPtr child, IntPtr newParent);
+    [DllImport("user32.dll", SetLastError = true)] private static extern IntPtr GetParent(IntPtr child);
     [DllImport("user32.dll", SetLastError = true)] private static extern bool SetWindowPos(IntPtr hwnd, IntPtr insertAfter, int x, int y, int width, int height, uint flags);
     [DllImport("user32.dll")] private static extern int GetSystemMetrics(int index);
 

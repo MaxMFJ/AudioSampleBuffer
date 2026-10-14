@@ -8,6 +8,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>SoundDesk</AssemblyName>
     <RootNamespace>SoundDesk</RootNamespace>
+    <PlatformTarget>x64</PlatformTarget>
+    <Prefer32Bit>false</Prefer32Bit>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="NAudio" Version="2.2.1" />
@@ -15,4 +17,15 @@
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4258.31" />
     <PackageReference Include="TagLibSharp" Version="2.3.0" />
   </ItemGroup>
+  <ItemGroup>
+    <Content Include="native\WallpaperShaders.hlsl" Link="WallpaperShaders.hlsl" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+  <Target Name="BuildNativeWallpaperRenderer" BeforeTargets="Build" Condition="'$(OS)' == 'Windows_NT'">
+    <MSBuild Projects="$(MSBuildProjectDirectory)\native\WallpaperD3D.vcxproj" Targets="Build"
+             Properties="Configuration=$(Configuration);Platform=x64;OutDir=$(TargetDir)" />
+  </Target>
+  <Target Name="CopyNativeWallpaperRendererToPublish" AfterTargets="Publish" Condition="'$(OS)' == 'Windows_NT'">
+    <Error Condition="!Exists('$(TargetDir)WallpaperD3D.dll')" Text="WallpaperD3D.dll was not built. Install the Visual C++ desktop build tools and rebuild Sound Desk." />
+    <Copy SourceFiles="$(TargetDir)WallpaperD3D.dll" DestinationFolder="$(PublishDir)" />
+  </Target>
 </Project>

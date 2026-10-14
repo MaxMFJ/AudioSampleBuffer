@@ -19,6 +19,7 @@ namespace SoundDesk;
 public partial class MainWindow : Window
 {
     private readonly ObservableCollection<LocalTrack> _tracks = [];
+    private IReadOnlyList<LocalTrack> _playbackQueue = [];
     private readonly ICollectionView _tracksView;
     private readonly DispatcherTimer _positionTimer;
     private readonly DispatcherTimer _visualTimer;
@@ -28,30 +29,49 @@ public partial class MainWindow : Window
     private readonly Brush[] _spectrumBrushes = new Brush[48];
     private readonly string _libraryPath = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "SoundDesk", "library.json");
+    private readonly string _playlistsPath = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "SoundDesk", "playlists.json");
+    private readonly string _playbackSettingsPath = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "SoundDesk", "playback-settings.json");
+    private readonly ObservableCollection<UserPlaylist> _playlists = [];
     private readonly LyricsService _lyricsService = new();
     private IReadOnlyList<TimedLyric> _lyrics = [];
     private CancellationTokenSource? _lyricsCancellation;
     private LyricsOverlayWindow? _lyricsOverlay;
     private PlatformWindow? _platformWindow;
+    private LyricsSettingsWindow? _lyricsSettings;
+    private WindowsStatusBarPlayer? _statusPlayer;
+    private SongListDrawerWindow? _songListDrawer;
+    private string? _selectedPlaylistId;
     private int _lyricsGeneration;
     private int _visualizationMode;
     private int _brushMode = -1;
     private int _artworkGeneration;
     private double _visualTime;
     private LocalTrack? _currentTrack;
+    private ImageSource? _currentArtwork;
     private bool _isSeeking;
     private bool _isPlaying;
+    private bool _allowExit;
     private int _repeatMode;
 
     public MainWindow()
     {
         InitializeComponent();
         _desktopWallpaper = new DesktopWallpaperController(_reactiveMonitor);
+        try
+        {
+            if (File.Exists(_playbackSettingsPath))
+                _repeatMode = Math.Clamp(JsonSerializer.Deserialize<int>(File.ReadAllText(_playbackSettingsPath)), 0, 2);
+        }
+        catch (Exception error) when (error is IOException or JsonException) { }
         _visualizationMode = _desktopWallpaper.EffectIndex;
         EffectSelector.SelectedIndex = _visualizationMode;
+        RepeatButton.Content = RepeatModeTitle();
         _tracksView = CollectionViewSource.GetDefaultView(_tracks);
         _tracksView.Filter = FilterTrack;
         TrackList.ItemsSource = _tracksView;
+        PlaylistList.ItemsSource = _playlists;
         _positionTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
         _positionTimer.Tick += (_, _) => RefreshPosition();
         for (var index = 0; index < _spectrumBars.Length; index++)
@@ -65,12 +85,25 @@ public partial class MainWindow : Window
         _visualTimer.Tick += (_, _) => RenderSpectrum();
         Loaded += (_, _) =>
         {
+            _statusPlayer = new WindowsStatusBarPlayer(
+                ShowConsoleFromTray, TogglePlaybackFromTray, PreviousFromTray, NextFromTray,
+                RepeatFromTray, SeekFromTray, OpenSongListFromTray, OpenLyricsFromTray, ExitFromTray);
+            RefreshTrayState();
+            _songListDrawer = new SongListDrawerWindow(_tracks, PlayTrackFromDrawer, RemoveTrackFromLibrary, PlayPlatformTrackFromDrawer);
+            _songListDrawer.Show();
             _reactiveMonitor.Start();
             _desktopWallpaper.Show();
             _visualTimer.Start();
         };
         LoadLibrary();
+        LoadPlaylists();
         RefreshLibraryState();
+        Closing += (_, e) =>
+        {
+            if (_allowExit) return;
+            e.Cancel = true;
+            Hide();
+        };
     }
 
     private bool FilterTrack(object item)
@@ -98,9 +131,12 @@ public partial class MainWindow : Window
             if (_tracks.Any(track => string.Equals(track.Path, path, StringComparison.OrdinalIgnoreCase))) continue;
             var title = Path.GetFileNameWithoutExtension(path);
             _tracks.Add(new LocalTrack { Path = path, Title = title, Artist = "本地文件", Album = "" });
+            if (_selectedPlaylistId is not null)
+                _playlists.FirstOrDefault(item => item.Id == _selectedPlaylistId)?.TrackPaths.Add(path);
             added++;
         }
         SaveLibrary();
+        SavePlaylists();
         RefreshLibraryState();
         if (added > 0 && _currentTrack is null) TrackList.SelectedItem = _tracks.LastOrDefault();
     }
@@ -108,6 +144,12 @@ public partial class MainWindow : Window
     private void TrackList_DoubleClick(object sender, MouseButtonEventArgs e)
     {
         if (TrackList.SelectedItem is LocalTrack track) PlayTrack(track);
+    }
+
+    private void TrackList_RightClick(object sender, MouseButtonEventArgs e)
+    {
+        if (ItemsControl.ContainerFromElement(TrackList, e.OriginalSource as DependencyObject) is ListBoxItem item)
+            TrackList.SelectedItem = item.DataContext;
     }
 
     private void TrackList_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -121,7 +163,7 @@ public partial class MainWindow : Window
         if (_currentTrack is null)
         {
             if (TrackList.SelectedItem is LocalTrack selected) PlayTrack(selected);
-            else if (_tracks.Count > 0) PlayTrack(_tracks[0]);
+            else if (_tracksView.Cast<LocalTrack>().FirstOrDefault() is LocalTrack first) PlayTrack(first);
             else Import_Click(sender, e);
             return;
         }
@@ -141,9 +183,10 @@ public partial class MainWindow : Window
             PlayButton.Content = "Ⅱ";
             _positionTimer.Start();
         }
+        RefreshTrayState();
     }
 
-    private void PlayTrack(LocalTrack track)
+    private void PlayTrack(LocalTrack track, bool updateQueue = true)
     {
         if (!File.Exists(track.Path))
         {
@@ -152,10 +195,17 @@ public partial class MainWindow : Window
         }
         try
         {
+            if (updateQueue)
+            {
+                var visible = _tracksView.Cast<LocalTrack>().ToList();
+                _playbackQueue = visible.Contains(track) ? visible : [track];
+            }
             _currentTrack = track;
+            _currentArtwork = null;
             TrackList.SelectedItem = track;
             SetTrackLabels(track);
             LoadLyricsForTrack(track);
+            if (_lyricsService.Settings.Enabled) ShowLyricsOverlay();
             LoadTrackArtwork(track);
             Player.Stop();
             Player.Source = new Uri(track.Path, UriKind.Absolute);
@@ -163,6 +213,7 @@ public partial class MainWindow : Window
             _isPlaying = true;
             PlayButton.Content = "Ⅱ";
             _positionTimer.Start();
+            RefreshTrayState();
             track.LastPlayedUtc = DateTime.UtcNow;
             SaveLibrary();
         }
@@ -177,16 +228,44 @@ public partial class MainWindow : Window
 
     private void MoveTrack(int delta)
     {
-        if (_tracks.Count == 0) return;
-        var index = _currentTrack is null ? -1 : _tracks.IndexOf(_currentTrack);
-        var next = (index + delta + _tracks.Count) % _tracks.Count;
-        PlayTrack(_tracks[next]);
+        var queue = _playbackQueue;
+        if (queue.Count == 0) return;
+        var index = _currentTrack is null ? -1 : queue.ToList().IndexOf(_currentTrack);
+        PlayTrack(queue[(index + delta + queue.Count) % queue.Count], updateQueue: false);
     }
 
     private void Repeat_Click(object sender, RoutedEventArgs e)
     {
         _repeatMode = (_repeatMode + 1) % 3;
-        RepeatButton.Content = _repeatMode switch { 1 => "列表循环", 2 => "单曲循环", _ => "顺序播放" };
+        RepeatButton.Content = RepeatModeTitle();
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(_playbackSettingsPath)!);
+            File.WriteAllText(_playbackSettingsPath, JsonSerializer.Serialize(_repeatMode));
+        }
+        catch (IOException) { }
+        RefreshTrayState();
+    }
+
+    private void Stop_Click(object sender, RoutedEventArgs e)
+    {
+        Player.Stop();
+        Player.Source = null;
+        _isPlaying = false;
+        _positionTimer.Stop();
+        PlayButton.Content = "▶";
+        ProgressSlider.Value = 0;
+        ElapsedText.Text = "0:00";
+        RefreshTrayState();
+    }
+
+    private void FavoriteCurrent_Click(object sender, RoutedEventArgs e)
+    {
+        if (_currentTrack is null) return;
+        _currentTrack.IsFavorite = !_currentTrack.IsFavorite;
+        FavoriteButton.Content = _currentTrack.IsFavorite ? "♥" : "♡";
+        SaveLibrary();
+        if (SectionTitle.Text == "我的收藏") _tracksView.Refresh();
     }
 
     private void Player_MediaOpened(object sender, RoutedEventArgs e)
@@ -208,12 +287,13 @@ public partial class MainWindow : Window
     private void Player_MediaEnded(object sender, RoutedEventArgs e)
     {
         if (_repeatMode == 2 && _currentTrack is not null) { PlayTrack(_currentTrack); return; }
-        if (_repeatMode == 0 && _currentTrack is not null && _tracks.IndexOf(_currentTrack) == _tracks.Count - 1)
+        if (_repeatMode == 0 && _currentTrack is not null && _playbackQueue.ToList().IndexOf(_currentTrack) >= _playbackQueue.Count - 1)
         {
             _isPlaying = false;
             _positionTimer.Stop();
             PlayButton.Content = "▶";
             ProgressSlider.Value = ProgressSlider.Maximum;
+            RefreshTrayState();
             return;
         }
         MoveTrack(1);
@@ -224,6 +304,7 @@ public partial class MainWindow : Window
         _positionTimer.Stop();
         _isPlaying = false;
         PlayButton.Content = "▶";
+        RefreshTrayState();
         var detail = e.ErrorException?.Message ?? "Windows 媒体组件无法解码此格式。";
         MessageBox.Show(this, $"当前文件无法播放。\n\n{detail}", "播放失败", MessageBoxButton.OK, MessageBoxImage.Warning);
     }
@@ -245,9 +326,100 @@ public partial class MainWindow : Window
     {
         if (TrackList.SelectedItem is not LocalTrack track) return;
         track.IsFavorite = !track.IsFavorite;
+        if (ReferenceEquals(track, _currentTrack)) FavoriteButton.Content = track.IsFavorite ? "♥" : "♡";
         SaveLibrary();
         if (SectionTitle.Text == "我的收藏") _tracksView.Refresh();
     }
+
+    private void RemoveFromPlaylist_Click(object sender, RoutedEventArgs e)
+    {
+        if (_selectedPlaylistId is null || TrackList.SelectedItem is not LocalTrack track) return;
+        var playlist = _playlists.FirstOrDefault(item => item.Id == _selectedPlaylistId);
+        playlist?.TrackPaths.RemoveAll(path => string.Equals(path, track.Path, StringComparison.OrdinalIgnoreCase));
+        SavePlaylists();
+        _tracksView.Refresh();
+    }
+
+    private void TrackContextMenu_Opened(object sender, RoutedEventArgs e)
+    {
+        if (sender is not ContextMenu menu) return;
+        var addToPlaylist = menu.Items.OfType<MenuItem>().FirstOrDefault(item => Equals(item.Header, "添加到歌单"));
+        if (addToPlaylist is null) return;
+        addToPlaylist.Items.Clear();
+        if (_playlists.Count == 0)
+        {
+            addToPlaylist.Items.Add(new MenuItem { Header = "请先新建歌单", IsEnabled = false });
+            return;
+        }
+        foreach (var playlist in _playlists)
+        {
+            var item = new MenuItem { Header = playlist.Name, Tag = playlist.Id };
+            item.Click += (_, _) =>
+            {
+                if (TrackList.SelectedItem is not LocalTrack track) return;
+                var target = _playlists.FirstOrDefault(candidate => candidate.Id == (string)item.Tag);
+                if (target is null || target.TrackPaths.Contains(track.Path, StringComparer.OrdinalIgnoreCase)) return;
+                target.TrackPaths.Add(track.Path);
+                SavePlaylists();
+                _tracksView.Refresh();
+            };
+            addToPlaylist.Items.Add(item);
+        }
+    }
+
+    private void RemoveFromLibrary_Click(object sender, RoutedEventArgs e)
+    {
+        if (TrackList.SelectedItem is not LocalTrack track) return;
+        RemoveTrackFromLibrary(track);
+    }
+
+    private void RemoveTrackFromLibrary(LocalTrack track)
+    {
+        _tracks.Remove(track);
+        _playbackQueue = _playbackQueue.Where(item => !ReferenceEquals(item, track)).ToList();
+        foreach (var playlist in _playlists)
+            playlist.TrackPaths.RemoveAll(path => string.Equals(path, track.Path, StringComparison.OrdinalIgnoreCase));
+        if (ReferenceEquals(_currentTrack, track))
+        {
+            Player.Stop();
+            Player.Source = null;
+            _currentTrack = null;
+            _isPlaying = false;
+            PlayButton.Content = "▶";
+            _positionTimer.Stop();
+            RefreshTrayState();
+        }
+        SaveLibrary();
+        SavePlaylists();
+        RefreshLibraryState();
+    }
+
+    private void PlayTrackFromDrawer(LocalTrack track)
+    {
+        _playbackQueue = _tracks.ToList();
+        PlayTrack(track, updateQueue: false);
+    }
+
+    private async void PlayPlatformTrackFromDrawer(PlatformTrack track)
+    {
+        try
+        {
+            var service = new PlatformMusicService();
+            var path = await service.DownloadTrackAsync(track);
+            var local = new LocalTrack
+            {
+                Path = path, Title = track.Title, Artist = track.Artist, Album = track.Album,
+                CoverUrl = track.CoverUrl, DurationSeconds = track.DurationSeconds
+            };
+            OnPlatformTrackDownloaded(local);
+        }
+        catch (Exception error)
+        {
+            MessageBox.Show(this, error.Message, "平台歌曲播放失败", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+    }
+
+    private void SongList_Click(object sender, RoutedEventArgs e) => _songListDrawer?.OpenDrawer();
 
     private void EffectSelector_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
@@ -335,41 +507,12 @@ public partial class MainWindow : Window
         }
     }
 
-    private async void Lyrics_Click(object sender, RoutedEventArgs e)
-    {
-        if (_lyricsOverlay is { IsVisible: true })
-        {
-            _lyricsOverlay.Close();
-            _lyricsOverlay = null;
-            LyricsButton.Content = "▤  桌面歌词";
-            return;
-        }
-        if (_currentTrack is null)
-        {
-            MessageBox.Show(this, "先播放一首歌曲，再打开桌面歌词。", "桌面歌词", MessageBoxButton.OK, MessageBoxImage.Information);
-            return;
-        }
-        if (_lyrics.Count == 0)
-        {
-            try { _lyrics = await _lyricsService.LoadAsync(_currentTrack); }
-            catch (Exception error)
-            {
-                MessageBox.Show(this, $"歌词加载失败：{error.Message}", "桌面歌词", MessageBoxButton.OK, MessageBoxImage.Warning);
-            }
-        }
-
-        _lyricsOverlay = new LyricsOverlayWindow();
-        _lyricsOverlay.ShowFrame("", _lyrics.Count > 0 ? "歌词已同步" : "没有找到匹配的歌词", "");
-        _lyricsOverlay.Show();
-        LyricsButton.Content = "▤  隐藏歌词";
-        UpdateLyrics(Player.Position.TotalSeconds);
-    }
+    private void Lyrics_Click(object sender, RoutedEventArgs e) => LyricsSettings_Click(sender, e);
 
     private void UpdateLyrics(double time)
     {
         if (_lyricsOverlay is not { IsVisible: true }) return;
-        var frame = LyricsService.FrameAt(_lyrics, time);
-        _lyricsOverlay.ShowFrame(frame.Previous, frame.Current, frame.Next);
+        _lyricsOverlay.ShowLyrics(_lyrics, time);
     }
 
     private async void LoadTrackArtwork(LocalTrack track)
@@ -401,14 +544,16 @@ public partial class MainWindow : Window
             image.StreamSource = stream;
             image.EndInit();
             image.Freeze();
+            _currentArtwork = image;
             _desktopWallpaper.SetArtwork(image);
+            RefreshTrayState();
         }
         catch { /* Artwork is optional; keep the selected animated background available. */ }
     }
 
     private void RefreshPosition()
     {
-        if (Player.Source is null || _isSeeking) return;
+        if (Player.Source is null || _isSeeking) { RefreshTrayState(); return; }
         _isSeeking = true;
         try
         {
@@ -418,6 +563,7 @@ public partial class MainWindow : Window
             ProgressSlider.Value = Math.Min(position.TotalSeconds, ProgressSlider.Maximum);
             ElapsedText.Text = FormatTime(position);
             UpdateLyrics(position.TotalSeconds);
+            RefreshTrayState();
         }
         finally { _isSeeking = false; }
     }
@@ -428,18 +574,81 @@ public partial class MainWindow : Window
     }
 
     private void Search_TextChanged(object sender, TextChangedEventArgs e) => _tracksView.Refresh();
-    private void AllSongs_Click(object sender, RoutedEventArgs e) { SectionTitle.Text = "所有歌曲"; _tracksView.Filter = FilterTrack; _tracksView.Refresh(); }
+    private void AllSongs_Click(object sender, RoutedEventArgs e) { _selectedPlaylistId = null; PlaylistList.SelectedItem = null; SectionTitle.Text = "所有歌曲"; _tracksView.Filter = FilterTrack; _tracksView.Refresh(); }
     private void Recent_Click(object sender, RoutedEventArgs e)
     {
         SectionTitle.Text = "最近播放";
+        _selectedPlaylistId = null;
+        PlaylistList.SelectedItem = null;
         _tracksView.Filter = item => item is LocalTrack track && track.LastPlayedUtc.HasValue && FilterTrack(track);
         _tracksView.Refresh();
     }
     private void Favorites_Click(object sender, RoutedEventArgs e)
     {
         SectionTitle.Text = "我的收藏";
+        _selectedPlaylistId = null;
+        PlaylistList.SelectedItem = null;
         _tracksView.Filter = item => item is LocalTrack track && track.IsFavorite && FilterTrack(track);
         _tracksView.Refresh();
+    }
+
+    private void PlaylistList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (PlaylistList.SelectedItem is not UserPlaylist playlist) return;
+        _selectedPlaylistId = playlist.Id;
+        SectionTitle.Text = playlist.Name;
+        _tracksView.Filter = item => item is LocalTrack track
+            && playlist.TrackPaths.Contains(track.Path, StringComparer.OrdinalIgnoreCase)
+            && FilterTrack(track);
+        _tracksView.Refresh();
+    }
+
+    private void CreatePlaylist_Click(object sender, RoutedEventArgs e)
+    {
+        var name = TextPromptWindow.Show(this, "新建歌单", "歌单名称");
+        if (string.IsNullOrWhiteSpace(name)) return;
+        var playlist = new UserPlaylist { Name = name.Trim() };
+        _playlists.Add(playlist);
+        SavePlaylists();
+        PlaylistList.SelectedItem = playlist;
+    }
+
+    private void DeletePlaylist_Click(object sender, RoutedEventArgs e)
+    {
+        if (PlaylistList.SelectedItem is not UserPlaylist playlist) return;
+        _playlists.Remove(playlist);
+        if (_selectedPlaylistId == playlist.Id) { _selectedPlaylistId = null; AllSongs_Click(sender, e); }
+        SavePlaylists();
+    }
+
+    private void LyricsSettings_Click(object sender, RoutedEventArgs e)
+    {
+        _lyricsSettings ??= new LyricsSettingsWindow(_lyricsService.Settings, settings =>
+        {
+            _lyricsService.UpdateSettings(settings);
+            if (settings.Enabled) ShowLyricsOverlay(); else CloseLyricsOverlay();
+            _lyricsOverlay?.ApplySettings(settings);
+            UpdateLyrics(Player.Position.TotalSeconds);
+        });
+        _lyricsSettings.Owner = this;
+        if (_lyricsSettings.IsVisible) { _lyricsSettings.Activate(); return; }
+        _lyricsSettings.Show();
+    }
+
+    private void ShowLyricsOverlay()
+    {
+        if (_currentTrack is null) return;
+        if (_lyrics.Count == 0)
+            LoadLyricsForTrack(_currentTrack);
+        _lyricsOverlay ??= new LyricsOverlayWindow(_lyricsService.Settings);
+        if (!_lyricsOverlay.IsVisible) _lyricsOverlay.Show();
+        UpdateLyrics(Player.Position.TotalSeconds);
+    }
+
+    private void CloseLyricsOverlay()
+    {
+        _lyricsOverlay?.Close();
+        _lyricsOverlay = null;
     }
 
     private void OnlineSearch_Click(object sender, RoutedEventArgs e) => OpenPlatformWindow();
@@ -480,6 +689,8 @@ public partial class MainWindow : Window
     {
         NowPlayingTitle.Text = track.Title;
         NowPlayingArtist.Text = string.IsNullOrWhiteSpace(track.Artist) ? "本地文件" : track.Artist;
+        FavoriteButton.Content = track.IsFavorite ? "♥" : "♡";
+        RefreshTrayState();
     }
 
     private void RefreshLibraryState()
@@ -503,6 +714,27 @@ public partial class MainWindow : Window
         }
     }
 
+    private void LoadPlaylists()
+    {
+        try
+        {
+            if (!File.Exists(_playlistsPath)) return;
+            var loaded = JsonSerializer.Deserialize<List<UserPlaylist>>(File.ReadAllText(_playlistsPath)) ?? [];
+            foreach (var playlist in loaded.Where(item => !string.IsNullOrWhiteSpace(item.Name))) _playlists.Add(playlist);
+        }
+        catch (Exception error) { MessageBox.Show(this, $"读取歌单失败：{error.Message}", "Sound Desk", MessageBoxButton.OK, MessageBoxImage.Warning); }
+    }
+
+    private void SavePlaylists()
+    {
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(_playlistsPath)!);
+            File.WriteAllText(_playlistsPath, JsonSerializer.Serialize(_playlists));
+        }
+        catch (IOException) { }
+    }
+
     private void SaveLibrary()
     {
         try
@@ -516,10 +748,52 @@ public partial class MainWindow : Window
         }
     }
 
+    private void RefreshTrayState()
+    {
+        var duration = Player?.NaturalDuration.HasTimeSpan == true ? Player.NaturalDuration.TimeSpan.TotalSeconds : 0;
+        _statusPlayer?.UpdateState(_isPlaying, _repeatMode, _currentTrack?.Title ?? "Sound Desk",
+            _currentTrack?.Artist, _currentArtwork, Player?.Position.TotalSeconds ?? 0, duration);
+    }
+    private string RepeatModeTitle() => _repeatMode switch { 1 => "列表循环", 2 => "单曲循环", _ => "顺序播放" };
+
+    private void ShowConsoleFromTray()
+    {
+        Show();
+        if (WindowState == WindowState.Minimized) WindowState = WindowState.Normal;
+        Activate();
+    }
+
+    private void TogglePlaybackFromTray() => Play_Click(this, new RoutedEventArgs());
+    private void PreviousFromTray() => Previous_Click(this, new RoutedEventArgs());
+    private void NextFromTray() => Next_Click(this, new RoutedEventArgs());
+    private void RepeatFromTray() => Repeat_Click(this, new RoutedEventArgs());
+    private void SeekFromTray(double seconds)
+    {
+        if (Player.Source is null) return;
+        Player.Position = TimeSpan.FromSeconds(Math.Clamp(seconds, 0, Player.NaturalDuration.HasTimeSpan ? Player.NaturalDuration.TimeSpan.TotalSeconds : seconds));
+        RefreshPosition();
+    }
+    private void OpenSongListFromTray()
+    {
+        _songListDrawer?.OpenDrawer();
+    }
+    private void OpenLyricsFromTray()
+    {
+        ShowConsoleFromTray();
+        LyricsSettings_Click(this, new RoutedEventArgs());
+    }
+    private void ExitFromTray()
+    {
+        _allowExit = true;
+        Close();
+    }
+
     private static string FormatTime(TimeSpan time) => $"{(int)time.TotalMinutes}:{time.Seconds:00}";
 
     protected override void OnClosed(EventArgs e)
     {
+        _statusPlayer?.Dispose();
+        _statusPlayer = null;
         _positionTimer.Stop();
         _visualTimer.Stop();
         _desktopWallpaper.Dispose();
@@ -527,10 +801,14 @@ public partial class MainWindow : Window
         Player.Stop();
         _lyricsCancellation?.Cancel();
         _lyricsOverlay?.Close();
+        _lyricsSettings?.Close();
         _platformWindow?.Close();
+        _songListDrawer?.Close();
         Interlocked.Increment(ref _artworkGeneration);
         SaveLibrary();
+        SavePlaylists();
         base.OnClosed(e);
+        Application.Current.Shutdown();
     }
 }
 

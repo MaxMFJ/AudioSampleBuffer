@@ -17,6 +17,8 @@ public sealed record PlatformTrack(
     public string DurationText => DurationSeconds <= 0 ? "—" : $"{(int)TimeSpan.FromSeconds(DurationSeconds).TotalMinutes}:{TimeSpan.FromSeconds(DurationSeconds).Seconds:00}";
 }
 
+public sealed record PlatformPlaylist(string Id, MusicProvider Provider, string Name, string? CoverUrl = null, int? TrackCount = null);
+
 public sealed class PlatformMusicService
 {
     private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(20) };
@@ -91,6 +93,59 @@ public sealed class PlatformMusicService
         }
         File.Move(temporary, destination, overwrite: true);
         return destination;
+    }
+
+    public Task<IReadOnlyList<PlatformPlaylist>> GetUserPlaylistsAsync(MusicProvider provider, int limit = 0, int offset = 0, CancellationToken cancellationToken = default) => provider switch
+    {
+        MusicProvider.NetEase => GetNetEasePlaylistsAsync(limit, offset, cancellationToken),
+        MusicProvider.QQ => GetQQPlaylistsAsync(cancellationToken),
+        MusicProvider.Kugou => GetKugouPlaylistsAsync(limit, cancellationToken),
+        _ => Task.FromResult<IReadOnlyList<PlatformPlaylist>>([])
+    };
+
+    public Task<IReadOnlyList<PlatformTrack>> GetPlaylistTracksAsync(PlatformPlaylist playlist, int limit = 50, int offset = 0, CancellationToken cancellationToken = default) => playlist.Provider switch
+    {
+        MusicProvider.NetEase => GetNetEasePlaylistTracksAsync(playlist.Id, limit, offset, cancellationToken),
+        MusicProvider.QQ => GetQQPlaylistTracksAsync(playlist.Id, limit, offset, cancellationToken),
+        MusicProvider.Kugou => GetKugouPlaylistTracksAsync(playlist.Id, limit, offset, cancellationToken),
+        _ => Task.FromResult<IReadOnlyList<PlatformTrack>>([])
+    };
+
+    private async Task<IReadOnlyList<PlatformPlaylist>> GetNetEasePlaylistsAsync(int limit, int offset, CancellationToken ct)
+    {
+        var account = await NetEaseRequestAsync("/api/nuser/account/get", new JsonObject(), ct);
+        var uid = account["account"]?["id"]?.ToString() ?? account["profile"]?["userId"]?.ToString();
+        if (string.IsNullOrWhiteSpace(uid)) throw new InvalidOperationException("请先登录网易云音乐。");
+        var response = await NetEaseRequestAsync("/api/user/playlist", new JsonObject { ["uid"] = uid, ["limit"] = limit > 0 ? Math.Min(limit, 100) : 100, ["offset"] = Math.Max(0, offset), ["includeVideo"] = true }, ct);
+        var rows = response["playlist"]?.AsArray() ?? response["data"]?["playlist"]?.AsArray() ?? [];
+        return rows.Select(row => new PlatformPlaylist(row?["id"]?.ToString() ?? "", MusicProvider.NetEase, row?["name"]?.GetValue<string>() ?? "", row?["coverImgUrl"]?.GetValue<string>(), row?["trackCount"]?.GetValue<int>())).Where(p => p.Id.Length > 0).ToArray();
+    }
+
+    private async Task<IReadOnlyList<PlatformTrack>> GetNetEasePlaylistTracksAsync(string id, int limit, int offset, CancellationToken ct)
+    {
+        var detail = await NetEaseRequestAsync("/api/v6/playlist/detail", new JsonObject { ["id"] = id, ["n"] = 100000, ["s"] = 8 }, ct);
+        var ids = detail["playlist"]?["trackIds"]?.AsArray() ?? [];
+        var selected = ids.Skip(Math.Max(0, offset)).Take(Math.Clamp(limit, 1, 100)).Select(x => x?["id"]?.ToString()).Where(x => !string.IsNullOrWhiteSpace(x)).ToArray();
+        if (selected.Length == 0) return [];
+        var c = "[" + string.Join(',', selected.Select(x => "{\"id\":" + x + "}")) + "]";
+        var songs = await NetEaseRequestAsync("/api/v3/song/detail", new JsonObject { ["c"] = c }, ct);
+        return songs["songs"]?.AsArray().Select(DecodeNetEaseTrack).Where(x => x is not null).Cast<PlatformTrack>().ToArray() ?? [];
+    }
+
+    private async Task<IReadOnlyList<PlatformPlaylist>> GetQQPlaylistsAsync(CancellationToken ct)
+    {
+        var cookie = _credentials.Load("QQ") ?? ""; var uin = CookieValue(cookie, "uin") ?? CookieValue(cookie, "qqmusic_uin");
+        if (string.IsNullOrWhiteSpace(uin)) throw new InvalidOperationException("请先登录 QQ 音乐。");
+        var created = await GetJsonAsync("https://c.y.qq.com/rsc/fcgi-bin/fcg_user_created_diss", new Dictionary<string,string> { ["hostUin"]="0", ["hostuin"] = uin, ["sin"]="0", ["size"]="200", ["g_tk"]="5381", ["loginUin"] = uin, ["format"]="json", ["platform"]="yqq.json" }, cookie, ct);
+        var rows = created["data"]?["disslist"]?.AsArray() ?? [];
+        return rows.Select(x => new PlatformPlaylist(x?["dissid"]?.ToString() ?? "", MusicProvider.QQ, x?["diss_name"]?.GetValue<string>() ?? "QQ 歌单", x?["diss_cover"]?.GetValue<string>(), x?["song_cnt"]?.GetValue<int>())).Where(x => x.Id.Length > 0).ToArray();
+    }
+
+    private async Task<IReadOnlyList<PlatformTrack>> GetQQPlaylistTracksAsync(string id, int limit, int offset, CancellationToken ct)
+    {
+        var cookie = _credentials.Load("QQ") ?? ""; var uin = CookieValue(cookie, "uin") ?? CookieValue(cookie, "qqmusic_uin") ?? "";
+        var json = await GetJsonAsync("https://c.y.qq.com/qzone/fcg-bin/fcg_ucc_getcdinfo_byids_cp.fcg", new Dictionary<string,string> { ["type"]="1", ["utf8"]="1", ["disstid"] = id, ["song_begin"] = Math.Max(0, offset).ToString(), ["song_num"] = Math.Clamp(limit,1,100).ToString(), ["loginUin"] = uin, ["format"]="json", ["platform"]="yqq.json" }, cookie, ct);
+        return (json["cdlist"]?[0]?["songlist"]?.AsArray() ?? []).Select(DecodeQQTrack).Where(x => x is not null).Cast<PlatformTrack>().ToArray();
     }
 
     public string? LoadCookie(MusicProvider provider) => _credentials.Load(provider.ToString());
@@ -276,6 +331,33 @@ public sealed class PlatformMusicService
             try { return JsonNode.Parse(Encoding.UTF8.GetString(AesEcbPkcs7(Convert.FromHexString(text), Encoding.UTF8.GetBytes("e82ckenh8dichen8"), decrypt: true))) ?? new JsonObject(); }
             catch { throw new InvalidOperationException("网易云接口返回了无法识别的数据。"); }
         }
+    }
+
+    private async Task<IReadOnlyList<PlatformPlaylist>> GetKugouPlaylistsAsync(int limit, CancellationToken ct) => throw new NotSupportedException("Windows 酷狗歌单读取需要当前登录会话支持 cloudlist H5 接口，暂未移植。");
+    private async Task<IReadOnlyList<PlatformTrack>> GetKugouPlaylistTracksAsync(string id, int limit, int offset, CancellationToken ct) => throw new NotSupportedException("Windows 酷狗歌单歌曲读取需要当前登录会话支持 cloudlist H5 接口，暂未移植。");
+
+    private async Task<JsonNode> GetJsonAsync(string endpoint, Dictionary<string, string> parameters, string cookie, CancellationToken ct)
+    {
+        var url = endpoint + "?" + string.Join("&", parameters.Select(x => Uri.EscapeDataString(x.Key) + "=" + Uri.EscapeDataString(x.Value)));
+        using var request = new HttpRequestMessage(HttpMethod.Get, url); AddProviderHeaders(request, endpoint.Contains("qq.com") ? "https://y.qq.com/" : "https://www.kugou.com/", "Mozilla/5.0");
+        if (!string.IsNullOrWhiteSpace(cookie)) request.Headers.TryAddWithoutValidation("Cookie", cookie);
+        using var response = await Http.SendAsync(request, ct); response.EnsureSuccessStatusCode();
+        return JsonNode.Parse(await response.Content.ReadAsStringAsync(ct)) ?? new JsonObject();
+    }
+
+    private static PlatformTrack? DecodeNetEaseTrack(JsonNode? row)
+    {
+        var id = row?["id"]?.ToString() ?? ""; if (id.Length == 0) return null;
+        var artists = row?["ar"]?.AsArray() ?? row?["artists"]?.AsArray() ?? [];
+        return new PlatformTrack(id, MusicProvider.NetEase, row?["name"]?.GetValue<string>() ?? "", string.Join(" / ", artists.Select(x => x?["name"]?.GetValue<string>()).Where(x => !string.IsNullOrWhiteSpace(x))), row?["al"]?["name"]?.GetValue<string>() ?? "", (row?["dt"]?.GetValue<double>() ?? 0) / 1000, row?["al"]?["picUrl"]?.GetValue<string>());
+    }
+
+    private static PlatformTrack? DecodeQQTrack(JsonNode? row)
+    {
+        var id = row?["mid"]?.GetValue<string>() ?? row?["songmid"]?.GetValue<string>() ?? ""; if (id.Length == 0) return null;
+        var singers = row?["singer"]?.AsArray() ?? []; var album = row?["album"];
+        var media = row?["file"]?["media_mid"]?.GetValue<string>(); var albumMid = album?["mid"]?.GetValue<string>();
+        return new PlatformTrack(id, MusicProvider.QQ, row?["name"]?.GetValue<string>() ?? row?["songname"]?.GetValue<string>() ?? "", string.Join(" / ", singers.Select(x => x?["name"]?.GetValue<string>()).Where(x => !string.IsNullOrWhiteSpace(x))), album?["name"]?.GetValue<string>() ?? "", row?["interval"]?.GetValue<double>() ?? 0, string.IsNullOrWhiteSpace(albumMid) ? null : $"https://y.qq.com/music/photo_new/T002R300x300M000{albumMid}.jpg", media);
     }
 
     private static byte[] AesEcbPkcs7(byte[] data, byte[] key, bool decrypt = false)

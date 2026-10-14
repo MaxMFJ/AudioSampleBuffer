@@ -13,6 +13,37 @@ public sealed class LyricsService
     private static readonly Regex Timestamp = new(@"\[(\d+):(\d{1,2})(?:[.:](\d{1,3}))?\]", RegexOptions.Compiled);
     private readonly string _cacheDirectory = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "SoundDesk", "Lyrics");
+    private readonly string _settingsPath = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "SoundDesk", "lyrics-settings.json");
+    public LyricsDisplaySettings Settings { get; private set; } = new() { Enabled = false };
+
+    public LyricsService()
+    {
+        try
+        {
+            if (File.Exists(_settingsPath))
+                Settings = JsonSerializer.Deserialize<LyricsDisplaySettings>(File.ReadAllText(_settingsPath)) ?? Settings;
+        }
+        catch (Exception error) when (error is IOException or JsonException) { }
+    }
+
+    public void UpdateSettings(LyricsDisplaySettings settings)
+    {
+        settings.LineCount = Math.Clamp(settings.LineCount, 1, 12);
+        settings.PositionX = Math.Clamp(settings.PositionX, 0, 1);
+        settings.PositionY = Math.Clamp(settings.PositionY, 0, 1);
+        settings.WidthFraction = Math.Clamp(settings.WidthFraction, .2, 1);
+        settings.FontSize = Math.Clamp(settings.FontSize, 12, 72);
+        settings.InactiveScale = Math.Clamp(settings.InactiveScale, .3, 1);
+        settings.InactiveOpacity = Math.Clamp(settings.InactiveOpacity, 0, 1);
+        Settings = settings;
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(_settingsPath)!);
+            File.WriteAllText(_settingsPath, JsonSerializer.Serialize(settings));
+        }
+        catch (IOException) { }
+    }
 
     public async Task<IReadOnlyList<TimedLyric>> LoadAsync(LocalTrack track, CancellationToken cancellationToken = default)
     {

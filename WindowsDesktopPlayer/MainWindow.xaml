@@ -36,8 +36,16 @@
                         <Button Content="♫  所有歌曲" HorizontalContentAlignment="Left" Click="AllSongs_Click" />
                         <Button Content="◷  最近播放" HorizontalContentAlignment="Left" Margin="0,5,0,0" Click="Recent_Click" />
                         <Button Content="♡  我的收藏" HorizontalContentAlignment="Left" Margin="0,5,0,0" Click="Favorites_Click" />
+                        <DockPanel Margin="4,18,0,7">
+                            <TextBlock Text="我的歌单" Style="{StaticResource SectionLabel}" VerticalAlignment="Center" />
+                            <Button Content="＋" Padding="7,2" Margin="0,0,0,0" DockPanel.Dock="Right" ToolTip="新建歌单" Click="CreatePlaylist_Click" />
+                        </DockPanel>
+                        <ListBox x:Name="PlaylistList" MaxHeight="150" SelectionChanged="PlaylistList_SelectionChanged">
+                            <ListBox.ItemTemplate><DataTemplate><StackPanel Orientation="Horizontal"><TextBlock Text="♫  " /><TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" /></StackPanel></DataTemplate></ListBox.ItemTemplate>
+                            <ListBox.ContextMenu><ContextMenu><MenuItem Header="删除歌单" Click="DeletePlaylist_Click" /></ContextMenu></ListBox.ContextMenu>
+                        </ListBox>
                         <TextBlock Text="桌面体验" Style="{StaticResource SectionLabel}" Margin="4,22,0,8" />
-                        <Button x:Name="LyricsButton" Content="▤  桌面歌词" HorizontalContentAlignment="Left" Click="Lyrics_Click" />
+                        <Button x:Name="LyricsButton" Content="▤  歌词管理" HorizontalContentAlignment="Left" Click="LyricsSettings_Click" />
                         <TextBlock Text="音频响应效果" Style="{StaticResource SectionLabel}" Margin="4,18,0,7" />
                         <ComboBox x:Name="EffectSelector" SelectedIndex="0" SelectionChanged="EffectSelector_SelectionChanged" Height="34" Background="#202B3E" Foreground="#F4F5FF">
                             <ComboBoxItem Content="蜂窝（Mac）" />
@@ -60,6 +68,7 @@
                         </StackPanel>
                         <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
                             <Button x:Name="MonitorButton" Content="关闭桌面背景" Margin="0,0,8,0" Click="Monitor_Click" />
+                            <Button Content="歌曲列表" Margin="0,0,8,0" Click="SongList_Click" />
                             <Button Content="添加歌曲" Background="#596AE3" BorderBrush="#7C8CFF" Click="Import_Click" />
                         </StackPanel>
                     </Grid>
@@ -77,10 +86,13 @@
                             <TextBlock Grid.Column="1" Text="艺术家" Style="{StaticResource SectionLabel}" />
                             <TextBlock Grid.Column="2" Text="时长" Style="{StaticResource SectionLabel}" />
                         </Grid>
-                        <ListBox x:Name="TrackList" Grid.Row="1" SelectionChanged="TrackList_SelectionChanged" MouseDoubleClick="TrackList_DoubleClick">
+                        <ListBox x:Name="TrackList" Grid.Row="1" SelectionChanged="TrackList_SelectionChanged" MouseDoubleClick="TrackList_DoubleClick" PreviewMouseRightButtonDown="TrackList_RightClick">
                             <ListBox.ContextMenu>
-                                <ContextMenu>
+                                <ContextMenu Opened="TrackContextMenu_Opened">
                                     <MenuItem Header="切换收藏" Click="Favorite_Click" />
+                                    <MenuItem Header="添加到歌单" />
+                                    <MenuItem Header="从当前歌单移除" Click="RemoveFromPlaylist_Click" />
+                                    <MenuItem Header="从曲库移除" Click="RemoveFromLibrary_Click" />
                                 </ContextMenu>
                             </ListBox.ContextMenu>
                             <ListBox.ItemTemplate>
@@ -118,6 +130,8 @@
                         <Button x:Name="PreviousButton" Content="|◀" Padding="11,5" Click="Previous_Click" />
                         <Button x:Name="PlayButton" Content="▶" Padding="18,5" Margin="10,0" Background="#596AE3" Click="Play_Click" />
                         <Button Content="▶|" Padding="11,5" Click="Next_Click" />
+                        <Button Content="■" Padding="11,5" Margin="8,0,0,0" ToolTip="停止" Click="Stop_Click" />
+                        <Button x:Name="FavoriteButton" Content="♡" Padding="11,5" Margin="8,0,0,0" ToolTip="喜欢" Click="FavoriteCurrent_Click" />
                         <Button x:Name="RepeatButton" Content="顺序播放" Padding="11,5" Margin="10,0,0,0" Click="Repeat_Click" />
                     </StackPanel>
                     <Grid Margin="0,8,0,0">
