@@ -158,5 +158,8 @@ float4 wallpaperPS(VSOut input) : SV_Target
     else if (effectIndex == 2) color = coverDots(input.uv);
     else if (effectIndex == 3) color = hexMorph(input.uv);
     else color = cellular(input.uv);
-    return float4(saturate(color), 1);
+    // The swap chain uses UNORM (not an sRGB render target). Encode linear
+    // shader output for the display transfer curve; without this, the Mac
+    // palettes are crushed into near-black on typical Windows displays.
+    return float4(pow(saturate(color), 1.0 / 2.2), 1);
 }
