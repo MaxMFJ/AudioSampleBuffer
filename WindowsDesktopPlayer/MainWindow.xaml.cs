@@ -7,8 +7,10 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Input;
+using System.Windows.Media;
 using System.Windows.Threading;
 using Microsoft.Win32;
+using Rectangle = System.Windows.Shapes.Rectangle;
 
 namespace SoundDesk;
 
@@ -17,8 +19,21 @@ public partial class MainWindow : Window
     private readonly ObservableCollection<LocalTrack> _tracks = [];
     private readonly ICollectionView _tracksView;
     private readonly DispatcherTimer _positionTimer;
+    private readonly DispatcherTimer _visualTimer;
+    private readonly AudioReactiveMonitor _reactiveMonitor = new();
+    private readonly Rectangle[] _spectrumBars = new Rectangle[48];
+    private readonly Brush[] _spectrumBrushes = new Brush[48];
     private readonly string _libraryPath = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "SoundDesk", "library.json");
+    private readonly LyricsService _lyricsService = new();
+    private IReadOnlyList<TimedLyric> _lyrics = [];
+    private CancellationTokenSource? _lyricsCancellation;
+    private LyricsOverlayWindow? _lyricsOverlay;
+    private PlatformWindow? _platformWindow;
+    private int _lyricsGeneration;
+    private int _visualizationMode;
+    private int _brushMode = -1;
+    private double _visualTime;
     private LocalTrack? _currentTrack;
     private bool _isSeeking;
     private bool _isPlaying;
@@ -32,6 +47,20 @@ public partial class MainWindow : Window
         TrackList.ItemsSource = _tracksView;
         _positionTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
         _positionTimer.Tick += (_, _) => RefreshPosition();
+        for (var index = 0; index < _spectrumBars.Length; index++)
+        {
+            var bar = new Rectangle { RadiusX = 4, RadiusY = 4, Opacity = 0.24, IsHitTestVisible = false };
+            _spectrumBars[index] = bar;
+            SpectrumCanvas.Children.Add(bar);
+        }
+        SpectrumCanvas.SizeChanged += (_, _) => RenderSpectrum();
+        _visualTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(33) };
+        _visualTimer.Tick += (_, _) => RenderSpectrum();
+        Loaded += (_, _) =>
+        {
+            _reactiveMonitor.Start();
+            _visualTimer.Start();
+        };
         LoadLibrary();
         RefreshLibraryState();
     }
@@ -118,6 +147,7 @@ public partial class MainWindow : Window
             _currentTrack = track;
             TrackList.SelectedItem = track;
             SetTrackLabels(track);
+            LoadLyricsForTrack(track);
             Player.Stop();
             Player.Source = new Uri(track.Path, UriKind.Absolute);
             Player.Play();
@@ -210,6 +240,128 @@ public partial class MainWindow : Window
         if (SectionTitle.Text == "我的收藏") _tracksView.Refresh();
     }
 
+    private void EffectSelector_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (EffectSelector is not null) _visualizationMode = Math.Max(0, EffectSelector.SelectedIndex);
+        RenderSpectrum();
+    }
+
+    private void RenderSpectrum()
+    {
+        if (SpectrumCanvas is null || SpectrumCanvas.ActualWidth <= 0 || SpectrumCanvas.ActualHeight <= 0) return;
+        var width = SpectrumCanvas.ActualWidth;
+        var height = SpectrumCanvas.ActualHeight;
+        var values = _reactiveMonitor.Spectrum;
+        if (_brushMode != _visualizationMode) BuildSpectrumBrushes();
+        var barSlot = width / _spectrumBars.Length;
+        var baseline = Math.Max(0, height - 18);
+        var maxHeight = Math.Min(height * 0.48, 230);
+        _visualTime += 1d / 30;
+        for (var index = 0; index < _spectrumBars.Length; index++)
+        {
+            var amplitude = values[index];
+            var bar = _spectrumBars[index];
+            var widthFactor = _visualizationMode switch { 1 => 0.12, 2 => 0.28, 3 => 0.48, _ => 0.64 };
+            var barWidth = Math.Max(2, barSlot * widthFactor);
+            var barHeight = 5 + Math.Pow(amplitude, 0.72) * maxHeight;
+            var centerX = index * barSlot + barSlot / 2;
+            Canvas.SetLeft(bar, centerX - barWidth / 2);
+            Canvas.SetTop(bar, Math.Max(0, baseline - barHeight));
+            bar.Width = barWidth;
+            bar.Height = _visualizationMode == 2 ? Math.Max(4, barWidth) : barHeight;
+            if (_visualizationMode == 2)
+                Canvas.SetTop(bar, Math.Max(0, baseline - amplitude * maxHeight));
+
+            bar.Fill = _spectrumBrushes[index];
+            bar.Opacity = Math.Clamp(0.12 + amplitude * 1.8, 0.12, 0.82);
+            if (_visualizationMode == 1)
+            {
+                var sway = Math.Sin(_visualTime * 0.8 + index * 0.35) * 16;
+                Canvas.SetLeft(bar, centerX - barWidth / 2 + sway);
+                bar.Opacity = Math.Clamp(0.08 + amplitude * 1.4, 0.08, 0.62);
+            }
+        }
+    }
+
+    private void BuildSpectrumBrushes()
+    {
+        for (var index = 0; index < _spectrumBrushes.Length; index++)
+        {
+            var color = _visualizationMode switch
+            {
+                1 => Color.FromRgb((byte)(255 - index * 2), (byte)(158 + index % 5 * 9), 105),
+                2 => Color.FromRgb(138, (byte)(174 + index % 5 * 12), 255),
+                3 => index % 3 == 0 ? Color.FromRgb(118, 255, 104) : Color.FromRgb(48, 226, 231),
+                _ => Color.FromRgb((byte)(108 + index % 4 * 12), (byte)(165 + index % 5 * 9), 255)
+            };
+            var brush = new SolidColorBrush(color);
+            brush.Freeze();
+            _spectrumBrushes[index] = brush;
+        }
+        _brushMode = _visualizationMode;
+    }
+
+    private async void LoadLyricsForTrack(LocalTrack track)
+    {
+        _lyricsCancellation?.Cancel();
+        _lyricsCancellation?.Dispose();
+        var cancellation = new CancellationTokenSource();
+        _lyricsCancellation = cancellation;
+        var generation = ++_lyricsGeneration;
+        _lyrics = [];
+        _lyricsOverlay?.ShowFrame("", "正在查找歌词…", "");
+        try
+        {
+            var lines = await _lyricsService.LoadAsync(track, cancellation.Token);
+            if (generation != _lyricsGeneration || !ReferenceEquals(track, _currentTrack)) return;
+            _lyrics = lines;
+            UpdateLyrics(Player.Position.TotalSeconds);
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception error)
+        {
+            if (generation == _lyricsGeneration)
+                _lyricsOverlay?.ShowFrame("", $"歌词加载失败：{error.Message}", "");
+        }
+    }
+
+    private async void Lyrics_Click(object sender, RoutedEventArgs e)
+    {
+        if (_lyricsOverlay is { IsVisible: true })
+        {
+            _lyricsOverlay.Close();
+            _lyricsOverlay = null;
+            LyricsButton.Content = "▤  桌面歌词";
+            return;
+        }
+        if (_currentTrack is null)
+        {
+            MessageBox.Show(this, "先播放一首歌曲，再打开桌面歌词。", "桌面歌词", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+        if (_lyrics.Count == 0)
+        {
+            try { _lyrics = await _lyricsService.LoadAsync(_currentTrack); }
+            catch (Exception error)
+            {
+                MessageBox.Show(this, $"歌词加载失败：{error.Message}", "桌面歌词", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+        }
+
+        _lyricsOverlay = new LyricsOverlayWindow();
+        _lyricsOverlay.ShowFrame("", _lyrics.Count > 0 ? "歌词已同步" : "没有找到匹配的歌词", "");
+        _lyricsOverlay.Show();
+        LyricsButton.Content = "▤  隐藏歌词";
+        UpdateLyrics(Player.Position.TotalSeconds);
+    }
+
+    private void UpdateLyrics(double time)
+    {
+        if (_lyricsOverlay is not { IsVisible: true }) return;
+        var frame = LyricsService.FrameAt(_lyrics, time);
+        _lyricsOverlay.ShowFrame(frame.Previous, frame.Current, frame.Next);
+    }
+
     private void RefreshPosition()
     {
         if (Player.Source is null || _isSeeking) return;
@@ -221,6 +373,7 @@ public partial class MainWindow : Window
                 ProgressSlider.Maximum = Math.Max(1, Player.NaturalDuration.TimeSpan.TotalSeconds);
             ProgressSlider.Value = Math.Min(position.TotalSeconds, ProgressSlider.Maximum);
             ElapsedText.Text = FormatTime(position);
+            UpdateLyrics(position.TotalSeconds);
         }
         finally { _isSeeking = false; }
     }
@@ -245,11 +398,27 @@ public partial class MainWindow : Window
         _tracksView.Refresh();
     }
 
-    private void OnlineSearch_Click(object sender, RoutedEventArgs e) => ShowNotAvailable("在线音乐搜索和平台账号登录将在后续 Windows 版本接入。当前可以先导入本地音频播放。");
-    private void Lyrics_Click(object sender, RoutedEventArgs e) => ShowNotAvailable("歌词管理与桌面歌词正在移植中。此功能会沿用 Mac 端的控制台入口。");
-    private void Effects_Click(object sender, RoutedEventArgs e) => ShowNotAvailable("音频响应式桌面效果正在移植中。Windows 版会用 Direct3D 渲染，复现 Mac 端的效果样式。");
-    private void Accounts_Click(object sender, RoutedEventArgs e) => ShowNotAvailable("QQ、网易云和酷狗账号连接尚未接入 Windows 版。");
+    private void OnlineSearch_Click(object sender, RoutedEventArgs e) => OpenPlatformWindow();
+    private void Accounts_Click(object sender, RoutedEventArgs e) => OpenPlatformWindow();
     private void Monitor_Click(object sender, RoutedEventArgs e) => ShowNotAvailable("窗口预览需要 Windows 桌面合成器接入，后续版本开放。");
+
+    private void OpenPlatformWindow()
+    {
+        if (_platformWindow is { IsVisible: true }) { _platformWindow.Activate(); return; }
+        _platformWindow = new PlatformWindow(OnPlatformTrackDownloaded) { Owner = this };
+        _platformWindow.Closed += (_, _) => _platformWindow = null;
+        _platformWindow.Show();
+    }
+
+    private void OnPlatformTrackDownloaded(LocalTrack track)
+    {
+        var existing = _tracks.FirstOrDefault(item => string.Equals(item.Path, track.Path, StringComparison.OrdinalIgnoreCase));
+        if (existing is null) _tracks.Add(track);
+        else track = existing;
+        SaveLibrary();
+        RefreshLibraryState();
+        PlayTrack(track);
+    }
 
     private void ShowNotAvailable(string message) => MessageBox.Show(this, message, "Windows 版开发中", MessageBoxButton.OK, MessageBoxImage.Information);
 
@@ -298,7 +467,12 @@ public partial class MainWindow : Window
     protected override void OnClosed(EventArgs e)
     {
         _positionTimer.Stop();
+        _visualTimer.Stop();
+        _reactiveMonitor.Dispose();
         Player.Stop();
+        _lyricsCancellation?.Cancel();
+        _lyricsOverlay?.Close();
+        _platformWindow?.Close();
         SaveLibrary();
         base.OnClosed(e);
     }

@@ -17,6 +17,7 @@
     </Window.Resources>
     <Grid Background="{StaticResource Backdrop}">
         <Grid.RowDefinitions><RowDefinition Height="*"/><RowDefinition Height="112"/></Grid.RowDefinitions>
+        <Canvas x:Name="SpectrumCanvas" IsHitTestVisible="False" ClipToBounds="True" />
         <Grid Margin="28,24,28,16">
             <Grid.ColumnDefinitions><ColumnDefinition Width="226"/><ColumnDefinition Width="24"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
             <Border Grid.Column="0" Background="#9B141A28" BorderBrush="#33FFFFFF" BorderThickness="1" CornerRadius="22" Padding="18">
@@ -36,8 +37,14 @@
                         <Button Content="◷  最近播放" HorizontalContentAlignment="Left" Margin="0,5,0,0" Click="Recent_Click" />
                         <Button Content="♡  我的收藏" HorizontalContentAlignment="Left" Margin="0,5,0,0" Click="Favorites_Click" />
                         <TextBlock Text="桌面体验" Style="{StaticResource SectionLabel}" Margin="4,22,0,8" />
-                        <Button Content="▤  歌词管理" HorizontalContentAlignment="Left" Click="Lyrics_Click" />
-                        <Button Content="◉  视觉效果" HorizontalContentAlignment="Left" Margin="0,5,0,0" Click="Effects_Click" />
+                        <Button x:Name="LyricsButton" Content="▤  桌面歌词" HorizontalContentAlignment="Left" Click="Lyrics_Click" />
+                        <TextBlock Text="音频响应效果" Style="{StaticResource SectionLabel}" Margin="4,18,0,7" />
+                        <ComboBox x:Name="EffectSelector" SelectedIndex="0" SelectionChanged="EffectSelector_SelectionChanged" Height="34" Background="#202B3E" Foreground="#F4F5FF">
+                            <ComboBoxItem Content="极光波纹" />
+                            <ComboBoxItem Content="丁达尔光束" />
+                            <ComboBoxItem Content="封面点阵" />
+                            <ComboBoxItem Content="深空蜂巢" />
+                        </ComboBox>
                         <Button Content="☷  平台账号" HorizontalContentAlignment="Left" Margin="0,5,0,0" Click="Accounts_Click" />
                     </StackPanel>
                 </DockPanel>

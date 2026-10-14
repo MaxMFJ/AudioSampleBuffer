@@ -1,0 +1,71 @@
+<Window x:Class="SoundDesk.PlatformWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="在线音乐与平台账号" Width="900" Height="700" MinWidth="720" MinHeight="560"
+        WindowStartupLocation="CenterOwner" Background="#101522" Foreground="#F4F5FF">
+    <Window.Resources>
+        <SolidColorBrush x:Key="Muted" Color="#AAB2C6" />
+        <Style TargetType="Button">
+            <Setter Property="Foreground" Value="#F4F5FF" /><Setter Property="Background" Value="#28344C" />
+            <Setter Property="BorderBrush" Value="#3C4A65" /><Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Padding" Value="14,8" /><Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style TargetType="TextBox">
+            <Setter Property="Foreground" Value="#F4F5FF" /><Setter Property="Background" Value="#1B2333" />
+            <Setter Property="BorderBrush" Value="#3C4A65" /><Setter Property="Padding" Value="11,8" />
+        </Style>
+        <Style TargetType="ListBox"><Setter Property="Background" Value="Transparent" /><Setter Property="BorderThickness" Value="0" /></Style>
+        <Style TargetType="ListBoxItem">
+            <Setter Property="Padding" Value="12,9" /><Setter Property="Margin" Value="0,2" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ListBoxItem">
+                <Border x:Name="Root" Background="Transparent" CornerRadius="9" Padding="{TemplateBinding Padding}"><ContentPresenter /></Border>
+                <ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Root" Property="Background" Value="#263249" /></Trigger><Trigger Property="IsSelected" Value="True"><Setter TargetName="Root" Property="Background" Value="#394968" /></Trigger></ControlTemplate.Triggers>
+            </ControlTemplate></Setter.Value></Setter>
+        </Style>
+    </Window.Resources>
+    <Grid Margin="26">
+        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+        <StackPanel>
+            <TextBlock Text="ONLINE MUSIC" Foreground="#AAB2C6" FontSize="10" FontWeight="Bold" />
+            <TextBlock Text="在线音乐与平台账号" FontSize="24" FontWeight="SemiBold" Margin="0,6,0,14" />
+        </StackPanel>
+        <Grid Grid.Row="1" Margin="0,0,0,12">
+            <Grid.ColumnDefinitions><ColumnDefinition Width="180"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+            <ComboBox x:Name="ProviderPicker" SelectedIndex="0" SelectionChanged="Provider_SelectionChanged" Height="38" VerticalContentAlignment="Center">
+                <ComboBoxItem Content="QQ 音乐"/><ComboBoxItem Content="网易云音乐"/><ComboBoxItem Content="酷狗音乐"/>
+            </ComboBox>
+            <TextBox x:Name="SearchBox" Grid.Column="1" Margin="10,0" Height="38" VerticalContentAlignment="Center" KeyDown="SearchBox_KeyDown" ToolTip="搜索歌曲" />
+            <Button Grid.Column="2" Content="搜索歌曲" Click="Search_Click" Background="#596AE3" BorderBrush="#7C8CFF" />
+        </Grid>
+        <Grid Grid.Row="2" Margin="0,0,0,12">
+            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+            <Button x:Name="LoginPageButton" Content="打开平台登录页" HorizontalAlignment="Left" Click="LoginPage_Click" />
+            <Button Grid.Column="1" Content="保存 Cookie" Margin="8,0,0,0" Click="SaveCookie_Click" />
+            <Button Grid.Column="2" Content="清除账号" Margin="8,0,0,0" Click="DeleteCookie_Click" />
+        </Grid>
+        <TextBox x:Name="CookieBox" Grid.Row="3" Height="64" AcceptsReturn="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" ToolTip="粘贴登录后的平台 Cookie" />
+        <Grid Grid.Row="4" Margin="0,14,0,12">
+            <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+            <Grid Margin="12,0,12,6">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="190"/><ColumnDefinition Width="70"/></Grid.ColumnDefinitions>
+                <TextBlock Text="歌曲" Foreground="{StaticResource Muted}" FontSize="11" />
+                <TextBlock Grid.Column="1" Text="艺术家" Foreground="{StaticResource Muted}" FontSize="11" />
+                <TextBlock Grid.Column="2" Text="时长" Foreground="{StaticResource Muted}" FontSize="11" />
+            </Grid>
+            <ListBox x:Name="ResultsList" Grid.Row="1" MouseDoubleClick="Results_DoubleClick">
+                <ListBox.ItemTemplate><DataTemplate><Grid>
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="190"/><ColumnDefinition Width="70"/></Grid.ColumnDefinitions>
+                    <StackPanel><TextBlock Text="{Binding Title}" FontSize="13" FontWeight="Medium" TextTrimming="CharacterEllipsis"/><TextBlock Text="{Binding Album}" Foreground="#9CA6BB" FontSize="10" Margin="0,3,0,0" TextTrimming="CharacterEllipsis"/></StackPanel>
+                    <TextBlock Grid.Column="1" Text="{Binding Artist}" Foreground="#C2C8D6" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                    <TextBlock Grid.Column="2" Text="{Binding DurationText}" Foreground="#9CA6BB" VerticalAlignment="Center" />
+                </Grid></DataTemplate></ListBox.ItemTemplate>
+            </ListBox>
+            <TextBlock x:Name="EmptyResults" Grid.Row="1" Text="搜索结果会显示在这里。双击歌曲即可解析并下载到本地曲库。" Foreground="{StaticResource Muted}" HorizontalAlignment="Center" VerticalAlignment="Center" TextWrapping="Wrap" TextAlignment="Center" Margin="30" IsHitTestVisible="False" />
+        </Grid>
+        <DockPanel Grid.Row="5">
+            <TextBlock x:Name="StatusText" Foreground="{StaticResource Muted}" VerticalAlignment="Center" TextWrapping="Wrap" />
+            <Button DockPanel.Dock="Right" Content="完成" Click="Close_Click" Margin="12,0,0,0" />
+        </DockPanel>
+    </Grid>
+</Window>

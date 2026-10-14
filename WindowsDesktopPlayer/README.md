@@ -8,6 +8,12 @@ Windows 桌面播放器工程，按 `MacDesktopPlayer` 的控制台布局搭建�
 - 多选导入本地音频，持久化文件路径、最近播放时间和时长
 - 播放、暂停、上一首/下一首、进度拖动、音量和三种循环模式
 - `MediaElement` 使用 Windows Media Foundation 解码本机支持的音频格式
+- 桌面歌词：优先读取同名 `.lrc`，按播放进度同步；缺少本地歌词时尝试 QQ 歌词并缓存
+- 输出频谱响应与四种配色/形态，可切换极光、光束、点阵和蜂巢风格
+- QQ 音乐、网易云、酷狗搜索及可用音源下载；下载曲目加入本地曲库
+- 平台 Cookie 按当前 Windows 用户使用 DPAPI 加密保存
+
+平台服务接口会受曲库权限、会员状态和平台接口变更影响。目前账号登录通过浏览器完成，随后在平台窗口粘贴 Cookie；用户歌单读取/管理尚未移植。输出频谱采集 Windows 默认播放设备的 WASAPI loopback，因此会包含其他应用的声音。
 
 ## macOS 交叉编译
 
@@ -32,6 +38,10 @@ artifacts/SoundDesk-win-x64.zip
 3. 搜索曲库、加入收藏、查看最近播放，然后退出并重开，确认曲库记录仍在。
 4. 记录不能播放的格式、窗口缩放/高 DPI 问题和任何异常提示，便于继续修复。
 
-## 后续移植模块
+## 尚待移植
 
-Mac 端还包含平台账号和歌单、同步歌词、音频响应式桌面效果、多显示器桌面层级和 YAMNet/HTDemucs 分析。Mac 端依赖 AppKit、AVFoundation、Metal、Accelerate 和 Core ML；Windows 版需用 Windows API、WASAPI/Direct3D 与 ONNX Runtime 等分别实现。本工程目前保留对应入口，尚未接入这些能力。
+- 用户歌单读取与管理
+- YAMNet 曲目分类和 HTDemucs 音轨分析：现有模型为 Core ML `.mlpackage`，Windows 版需要可运行的 ONNX 模型与一致的音频预处理/输出映射后再接入
+- 桌面歌词的逐字高亮和多屏幕位置记忆
+
+Windows 运行时体验需在远程 Windows 电脑验收；macOS 交叉编译只能确认目标框架和打包结果。
