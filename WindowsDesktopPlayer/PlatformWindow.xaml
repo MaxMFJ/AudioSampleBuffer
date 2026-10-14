@@ -25,7 +25,7 @@
         </Style>
     </Window.Resources>
     <Grid Margin="26">
-        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
         <StackPanel>
             <TextBlock Text="ONLINE MUSIC" Foreground="#AAB2C6" FontSize="10" FontWeight="Bold" />
             <TextBlock Text="在线音乐与平台账号" FontSize="24" FontWeight="SemiBold" Margin="0,6,0,14" />
@@ -40,12 +40,10 @@
         </Grid>
         <Grid Grid.Row="2" Margin="0,0,0,12">
             <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-            <Button x:Name="LoginPageButton" Content="打开平台登录页" HorizontalAlignment="Left" Click="LoginPage_Click" />
-            <Button Grid.Column="1" Content="保存 Cookie" Margin="8,0,0,0" Click="SaveCookie_Click" />
-            <Button Grid.Column="2" Content="清除账号" Margin="8,0,0,0" Click="DeleteCookie_Click" />
+            <Button x:Name="LoginPageButton" Content="在应用内登录并自动保存" HorizontalAlignment="Left" Click="LoginPage_Click" />
+            <Button Grid.Column="2" Content="退出账号" Margin="8,0,0,0" Click="DeleteCookie_Click" />
         </Grid>
-        <TextBox x:Name="CookieBox" Grid.Row="3" Height="64" AcceptsReturn="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" ToolTip="粘贴登录后的平台 Cookie" />
-        <Grid Grid.Row="4" Margin="0,14,0,12">
+        <Grid Grid.Row="3" Margin="0,14,0,12">
             <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
             <Grid Margin="12,0,12,6">
                 <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="190"/><ColumnDefinition Width="70"/></Grid.ColumnDefinitions>
@@ -63,7 +61,7 @@
             </ListBox>
             <TextBlock x:Name="EmptyResults" Grid.Row="1" Text="搜索结果会显示在这里。双击歌曲即可解析并下载到本地曲库。" Foreground="{StaticResource Muted}" HorizontalAlignment="Center" VerticalAlignment="Center" TextWrapping="Wrap" TextAlignment="Center" Margin="30" IsHitTestVisible="False" />
         </Grid>
-        <DockPanel Grid.Row="5">
+        <DockPanel Grid.Row="4">
             <TextBlock x:Name="StatusText" Foreground="{StaticResource Muted}" VerticalAlignment="Center" TextWrapping="Wrap" />
             <Button DockPanel.Dock="Right" Content="完成" Click="Close_Click" Margin="12,0,0,0" />
         </DockPanel>

@@ -9,11 +9,12 @@ Windows 桌面播放器工程，按 `MacDesktopPlayer` 的控制台布局搭建�
 - 播放、暂停、上一首/下一首、进度拖动、音量和三种循环模式
 - `MediaElement` 使用 Windows Media Foundation 解码本机支持的音频格式
 - 桌面歌词：优先读取同名 `.lrc`，按播放进度同步；缺少本地歌词时尝试 QQ 歌词并缓存
-- 输出频谱响应与四种配色/形态，可切换极光、光束、点阵和蜂巢风格
+- 动态桌面背景层：显示在桌面图标后面，复用 WASAPI 音频频谱，可切换极光、丁达尔光束、封面点阵和深空蜂巢；播放器控制器支持启用/关闭
+- 播放器窗口内同步显示音频频谱，背景效果切换会同步到桌面层
 - QQ 音乐、网易云、酷狗搜索及可用音源下载；下载曲目加入本地曲库
-- 平台 Cookie 按当前 Windows 用户使用 DPAPI 加密保存
+- WebView2 内嵌平台登录，登录后自动读取必要会话 Cookie，并按当前 Windows 用户使用 DPAPI 加密保存
 
-平台服务接口会受曲库权限、会员状态和平台接口变更影响。目前账号登录通过浏览器完成，随后在平台窗口粘贴 Cookie；用户歌单读取/管理尚未移植。输出频谱采集 Windows 默认播放设备的 WASAPI loopback，因此会包含其他应用的声音。
+平台服务接口会受曲库权限、会员状态和平台接口变更影响。登录由平台页面处理，Sound Desk 不读取或保存账号密码。内嵌登录需要远程电脑安装 Microsoft Edge WebView2 Runtime；Windows 11 通常已预装，其他环境可通过 Microsoft Edge WebView2 Runtime 安装程序提供。用户歌单读取/管理尚未移植。输出频谱采集 Windows 默认播放设备的 WASAPI loopback，因此会包含其他应用的声音。
 
 ## macOS 交叉编译
 

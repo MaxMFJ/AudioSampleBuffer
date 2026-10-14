@@ -1,5 +1,4 @@
 using System.Collections.ObjectModel;
-using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -32,10 +31,9 @@ public partial class PlatformWindow : Window
 
     private void LoadCookieForSelection()
     {
-        if (CookieBox is null || ProviderPicker.SelectedIndex < 0) return;
-        CookieBox.Text = _music.LoadCookie(SelectedProvider) ?? "";
-        StatusText.Text = string.IsNullOrWhiteSpace(CookieBox.Text)
-            ? "未保存账号。免费曲目可直接试听；需要登录的曲目请先保存平台 Cookie。"
+        if (StatusText is null || ProviderPicker.SelectedIndex < 0) return;
+        StatusText.Text = _music.LoadCookie(SelectedProvider) is null
+            ? "尚未登录此平台。部分歌曲需要平台账号授权后才能播放。"
             : "已读取此平台的加密登录凭据。";
     }
 
@@ -75,7 +73,7 @@ public partial class PlatformWindow : Window
             var local = new LocalTrack
             {
                 Path = path, Title = track.Title, Artist = string.IsNullOrWhiteSpace(track.Artist) ? "未知艺术家" : track.Artist,
-                Album = track.Album, DurationSeconds = track.DurationSeconds
+                Album = track.Album, DurationSeconds = track.DurationSeconds, CoverUrl = track.CoverUrl
             };
             _onTrackDownloaded(local);
             StatusText.Text = $"已下载并加入曲库：{track.Title}";
@@ -86,37 +84,9 @@ public partial class PlatformWindow : Window
 
     private void LoginPage_Click(object sender, RoutedEventArgs e)
     {
-        var url = SelectedProvider switch
-        {
-            MusicProvider.QQ => "https://y.qq.com/portal/profile.html",
-            MusicProvider.NetEase => "https://music.163.com/",
-            _ => "https://www.kugou.com/"
-        };
-        Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
-        StatusText.Text = "请在浏览器登录，再从该站点请求的 Cookie 请求头复制值粘贴到上方并保存。Cookie 会用 Windows DPAPI 加密到当前用户账户。";
-    }
-
-    private void SaveCookie_Click(object sender, RoutedEventArgs e)
-    {
-        var cookie = CookieBox.Text.Trim();
-        if (cookie.Length == 0) { StatusText.Text = "先粘贴登录后的 Cookie。"; return; }
-        if (!HasRequiredCookie(SelectedProvider, cookie))
-        {
-            StatusText.Text = SelectedProvider switch
-            {
-                MusicProvider.QQ => "QQ Cookie 至少需要 uin 和 qm_keyst / qqmusic_key。",
-                MusicProvider.NetEase => "网易云 Cookie 需要 MUSIC_U。",
-                _ => "酷狗 Cookie 需要 userid / KugooID 与 token。"
-            };
-            return;
-        }
-        try
-        {
-            _music.SaveCookie(SelectedProvider, cookie);
-            CookieBox.Text = _music.LoadCookie(SelectedProvider) ?? "";
-            StatusText.Text = "凭据已使用 Windows DPAPI 加密保存。";
-        }
-        catch (Exception error) { StatusText.Text = $"保存凭据失败：{error.Message}"; }
+        var login = new PlatformLoginWindow(SelectedProvider) { Owner = this };
+        login.ShowDialog();
+        LoadCookieForSelection();
     }
 
     private void DeleteCookie_Click(object sender, RoutedEventArgs e)
@@ -124,22 +94,9 @@ public partial class PlatformWindow : Window
         try
         {
             _music.DeleteCookie(SelectedProvider);
-            CookieBox.Clear();
             StatusText.Text = "已清除此平台的本机登录凭据。";
         }
         catch (Exception error) { StatusText.Text = $"清除失败：{error.Message}"; }
-    }
-
-    private static bool HasRequiredCookie(MusicProvider provider, string cookie)
-    {
-        var names = cookie.Split(';', StringSplitOptions.RemoveEmptyEntries)
-            .Select(part => part.Split('=', 2)[0].Trim()).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        return provider switch
-        {
-            MusicProvider.QQ => names.Contains("uin") && (names.Contains("qm_keyst") || names.Contains("qqmusic_key") || names.Contains("music_key") || names.Contains("wxskey")),
-            MusicProvider.NetEase => names.Contains("MUSIC_U"),
-            _ => (names.Contains("userid") || names.Contains("KugooID")) && (names.Contains("token") || names.Contains("t"))
-        };
     }
 
     private void SearchBox_KeyDown(object sender, KeyEventArgs e)

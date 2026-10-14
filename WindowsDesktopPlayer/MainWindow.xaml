@@ -59,7 +59,7 @@
                             <TextBlock x:Name="SectionTitle" Text="所有歌曲" FontSize="27" FontWeight="SemiBold" Margin="0,7,0,0" />
                         </StackPanel>
                         <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                            <Button Content="窗口预览" Margin="0,0,8,0" Click="Monitor_Click" />
+                            <Button x:Name="MonitorButton" Content="关闭桌面背景" Margin="0,0,8,0" Click="Monitor_Click" />
                             <Button Content="添加歌曲" Background="#596AE3" BorderBrush="#7C8CFF" Click="Import_Click" />
                         </StackPanel>
                     </Grid>

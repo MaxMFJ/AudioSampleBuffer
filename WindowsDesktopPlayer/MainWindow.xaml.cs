@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.IO;
+using System.Net.Http;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Windows;
@@ -8,6 +9,7 @@ using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using Microsoft.Win32;
 using Rectangle = System.Windows.Shapes.Rectangle;
@@ -21,6 +23,7 @@ public partial class MainWindow : Window
     private readonly DispatcherTimer _positionTimer;
     private readonly DispatcherTimer _visualTimer;
     private readonly AudioReactiveMonitor _reactiveMonitor = new();
+    private readonly DesktopWallpaperController _desktopWallpaper;
     private readonly Rectangle[] _spectrumBars = new Rectangle[48];
     private readonly Brush[] _spectrumBrushes = new Brush[48];
     private readonly string _libraryPath = Path.Combine(
@@ -33,6 +36,7 @@ public partial class MainWindow : Window
     private int _lyricsGeneration;
     private int _visualizationMode;
     private int _brushMode = -1;
+    private int _artworkGeneration;
     private double _visualTime;
     private LocalTrack? _currentTrack;
     private bool _isSeeking;
@@ -42,6 +46,9 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        _desktopWallpaper = new DesktopWallpaperController(_reactiveMonitor);
+        _visualizationMode = _desktopWallpaper.EffectIndex;
+        EffectSelector.SelectedIndex = _visualizationMode;
         _tracksView = CollectionViewSource.GetDefaultView(_tracks);
         _tracksView.Filter = FilterTrack;
         TrackList.ItemsSource = _tracksView;
@@ -59,6 +66,7 @@ public partial class MainWindow : Window
         Loaded += (_, _) =>
         {
             _reactiveMonitor.Start();
+            _desktopWallpaper.Show();
             _visualTimer.Start();
         };
         LoadLibrary();
@@ -148,6 +156,7 @@ public partial class MainWindow : Window
             TrackList.SelectedItem = track;
             SetTrackLabels(track);
             LoadLyricsForTrack(track);
+            LoadTrackArtwork(track);
             Player.Stop();
             Player.Source = new Uri(track.Path, UriKind.Absolute);
             Player.Play();
@@ -243,6 +252,7 @@ public partial class MainWindow : Window
     private void EffectSelector_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (EffectSelector is not null) _visualizationMode = Math.Max(0, EffectSelector.SelectedIndex);
+        _desktopWallpaper?.SetEffect(_visualizationMode);
         RenderSpectrum();
     }
 
@@ -362,6 +372,40 @@ public partial class MainWindow : Window
         _lyricsOverlay.ShowFrame(frame.Previous, frame.Current, frame.Next);
     }
 
+    private async void LoadTrackArtwork(LocalTrack track)
+    {
+        var generation = Interlocked.Increment(ref _artworkGeneration);
+        _desktopWallpaper.SetArtwork(null);
+        byte[]? bytes = null;
+        try
+        {
+            bytes = await Task.Run(() =>
+            {
+                try
+                {
+                    using var media = TagLib.File.Create(track.Path);
+                    return media.Tag.Pictures.FirstOrDefault()?.Data.Data;
+                }
+                catch { return null; }
+            });
+            if (bytes is null && Uri.TryCreate(track.CoverUrl, UriKind.Absolute, out var coverUri))
+            {
+                using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(8) };
+                bytes = await http.GetByteArrayAsync(coverUri);
+            }
+            if (generation != Volatile.Read(ref _artworkGeneration) || bytes is not { Length: > 0 }) return;
+            using var stream = new MemoryStream(bytes);
+            var image = new BitmapImage();
+            image.BeginInit();
+            image.CacheOption = BitmapCacheOption.OnLoad;
+            image.StreamSource = stream;
+            image.EndInit();
+            image.Freeze();
+            _desktopWallpaper.SetArtwork(image);
+        }
+        catch { /* Artwork is optional; keep the selected animated background available. */ }
+    }
+
     private void RefreshPosition()
     {
         if (Player.Source is null || _isSeeking) return;
@@ -400,7 +444,19 @@ public partial class MainWindow : Window
 
     private void OnlineSearch_Click(object sender, RoutedEventArgs e) => OpenPlatformWindow();
     private void Accounts_Click(object sender, RoutedEventArgs e) => OpenPlatformWindow();
-    private void Monitor_Click(object sender, RoutedEventArgs e) => ShowNotAvailable("窗口预览需要 Windows 桌面合成器接入，后续版本开放。");
+    private void Monitor_Click(object sender, RoutedEventArgs e)
+    {
+        if (_desktopWallpaper.IsVisible)
+        {
+            _desktopWallpaper.Hide();
+            MonitorButton.Content = "启用桌面背景";
+        }
+        else
+        {
+            _desktopWallpaper.Show();
+            MonitorButton.Content = "关闭桌面背景";
+        }
+    }
 
     private void OpenPlatformWindow()
     {
@@ -419,8 +475,6 @@ public partial class MainWindow : Window
         RefreshLibraryState();
         PlayTrack(track);
     }
-
-    private void ShowNotAvailable(string message) => MessageBox.Show(this, message, "Windows 版开发中", MessageBoxButton.OK, MessageBoxImage.Information);
 
     private void SetTrackLabels(LocalTrack track)
     {
@@ -468,11 +522,13 @@ public partial class MainWindow : Window
     {
         _positionTimer.Stop();
         _visualTimer.Stop();
+        _desktopWallpaper.Dispose();
         _reactiveMonitor.Dispose();
         Player.Stop();
         _lyricsCancellation?.Cancel();
         _lyricsOverlay?.Close();
         _platformWindow?.Close();
+        Interlocked.Increment(ref _artworkGeneration);
         SaveLibrary();
         base.OnClosed(e);
     }
@@ -484,6 +540,7 @@ public sealed class LocalTrack : INotifyPropertyChanged
     public string Title { get; set; } = "";
     public string Artist { get; set; } = "";
     public string Album { get; set; } = "";
+    public string? CoverUrl { get; set; }
     private double _durationSeconds;
     public double DurationSeconds
     {
