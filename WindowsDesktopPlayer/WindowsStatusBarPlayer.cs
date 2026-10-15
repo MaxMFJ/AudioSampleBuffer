@@ -74,7 +74,15 @@ public sealed class WindowsStatusBarPlayer : IDisposable
         _exit = exit ?? throw new ArgumentNullException(nameof(exit));
         _flyout = new StatusBarFlyoutWindow(_togglePlayback, _previous, _next, _repeat, _seek, _openConsole, _songList, _lyricsManager);
 
-        var parameters = new HwndSourceParameters("SoundDesk.Tray") { Width = 0, Height = 0 };
+        // This HWND only receives Shell_NotifyIcon callbacks. HwndSource's
+        // default style is visible, which otherwise creates a blank window.
+        var parameters = new HwndSourceParameters("SoundDesk.Tray")
+        {
+            WindowStyle = 0,
+            ExtendedWindowStyle = 0x08000080, // WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW
+            Width = 1,
+            Height = 1
+        };
         _source = new HwndSource(parameters);
         _source.AddHook(WndProc);
         _icon = new NOTIFYICONDATA

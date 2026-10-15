@@ -20,6 +20,18 @@ Windows 桌面播放器工程，按 `MacDesktopPlayer` 的控制台布局搭建�
 
 平台服务接口会受曲库权限、会员状态和平台接口变更影响。登录由平台页面处理，Sound Desk 不读取或保存账号密码。内嵌登录需要远程电脑安装 Microsoft Edge WebView2 Runtime；Windows 11 通常已预装，其他环境可通过 Microsoft Edge WebView2 Runtime 安装程序提供。输出频谱采集 Windows 默认播放设备的 WASAPI loopback，因此会包含其他应用的声音。
 
+## Windows 从代码更新并运行
+
+先从托盘菜单退出正在运行的 Sound Desk，再在本目录的 PowerShell 中运行：
+
+```powershell
+.\build-windows.ps1 -Run
+```
+
+需要 .NET 8 SDK、Visual Studio 2022 Build Tools 的“使用 C++ 的桌面开发”工作负载和 Windows SDK。脚本先使用 Visual Studio MSBuild 重编 Direct3D DLL，再使用 `dotnet` 编译 WPF，无需打包。默认输出为 `bin\Release\net8.0-windows`。
+
+原生渲染接口版本为 2，程序会识别旧 DLL 并记录原因。桌面挂载、原生初始化与首帧提交日志位于 `%LOCALAPPDATA%\SoundDesk\wallpaper.log`；首帧提交成功不代表已确认屏幕显示正常，仍需在 Windows 上观察效果。
+
 ## macOS 交叉编译
 
 安装 .NET 8 SDK 后，在此目录运行：

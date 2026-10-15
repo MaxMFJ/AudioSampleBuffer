@@ -30,6 +30,7 @@ struct Renderer
     ComPtr<ID3D11RenderTargetView> renderTarget;
     ComPtr<ID3D11VertexShader> vertexShader;
     ComPtr<ID3D11PixelShader> pixelShader;
+    ComPtr<ID3D11RasterizerState> rasterizer;
     ComPtr<ID3D11Buffer> constants;
     ComPtr<ID3D11SamplerState> sampler;
     ComPtr<ID3D11Texture2D> placeholderTexture;
@@ -96,6 +97,9 @@ static bool RegisterHostClass()
 
 static bool CreateBackBuffer(Renderer* renderer)
 {
+    // The context retains the currently bound RTV. Release that reference
+    // before ResizeBuffers, including on desktop/DPI size changes.
+    renderer->context->OMSetRenderTargets(0, nullptr, nullptr);
     renderer->renderTarget.Reset();
     RECT rect{};
     GetClientRect(renderer->window, &rect);
@@ -161,6 +165,16 @@ static bool CreateRenderer(Renderer* renderer, const wchar_t* shaderPath)
     hr = renderer->device->CreatePixelShader(psCode->GetBufferPointer(), psCode->GetBufferSize(), nullptr, &renderer->pixelShader);
     if (FAILED(hr)) { SetError(L"ID3D11Device::CreatePixelShader", hr); return false; }
 
+    // A fullscreen triangle has no meaningful back face. The shader's vertex
+    // order is counter-clockwise on the render target; D3D's default back-face
+    // culling discarded it, leaving only the near-black clear color.
+    D3D11_RASTERIZER_DESC rasterDesc{};
+    rasterDesc.FillMode = D3D11_FILL_SOLID;
+    rasterDesc.CullMode = D3D11_CULL_NONE;
+    rasterDesc.DepthClipEnable = TRUE;
+    hr = renderer->device->CreateRasterizerState(&rasterDesc, &renderer->rasterizer);
+    if (FAILED(hr)) { SetError(L"ID3D11Device::CreateRasterizerState", hr); return false; }
+
     D3D11_BUFFER_DESC bufferDesc{};
     bufferDesc.ByteWidth = sizeof(WallpaperFrame);
     bufferDesc.Usage = D3D11_USAGE_DEFAULT;
@@ -194,6 +208,11 @@ static bool CreateRenderer(Renderer* renderer, const wchar_t* shaderPath)
     if (FAILED(hr)) { SetError(L"placeholder artwork view", hr); return false; }
     renderer->artworkView = renderer->placeholderView;
     return CreateBackBuffer(renderer);
+}
+
+extern "C" __declspec(dllexport) unsigned __cdecl WallpaperD3D_GetApiVersion()
+{
+    return 2;
 }
 
 extern "C" __declspec(dllexport) void* __cdecl WallpaperD3D_Create(HWND parent, int width, int height, const wchar_t* shaderPath)
@@ -297,6 +316,7 @@ extern "C" __declspec(dllexport) int __cdecl WallpaperD3D_Render(void* handle, c
     viewport.Height = static_cast<float>(std::max<LONG>(1, rect.bottom - rect.top));
     viewport.MaxDepth = 1.0f;
     renderer->context->RSSetViewports(1, &viewport);
+    renderer->context->RSSetState(renderer->rasterizer.Get());
     renderer->context->ClearRenderTargetView(renderer->renderTarget.Get(), clear);
     renderer->context->UpdateSubresource(renderer->constants.Get(), 0, nullptr, &renderer->frame, 0, 0);
     renderer->context->VSSetShader(renderer->vertexShader.Get(), nullptr, 0);

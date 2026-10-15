@@ -16,19 +16,29 @@ internal sealed class NativeWallpaperRenderer : IDisposable
     private IntPtr _handle;
     private bool _hasArtwork;
     private bool _failed;
+    private bool _presented;
 
     public static NativeWallpaperRenderer? TryCreate(IntPtr parent, int width, int height, out string error)
     {
         error = "";
         try
         {
+            if (Native.GetApiVersion() != 2)
+            {
+                error = "WallpaperD3D.dll is outdated. Rebuild native/WallpaperD3D.vcxproj with Visual Studio MSBuild.";
+                return null;
+            }
             var shader = Path.Combine(AppContext.BaseDirectory, "WallpaperShaders.hlsl");
             var handle = Native.Create(parent, width, height, shader);
-            if (handle != IntPtr.Zero) return new NativeWallpaperRenderer { _handle = handle };
+            if (handle != IntPtr.Zero)
+            {
+                WallpaperDiagnostics.Write($"Direct3D API 2 initialized: {width}x{height}; shader={shader}");
+                return new NativeWallpaperRenderer { _handle = handle };
+            }
             error = Native.GetLastError();
         }
         catch (DllNotFoundException) { error = "WallpaperD3D.dll is missing. Build with the Visual C++ toolset installed."; }
-        catch (EntryPointNotFoundException exception) { error = exception.Message; }
+        catch (EntryPointNotFoundException exception) { error = $"WallpaperD3D.dll is outdated or incomplete. Rebuild the native project. {exception.Message}"; }
         catch (BadImageFormatException) { error = "WallpaperD3D.dll architecture does not match the player."; }
         return null;
     }
@@ -52,10 +62,15 @@ internal sealed class NativeWallpaperRenderer : IDisposable
         _frame.Guitar = Math.Clamp(_frame.High * 0.78f, 0, 1);
         _frame.Piano = Math.Clamp(_frame.Mid * 0.72f, 0, 1);
         _frame.Drums = Math.Clamp(_frame.Low * 0.92f, 0, 1);
-        if (Native.Render(_handle, _frame) != 0) return true;
+        if (Native.Render(_handle, _frame) != 0)
+        {
+            if (!_presented) WallpaperDiagnostics.Write("First Direct3D frame submitted (culling disabled).");
+            _presented = true;
+            return true;
+        }
         _failed = true;
         Native.Show(_handle, 0);
-        Debug.WriteLine($"Direct3D wallpaper render failed: {Native.GetLastError()}");
+        WallpaperDiagnostics.Write($"Direct3D wallpaper render failed; switching to WPF: {Native.GetLastError()}");
         return false;
     }
 
@@ -118,6 +133,9 @@ internal sealed class NativeWallpaperRenderer : IDisposable
     private static class Native
     {
         private const string Library = "WallpaperD3D.dll";
+
+        [DllImport(Library, EntryPoint = "WallpaperD3D_GetApiVersion", ExactSpelling = true, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern uint GetApiVersion();
 
         [DllImport(Library, EntryPoint = "WallpaperD3D_Create", ExactSpelling = true, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Unicode)]
         internal static extern IntPtr Create(IntPtr parent, int width, int height, string shaderPath);

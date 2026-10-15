@@ -11,6 +11,7 @@ struct WallpaperFrame
     float bands[128];
 };
 
+extern "C" __declspec(dllexport) unsigned __cdecl WallpaperD3D_GetApiVersion();
 extern "C" __declspec(dllexport) void* __cdecl WallpaperD3D_Create(HWND parent, int width, int height, const wchar_t* shaderPath);
 extern "C" __declspec(dllexport) void __cdecl WallpaperD3D_Destroy(void* handle);
 extern "C" __declspec(dllexport) void __cdecl WallpaperD3D_Show(void* handle, int show);

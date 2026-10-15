@@ -1,5 +1,4 @@
 using System.IO;
-using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Interop;
@@ -66,22 +65,24 @@ public sealed class DesktopWallpaperController : IDisposable
         Error = null;
         if (_window is null)
         {
+            WallpaperDiagnostics.Write($"Starting wallpaper; effect={EffectIndex}; directory={AppContext.BaseDirectory}");
             _window = new WallpaperWindow(_audio, EffectIndex);
             _window.Show();
             if (!AttachBehindDesktopIcons(_window))
             {
                 Error = "无法把动态桌面窗口挂载到 Windows 桌面层（WorkerW/Progman）。";
-                Debug.WriteLine(Error);
+                WallpaperDiagnostics.Write(Error);
                 _window.Close();
                 _window = null;
                 return;
             }
             var hwnd = new WindowInteropHelper(_window).Handle;
             GetClientRect(hwnd, out var client);
+            WallpaperDiagnostics.Write($"Desktop host attached; parent=0x{GetParent(hwnd).ToInt64():X}; client={client.Right - client.Left}x{client.Bottom - client.Top}");
             _nativeRenderer = NativeWallpaperRenderer.TryCreate(hwnd,
                 Math.Max(1, client.Right - client.Left), Math.Max(1, client.Bottom - client.Top), out var rendererError);
             if (_nativeRenderer is not null) _nativeRenderer.SetArtwork(_artwork);
-            else Debug.WriteLine($"Direct3D wallpaper unavailable; using WPF fallback: {rendererError}");
+            else WallpaperDiagnostics.Write($"Direct3D wallpaper unavailable; using WPF fallback: {rendererError}");
         }
         else _window.Show();
         _nativeRenderer?.SetVisible(true);
