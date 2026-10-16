@@ -12,17 +12,29 @@ public sealed class DesktopWallpaperController : IDisposable
 {
     private const int DesktopEffectCount = 4;
     private readonly AudioReactiveMonitor _audio;
-    private readonly DispatcherTimer _timer = new() { Interval = TimeSpan.FromMilliseconds(40) };
+    private readonly DispatcherTimer _timer = new(DispatcherPriority.Render)
+    {
+        Interval = TimeSpan.FromSeconds(1.0 / 60)
+    };
     private readonly string _settingsPath = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "SoundDesk", "desktop-effect.txt");
     private WallpaperWindow? _window;
     private NativeWallpaperRenderer? _nativeRenderer;
     private ImageSource? _artwork;
     private bool _disposed;
+    private bool _playing;
+    private float _playbackTime;
 
     public int EffectIndex { get; private set; }
     public bool IsVisible => _window?.IsVisible == true;
     public string? Error { get; private set; }
+    public string RenderingStatus => !IsVisible ? "桌面背景已关闭"
+        : _nativeRenderer?.IsOperational == true ? "原生特效" : "兼容效果（简化）";
+    public void UpdatePlayback(bool playing, double seconds)
+    {
+        _playing = playing;
+        _playbackTime = (float)seconds;
+    }
 
     public DesktopWallpaperController(AudioReactiveMonitor audio)
     {
@@ -35,7 +47,7 @@ public sealed class DesktopWallpaperController : IDisposable
         catch (IOException) { }
         _timer.Tick += (_, _) =>
         {
-            if (_nativeRenderer?.Render(EffectIndex, _audio.Spectrum) != true)
+            if (_nativeRenderer?.Render(EffectIndex, _audio.Spectrum, _audio.VisualAudio, _playing, _playbackTime) != true)
                 _window?.Surface.InvalidateVisual();
         };
     }

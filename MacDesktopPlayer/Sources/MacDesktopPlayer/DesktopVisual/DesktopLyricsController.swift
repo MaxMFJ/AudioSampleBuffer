@@ -199,7 +199,9 @@ final class DesktopLyricsController {
         return config
     }
 
-    func load(for url: URL, title: String, artist: String?) { source.load(for: url, title: title, artist: artist) }
+    func load(for url: URL, title: String, artist: String?, neteaseTrackID: String? = nil, duration: Double? = nil) {
+        source.load(for: url, title: title, artist: artist, neteaseTrackID: neteaseTrackID, duration: duration)
+    }
     func clear() { source.clear() }
 
     func frame(at time: Double, surface: DesktopLyricsSurface, viewport: CGSize) -> DesktopLyricsFrame {

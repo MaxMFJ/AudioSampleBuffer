@@ -410,39 +410,12 @@ static float3 laserSystem(float2 p, float pixelStep, float time, float high, flo
     float dist = sqrt(distSq);
     
     // ====== A. 上下两组 3D 蓝色激光（沿用 iOS 每组 6 条的紧密间距）======
-    float fanCycleDuration = 14.0;  // 完整周期 14 秒
-    float fanPhase = fract(time / fanCycleDuration);
-    
-    // 三阶段包络（超柔和渐显，完全避免突然出现）：
-    // [0, 0.28): 渐渐出现 + DSP 触发监听（约 3.9s 渐显，更长更柔和）
-    // [0.28, 0.72): 展示锁定阶段（不计算 DSP，固定 envelope=1.0）
-    // [0.72, 1.0): 渐消阶段（3.92s）
-    float fanEnvelope = 0.0;
-    bool fanNeedTrigger = false;
-    
-    if (fanPhase < 0.28) {
-        // 渐显：smoothstep 本身是 S 曲线，再套一层 smoothstep 使开始更缓慢（ease-in-out²）
-        float rawEnv = smoothstep(0.0, 0.28, fanPhase);
-        fanEnvelope = rawEnv * rawEnv * (3.0 - 2.0 * rawEnv);  // 二次缓动，开始极慢
-        fanNeedTrigger = true;
-    } else if (fanPhase < 0.72) {
-        fanEnvelope = 1.0;
-        fanNeedTrigger = false;  // 锁定期，跳过 DSP
-    } else {
-        fanEnvelope = smoothstep(1.0, 0.72, fanPhase);
-        fanNeedTrigger = false;
-    }
-    
-    // 只在渐显阶段检查 DSP 触发（拉长触发区间，避免 DSP 突变）
-    if (fanNeedTrigger) {
-        // 触发区间从 [0.02, 0.07] 拉长到 [0.015, 0.12]，更柔和
-        float fanTrigger = smoothstep(0.015, 0.12, high);
-        fanEnvelope *= fanTrigger;
-    }
-    
     float guitarClimax = smoothstep(0.28, 0.62, saturate(uniforms.galaxyParams3.x));
-    float regularFan = fanEnvelope * smoothstep(0.02, 0.12, high);
-    fanEnvelope = max(regularFan, guitarClimax);
+    // FFT is smoothed and briefly held by the renderer so short spectral gaps
+    // modulate brightness without extinguishing and restarting the fan.
+    float fftFan = max(smoothstep(0.015, 0.12, high),
+                       smoothstep(0.015, 0.12, uniforms.galaxyParams3.y));
+    float fanEnvelope = max(fftFan, guitarClimax);
     if (fanEnvelope > 0.01) {
         float3 blueColor = uniforms.aiColorLaserFanBlue.rgb;
         if (!colorIsSet(blueColor)) {
@@ -753,8 +726,8 @@ fragment float4 tyndallBeamFragment(VertexOut in [[stage_in]],
     }
     
     // Layer 3: Laser System
-    float guitarClimax = smoothstep(0.28, 0.62, saturate(uniforms.galaxyParams3.x));
-    float unlock3 = smoothstep(0.03, 0.12, max(energy, guitarClimax * 0.16));
+    float laserActivity = max(max(high, uniforms.galaxyParams3.y), uniforms.galaxyParams3.x);
+    float unlock3 = smoothstep(0.015, 0.12, max(energy, laserActivity));
     if (unlock3 > 0.01) {
         float pixelStep = max(fwidth(p.x), fwidth(p.y));
         float3 laser = laserSystem(p, pixelStep, animTime, high, mid, bass, aspectRatio, uniforms) * unlock3 * aiBright;

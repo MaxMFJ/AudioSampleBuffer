@@ -197,9 +197,9 @@ final class ControlsView: NSView {
         root.spacing = 20
         root.translatesAutoresizingMaskIntoConstraints = false
         let header = NSStackView()
-        header.orientation = .horizontal
-        header.alignment = .centerY
-        header.distribution = .equalSpacing
+        header.orientation = .vertical
+        header.alignment = .leading
+        header.spacing = 10
         let brand = NSTextField(labelWithString: "SOUND DESK")
         brand.font = .systemFont(ofSize: 11, weight: .bold)
         brand.textColor = .secondaryLabelColor
@@ -209,7 +209,11 @@ final class ControlsView: NSView {
         let subtitle = NSTextField(labelWithString: "搜索、聆听与塑造你的声音空间")
         subtitle.font = .systemFont(ofSize: 12)
         subtitle.textColor = .secondaryLabelColor
-        let titleGroup = NSStackView(views: [sectionTitle, subtitle])
+        let titleLine = NSStackView(views: [sectionTitle, brand])
+        titleLine.orientation = .horizontal
+        titleLine.alignment = .firstBaseline
+        titleLine.spacing = 12
+        let titleGroup = NSStackView(views: [titleLine, subtitle])
         titleGroup.orientation = .vertical
         titleGroup.alignment = .leading
         titleGroup.spacing = 4
@@ -239,11 +243,18 @@ final class ControlsView: NSView {
         platformSongsButton.imagePosition = .imageLeading
         platformSongsButton.bezelStyle = .rounded
         platformSongsButton.font = .systemFont(ofSize: 13, weight: .medium)
-        let headerActions = NSStackView(views: [brand, songsButton, lyricsButton, accountsButton, monitorButton])
-        headerActions.orientation = .horizontal
-        headerActions.alignment = .centerY
-        headerActions.addArrangedSubview(platformSongsButton)
-        headerActions.spacing = 18
+        let primaryActions = NSStackView(views: [songsButton, lyricsButton, accountsButton])
+        primaryActions.orientation = .horizontal
+        primaryActions.alignment = .centerY
+        primaryActions.spacing = 8
+        let secondaryActions = NSStackView(views: [monitorButton, platformSongsButton])
+        secondaryActions.orientation = .horizontal
+        secondaryActions.alignment = .centerY
+        secondaryActions.spacing = 8
+        let headerActions = NSStackView(views: [primaryActions, secondaryActions])
+        headerActions.orientation = .vertical
+        headerActions.alignment = .leading
+        headerActions.spacing = 8
         header.addArrangedSubview(headerActions)
         header.translatesAutoresizingMaskIntoConstraints = false
 
@@ -316,7 +327,7 @@ final class ControlsView: NSView {
         effectsRow.spacing = 9
         effectsRow.translatesAutoresizingMaskIntoConstraints = false
         let effects: [(DesktopBackgroundEffect, String)] = [
-            (.aurora, "sparkles"), (.tyndall, "sunbeams.fill"),
+            (.tyndall, "sunbeams.fill"),
             (.coverDots, "circle.grid.3x3.fill"), (.cellularHive, "hexagon.fill")
         ]
         effectButtons = effects.map { effect, symbol in
@@ -408,7 +419,9 @@ final class ControlsView: NSView {
             glass.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 18), glass.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -18),
             glass.topAnchor.constraint(equalTo: topAnchor, constant: 18), glass.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -18),
             root.leadingAnchor.constraint(equalTo: glass.leadingAnchor, constant: 28), root.trailingAnchor.constraint(equalTo: glass.trailingAnchor, constant: -28),
-            root.topAnchor.constraint(equalTo: glass.topAnchor, constant: 24), root.bottomAnchor.constraint(equalTo: glass.bottomAnchor, constant: -24),
+            // The transparent title bar shares the content view; keep all
+            // controls below the native traffic-light hit area.
+            root.topAnchor.constraint(equalTo: glass.topAnchor, constant: 30), root.bottomAnchor.constraint(equalTo: glass.bottomAnchor, constant: -24),
             header.widthAnchor.constraint(equalTo: root.widthAnchor), onlineSearchControls.widthAnchor.constraint(equalTo: root.widthAnchor),
             searchRow.widthAnchor.constraint(equalTo: onlineSearchControls.widthAnchor), searchSurface.widthAnchor.constraint(greaterThanOrEqualToConstant: 300),
             resultScroll.widthAnchor.constraint(equalTo: root.widthAnchor), resultScroll.heightAnchor.constraint(greaterThanOrEqualToConstant: 130),
@@ -518,9 +531,9 @@ final class ControlsView: NSView {
     }
     @objc private func showPlatformLibrary() {
         if platformLibraryWindow == nil {
-            platformLibraryWindow = PlatformLibraryWindowController { [weak self] url, title, artist, coverURL in
+            platformLibraryWindow = PlatformLibraryWindowController { [weak self] url, title, artist, coverURL, neteaseTrackID in
                 guard let self else { return }
-                self.audio.play(url: url, title: title, artist: artist)
+                self.audio.play(url: url, title: title, artist: artist, neteaseTrackID: neteaseTrackID)
                 self.artworkLoadGeneration += 1
                 let generation = self.artworkLoadGeneration
                 self.onArtworkChange(nil)

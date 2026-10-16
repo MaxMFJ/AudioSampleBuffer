@@ -51,8 +51,9 @@
                             <ComboBoxItem Content="蜂窝（Mac）" />
                             <ComboBoxItem Content="丁达尔（Mac）" />
                             <ComboBoxItem Content="点阵封面（Mac）" />
-                            <ComboBoxItem Content="六边形变形（保留）" />
+                            <ComboBoxItem Content="六边形（原版）" />
                         </ComboBox>
+                        <TextBlock x:Name="WallpaperRendererStatus" FontSize="11" Foreground="#A6B1C8" Margin="4,5,0,3" Text="桌面背景已关闭" />
                         <Button Content="☷  平台账号" HorizontalContentAlignment="Left" Margin="0,5,0,0" Click="Accounts_Click" />
                     </StackPanel>
                 </DockPanel>

@@ -1,39 +1,11 @@
 #include <metal_stdlib>
 using namespace metal;
 
-struct AuroraVertexOut { float4 position [[position]]; float2 uv; };
-struct AuroraVisualAudio { float time; float bass; float mid; float treble; float aspectRatio; };
+struct GuitarSurgeVertexOut { float4 position [[position]]; float2 uv; };
 struct DesktopMoodColors {
     float4 atmosphere, volumetricBeam, topLightArray, laserFanBlue, laserFanGreen;
     float4 rotatingBeam, rotatingBeamExtra, edgeLight, coronaFilaments, pulseRing;
 };
-
-vertex AuroraVertexOut auroraDesktopVertex(uint vertexID [[vertex_id]]) {
-    constexpr float2 points[3] = { float2(-1.0, -1.0), float2(3.0, -1.0), float2(-1.0, 3.0) };
-    AuroraVertexOut out;
-    out.position = float4(points[vertexID], 0.0, 1.0);
-    out.uv = points[vertexID] * 0.5 + 0.5;
-    return out;
-}
-
-fragment float4 desktopFragment(AuroraVertexOut in [[stage_in]], constant AuroraVisualAudio &audio [[buffer(0)]],
-                                constant DesktopMoodColors &mood [[buffer(1)]]) {
-    float2 p = (in.uv - 0.5) * float2(1.0, 0.62);
-    float radius = length(p);
-    float angle = atan2(p.y, p.x);
-    float bass = clamp(audio.bass, 0.0, 1.0);
-    float mid = clamp(audio.mid, 0.0, 1.0);
-    float treble = clamp(audio.treble, 0.0, 1.0);
-    float flow = sin(radius * (17.0 + bass * 8.0) - audio.time * (0.24 + bass * 0.16) + sin(angle * 3.0 + audio.time * 0.12) * (0.48 + mid * 0.5));
-    float filament = smoothstep(0.90 - treble * 0.16, 1.0, flow) * exp(-radius * (1.25 - bass * 0.25));
-    float halo = exp(-pow((radius - (0.18 + bass * 0.05)), 2.0) * 34.0) * (0.12 + mid * 0.38);
-    float3 deep = float3(0.006, 0.009, 0.025);
-    float3 blue = mood.atmosphere.rgb * float3(0.10, 0.27, 0.56);
-    float3 teal = mood.volumetricBeam.rgb * float3(0.30, 0.76, 0.72);
-    float3 color = deep + blue * (filament * 0.75 + halo * 0.45) + teal * (filament * treble * 0.55 + halo * 0.30);
-    float vignette = smoothstep(0.86, 0.13, radius);
-    return float4(color * vignette, 1.0);
-}
 
 struct GuitarSurgeUniforms {
     float cyclePhase;
@@ -44,16 +16,16 @@ struct GuitarSurgeUniforms {
     float activity;
 };
 
-vertex AuroraVertexOut guitarSurgeVertex(uint vertexID [[vertex_id]]) {
+vertex GuitarSurgeVertexOut guitarSurgeVertex(uint vertexID [[vertex_id]]) {
     constexpr float2 points[3] = { float2(-1.0, -1.0), float2(3.0, -1.0), float2(-1.0, 3.0) };
-    AuroraVertexOut out;
+    GuitarSurgeVertexOut out;
     out.position = float4(points[vertexID], 0.0, 1.0);
     out.uv = points[vertexID] * 0.5 + 0.5;
     return out;
 }
 
 fragment float4 guitarSurgeFragment(
-    AuroraVertexOut in [[stage_in]],
+    GuitarSurgeVertexOut in [[stage_in]],
     constant GuitarSurgeUniforms &u [[buffer(0)]],
     constant DesktopMoodColors &mood [[buffer(1)]]) {
     float2 uv = in.uv;

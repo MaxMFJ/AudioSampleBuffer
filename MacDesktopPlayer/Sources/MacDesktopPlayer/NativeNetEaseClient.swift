@@ -30,6 +30,49 @@ actor NativeNetEaseClient {
         return ((response["result"] as? [String: Any])?["songs"] as? [[String: Any]]) ?? []
     }
 
+    /// Reuses the same saved account credentials and encrypted transport as playback.
+    func lyrics(trackID: String) async throws -> String? {
+        let response = try await request("/api/song/lyric", payload: [
+            "id": trackID, "lv": -1, "tv": -1, "rv": -1, "kv": -1, "_nmclfl": 1
+        ], cookie: try PlatformCredentialStore.shared.load(for: .netease), mode: .weapi)
+        return (response["lrc"] as? [String: Any])?["lyric"] as? String
+    }
+
+    /// Require matching title/artist; duration helps choose the correct recording.
+    func matchedLyricTrackID(title: String, artist: String?, duration: Double?) async throws -> String? {
+        let titleKey = Self.lyricMatchKey(title)
+        guard !titleKey.isEmpty else { return nil }
+        let artistKey = Self.lyricMatchKey(artist ?? "")
+        let knownArtist = !artistKey.isEmpty && artistKey != Self.lyricMatchKey("未知艺术家")
+        let songs = try await search(keywords: [title, knownArtist ? artist : nil].compactMap { $0 }.joined(separator: " "), limit: 20)
+        try Task.checkCancellation()
+        var best: (id: String, delta: Double)?
+        for song in songs {
+            guard Self.lyricMatchKey(Self.string(song["name"]) ?? "") == titleKey,
+                  let id = Self.string(song["id"]) else { continue }
+            let artists = (song["ar"] ?? song["artists"]) as? [[String: Any]] ?? []
+            let names = artists.compactMap { Self.string($0["name"]) }.map(Self.lyricMatchKey)
+            guard !knownArtist || names.contains(artistKey) || names.joined() == artistKey else { continue }
+            let milliseconds = Self.integer(song["dt"] ?? song["duration"])
+            let delta: Double
+            if let duration, duration > 0, let milliseconds {
+                delta = abs(Double(milliseconds) / 1000 - duration)
+                guard delta <= 5 else { continue }
+            } else {
+                // Without an artist or duration there is too little evidence to auto-match.
+                guard knownArtist else { continue }
+                delta = 0
+            }
+            if best == nil || delta < best!.delta { best = (id, delta) }
+        }
+        return best?.id
+    }
+
+    private static func lyricMatchKey(_ value: String) -> String {
+        value.folding(options: [.caseInsensitive, .diacriticInsensitive, .widthInsensitive], locale: Locale(identifier: "en_US_POSIX"))
+            .unicodeScalars.filter { CharacterSet.alphanumerics.contains($0) }.map(String.init).joined()
+    }
+
     func loginStatus() async throws -> PlatformLoginStatus {
         let cookie = try PlatformCredentialStore.shared.load(for: .netease)
         guard let cookie, !cookie.isEmpty else {

@@ -18,8 +18,6 @@ enum DesktopEffectFactory {
         library: MTLLibrary
     ) -> any DesktopEffectRenderer {
         switch effect {
-        case .aurora:
-            return FullscreenDesktopEffectRenderer(effect: .aurora, vertexName: "auroraDesktopVertex", fragmentName: "desktopFragment", device: device, pixelFormat: pixelFormat, library: library)
         case .tyndall:
             return FullscreenDesktopEffectRenderer(effect: .tyndall, vertexName: "tyndallDesktopVertex", fragmentName: "desktopTyndallFragment", device: device, pixelFormat: pixelFormat, library: library)
         case .coverDots:
@@ -234,14 +232,23 @@ private struct TyndallActivation {
     var strength: Float = 0
 
     mutating func update(input: Float, threshold: Float, minimumStrength: Float,
-                         duration: Float, time: Float, deltaTime: Float, playing: Bool) {
+                         duration: Float, time: Float, deltaTime: Float, rearmBeforeFade: Bool,
+                         playing: Bool) {
         guard playing else {
             self = TyndallActivation()
             return
         }
-        let isActive = startedAt >= 0 && time - startedAt < duration
+        let elapsed = startedAt >= 0 ? time - startedAt : 0
+        var isActive = startedAt >= 0 && elapsed < duration
+        if rearmBeforeFade, isActive, elapsed >= duration - 0.8, input >= threshold {
+            // Refresh before the shader's terminal fade, so continuous music
+            // never creates a dark gap at the activation boundary.
+            startedAt = time - 0.45
+            isActive = true
+        }
         if !isActive && input >= threshold {
-            startedAt = time
+            let wasPreviouslyActive = startedAt >= 0
+            startedAt = wasPreviouslyActive ? time - 0.45 : time
             strength = max(input, minimumStrength)
             return
         }
@@ -346,11 +353,15 @@ private final class FullscreenDesktopEffectRenderer: DesktopEffectRenderer {
             let inputs = [values.mid, values.treble, audio.piano, audio.guitar, audio.guitarPeak]
             let thresholds: [Float] = [0.02, 0.02, 0.12, 0.13, 0.48]
             let minimums: [Float] = [0.08, 0.13, 0.20, 0.20, 0.85]
-            let durations: [Float] = [12, 14, 15.384615, 9, 13]
+            // Blue laser triggers should be brief: release after three seconds,
+            // then let a fresh treble/guitar event start the next display.
+            let durations: [Float] = [12, 3, 15.384615, 9, 3]
             for index in tyndallActivations.indices {
                 tyndallActivations[index].update(input: inputs[index], threshold: thresholds[index],
                                                  minimumStrength: minimums[index], duration: durations[index],
-                                                 time: audio.time, deltaTime: dt, playing: playing)
+                                                 time: audio.time, deltaTime: dt,
+                                                 rearmBeforeFade: index == 1 && durations[index] > 3.0,
+                                                 playing: playing)
             }
             animation.starts = SIMD4<Float>(tyndallActivations[0].startedAt, tyndallActivations[1].startedAt,
                                             tyndallActivations[2].startedAt, tyndallActivations[3].startedAt)

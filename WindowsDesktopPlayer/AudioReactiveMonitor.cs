@@ -3,13 +3,17 @@ using NAudio.Wave;
 
 namespace SoundDesk;
 
-/// <summary>Reads Windows' shared output loopback and publishes a smoothed 48-band spectrum.</summary>
+/// <summary>Reads Windows' shared output loopback and publishes the UI spectrum and Mac-compatible visual features.</summary>
 public sealed class AudioReactiveMonitor : IDisposable
 {
     private const int FftSize = 1024;
     private const int BandCount = 48;
     private readonly float[] _samples = new float[FftSize];
     private readonly Complex[] _fft = new Complex[FftSize];
+    private readonly float[] _visualInput = new float[2048];
+    private readonly MacVisualAudioAnalyzer _visualAnalyzer = new(48000);
+    private int _visualCount;
+    private VisualAudioSnapshot _visualAudio = new(0, 0, 0, new float[4], new float[4]);
     private float[] _spectrum = new float[BandCount];
     private WasapiLoopbackCapture? _capture;
     private int _writeIndex;
@@ -17,6 +21,7 @@ public sealed class AudioReactiveMonitor : IDisposable
     private bool _disposed;
 
     public float[] Spectrum => Volatile.Read(ref _spectrum);
+    public VisualAudioSnapshot VisualAudio => Volatile.Read(ref _visualAudio);
 
     public bool Start()
     {
@@ -43,6 +48,9 @@ public sealed class AudioReactiveMonitor : IDisposable
         var capture = _capture;
         if (capture is null || e.BytesRecorded == 0) return;
         var format = capture.WaveFormat;
+        var floatingPoint = format.Encoding == WaveFormatEncoding.IeeeFloat
+            || format is WaveFormatExtensible extensible
+                && extensible.SubFormat == new Guid("00000003-0000-0010-8000-00aa00389b71");
         var bytesPerSample = Math.Max(1, format.BitsPerSample / 8);
         var frameBytes = bytesPerSample * Math.Max(1, format.Channels);
         var frameCount = e.BytesRecorded / frameBytes;
@@ -52,9 +60,18 @@ public sealed class AudioReactiveMonitor : IDisposable
             for (var channel = 0; channel < format.Channels; channel++)
             {
                 var offset = frame * frameBytes + channel * bytesPerSample;
-                mono += ReadSample(e.Buffer, offset, format.BitsPerSample);
+                mono += ReadSample(e.Buffer, offset, format.BitsPerSample, floatingPoint);
             }
             mono /= Math.Max(1, format.Channels);
+            // Mac analyzes the first channel; keep the UI spectrum downmixed.
+            _visualInput[_visualCount++] = ReadSample(e.Buffer, frame * frameBytes, format.BitsPerSample, floatingPoint);
+            if (_visualCount == _visualInput.Length)
+            {
+                _visualAnalyzer.Configure(format.SampleRate);
+                _visualAnalyzer.Add(_visualInput, out var visual);
+                Volatile.Write(ref _visualAudio, visual);
+                _visualCount = 0;
+            }
             _samples[_writeIndex] = Math.Clamp(mono, -1f, 1f);
             _writeIndex = (_writeIndex + 1) % FftSize;
             if (++_samplesSinceFft >= FftSize / 2)
@@ -65,11 +82,12 @@ public sealed class AudioReactiveMonitor : IDisposable
         }
     }
 
-    private static float ReadSample(byte[] buffer, int offset, int bitsPerSample)
+    private static float ReadSample(byte[] buffer, int offset, int bitsPerSample, bool floatingPoint)
     {
         return bitsPerSample switch
         {
-            32 => BitConverter.Int32BitsToSingle(BitConverter.ToInt32(buffer, offset)),
+            32 => floatingPoint ? BitConverter.Int32BitsToSingle(BitConverter.ToInt32(buffer, offset))
+                : BitConverter.ToInt32(buffer, offset) / 2_147_483_648f,
             24 => ReadInt24(buffer, offset) / 8_388_608f,
             16 => BitConverter.ToInt16(buffer, offset) / 32_768f,
             8 => (buffer[offset] - 128) / 128f,
@@ -142,7 +160,8 @@ public sealed class AudioReactiveMonitor : IDisposable
 
     private void OnRecordingStopped(object? sender, StoppedEventArgs e)
     {
-        if (e.Exception is not null) Volatile.Write(ref _spectrum, new float[BandCount]);
+        Volatile.Write(ref _spectrum, new float[BandCount]);
+        Volatile.Write(ref _visualAudio, new VisualAudioSnapshot(0, 0, 0, new float[4], new float[4]));
     }
 
     public void Dispose()

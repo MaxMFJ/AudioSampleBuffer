@@ -432,6 +432,11 @@ public partial class MainWindow : Window
 
     private void RenderSpectrum()
     {
+        if (_desktopWallpaper is not null && Player is not null)
+        {
+            _desktopWallpaper.UpdatePlayback(_isPlaying, Player.Position.TotalSeconds);
+            if (WallpaperRendererStatus is not null) WallpaperRendererStatus.Text = _desktopWallpaper.RenderingStatus;
+        }
         if (SpectrumCanvas is null || SpectrumCanvas.ActualWidth <= 0 || SpectrumCanvas.ActualHeight <= 0) return;
         var width = SpectrumCanvas.ActualWidth;
         var height = SpectrumCanvas.ActualHeight;

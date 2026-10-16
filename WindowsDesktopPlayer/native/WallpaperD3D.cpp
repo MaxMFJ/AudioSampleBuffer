@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <array>
 #include <cstdint>
+#include <cmath>
 #include <cwchar>
 #include <iterator>
 #include <new>
@@ -19,7 +20,7 @@
 
 using Microsoft::WRL::ComPtr;
 
-static_assert(sizeof(WallpaperFrame) == 560, "WallpaperFrame must match the HLSL cbuffer layout.");
+static_assert(sizeof(WallpaperFrame) == 912, "WallpaperFrame must match the HLSL cbuffer layout.");
 
 struct Renderer
 {
@@ -31,6 +32,9 @@ struct Renderer
     ComPtr<ID3D11VertexShader> vertexShader;
     ComPtr<ID3D11PixelShader> pixelShader;
     ComPtr<ID3D11RasterizerState> rasterizer;
+    ComPtr<ID3D11VertexShader> fieldVS, reliefVS, backingVS;
+    ComPtr<ID3D11PixelShader> fieldPS, reliefPS, backingPS;
+    ComPtr<ID3D11BlendState> particleBlend;
     ComPtr<ID3D11Buffer> constants;
     ComPtr<ID3D11SamplerState> sampler;
     ComPtr<ID3D11Texture2D> placeholderTexture;
@@ -39,6 +43,10 @@ struct Renderer
     ComPtr<ID3D11ShaderResourceView> artworkView;
     WallpaperFrame frame{};
     bool resizePending{ true };
+    float lastFrameTime{ -1 }, yaw{}, pitch{}, velocityX{}, velocityY{}, hover{}, pressDepth{};
+    float lastPressTime{ -10 };
+    POINT previousMouse{}, pressPoint{};
+    bool previousDown{}, dragging{}, resetHeld{};
 };
 
 static std::wstring g_error;
@@ -165,6 +173,41 @@ static bool CreateRenderer(Renderer* renderer, const wchar_t* shaderPath)
     hr = renderer->device->CreatePixelShader(psCode->GetBufferPointer(), psCode->GetBufferSize(), nullptr, &renderer->pixelShader);
     if (FAILED(hr)) { SetError(L"ID3D11Device::CreatePixelShader", hr); return false; }
 
+    // Metal's programmable point sizes are implemented as instanced quads.
+    auto compileVertex = [&](const char* entry, ComPtr<ID3D11VertexShader>& shader) {
+        ComPtr<ID3DBlob> code, errors;
+        HRESULT result = D3DCompileFromFile(shaderPath, nullptr, D3D_COMPILE_STANDARD_FILE_INCLUDE,
+            entry, "vs_5_0", D3DCOMPILE_ENABLE_STRICTNESS, 0, &code, &errors);
+        if (FAILED(result)) { SetShaderError(errors.Get(), L"Could not compile particle vertex shader."); return false; }
+        result = renderer->device->CreateVertexShader(code->GetBufferPointer(), code->GetBufferSize(), nullptr, &shader);
+        if (FAILED(result)) { SetError(L"Create particle vertex shader", result); return false; }
+        return true;
+    };
+    auto compilePixel = [&](const char* entry, ComPtr<ID3D11PixelShader>& shader) {
+        ComPtr<ID3DBlob> code, errors;
+        HRESULT result = D3DCompileFromFile(shaderPath, nullptr, D3D_COMPILE_STANDARD_FILE_INCLUDE,
+            entry, "ps_5_0", D3DCOMPILE_ENABLE_STRICTNESS, 0, &code, &errors);
+        if (FAILED(result)) { SetShaderError(errors.Get(), L"Could not compile particle pixel shader."); return false; }
+        result = renderer->device->CreatePixelShader(code->GetBufferPointer(), code->GetBufferSize(), nullptr, &shader);
+        if (FAILED(result)) { SetError(L"Create particle pixel shader", result); return false; }
+        return true;
+    };
+    if (!compileVertex("coverFieldVS", renderer->fieldVS) || !compilePixel("coverFieldPS", renderer->fieldPS)
+        || !compileVertex("coverReliefVS", renderer->reliefVS) || !compilePixel("coverReliefPS", renderer->reliefPS)
+        || !compileVertex("coverBackingVS", renderer->backingVS) || !compilePixel("coverBackingPS", renderer->backingPS)) return false;
+    D3D11_BLEND_DESC blendDesc{};
+    auto& targetBlend = blendDesc.RenderTarget[0];
+    targetBlend.BlendEnable = TRUE;
+    targetBlend.SrcBlend = D3D11_BLEND_SRC_ALPHA;
+    targetBlend.DestBlend = D3D11_BLEND_INV_SRC_ALPHA;
+    targetBlend.BlendOp = D3D11_BLEND_OP_ADD;
+    targetBlend.SrcBlendAlpha = D3D11_BLEND_ONE;
+    targetBlend.DestBlendAlpha = D3D11_BLEND_INV_SRC_ALPHA;
+    targetBlend.BlendOpAlpha = D3D11_BLEND_OP_ADD;
+    targetBlend.RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
+    hr = renderer->device->CreateBlendState(&blendDesc, &renderer->particleBlend);
+    if (FAILED(hr)) { SetError(L"Create particle blend state", hr); return false; }
+
     // A fullscreen triangle has no meaningful back face. The shader's vertex
     // order is counter-clockwise on the render target; D3D's default back-face
     // culling discarded it, leaving only the near-black clear color.
@@ -195,7 +238,7 @@ static bool CreateRenderer(Renderer* renderer, const wchar_t* shaderPath)
     D3D11_TEXTURE2D_DESC textureDesc{};
     textureDesc.Width = textureDesc.Height = 1;
     textureDesc.MipLevels = textureDesc.ArraySize = 1;
-    textureDesc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+    textureDesc.Format = DXGI_FORMAT_B8G8R8A8_UNORM_SRGB;
     textureDesc.SampleDesc.Count = 1;
     textureDesc.Usage = D3D11_USAGE_DEFAULT;
     textureDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
@@ -212,7 +255,7 @@ static bool CreateRenderer(Renderer* renderer, const wchar_t* shaderPath)
 
 extern "C" __declspec(dllexport) unsigned __cdecl WallpaperD3D_GetApiVersion()
 {
-    return 2;
+    return 4;
 }
 
 extern "C" __declspec(dllexport) void* __cdecl WallpaperD3D_Create(HWND parent, int width, int height, const wchar_t* shaderPath)
@@ -271,7 +314,7 @@ extern "C" __declspec(dllexport) int __cdecl WallpaperD3D_SetArtwork(void* handl
     desc.Width = static_cast<UINT>(width);
     desc.Height = static_cast<UINT>(height);
     desc.MipLevels = desc.ArraySize = 1;
-    desc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+    desc.Format = DXGI_FORMAT_B8G8R8A8_UNORM_SRGB;
     desc.SampleDesc.Count = 1;
     desc.Usage = D3D11_USAGE_DEFAULT;
     desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
@@ -288,6 +331,77 @@ extern "C" __declspec(dllexport) int __cdecl WallpaperD3D_SetArtwork(void* handl
         return 0;
     }
     return 1;
+}
+
+// Passive polling preserves Explorer's desktop clicks, like the Mac cover stage.
+// Windows Alt corresponds to the Mac Option gesture for rotating the artwork.
+static void UpdateCoverInteraction(Renderer* r)
+{
+    const float now = r->frame.time;
+    const float dt = r->lastFrameTime >= 0 ? std::clamp(now - r->lastFrameTime, 0.0f, 0.1f) : 0;
+    r->lastFrameTime = now;
+    POINT mouse{};
+    if (!GetCursorPos(&mouse)) return;
+    const HWND underPointer = WindowFromPoint(mouse);
+    const HWND pointerRoot = underPointer ? GetAncestor(underPointer, GA_ROOT) : nullptr;
+    const HWND wallpaperRoot = GetAncestor(r->window, GA_ROOT);
+    // Explorer puts the icon list and wallpaper under different WorkerW roots.
+    // A root-equality check rejects real desktop gestures on that arrangement.
+    // Accept Explorer's desktop roots as well, while excluding ordinary windows.
+    wchar_t rootClass[64]{};
+    if (pointerRoot) GetClassNameW(pointerRoot, rootClass, static_cast<int>(std::size(rootClass)));
+    DWORD pointerProcess{}, shellProcess{};
+    if (pointerRoot) GetWindowThreadProcessId(pointerRoot, &pointerProcess);
+    const HWND shell = GetShellWindow();
+    if (shell) GetWindowThreadProcessId(shell, &shellProcess);
+    const bool shellDesktop = shellProcess != 0 && pointerProcess == shellProcess
+        && (wcscmp(rootClass, L"WorkerW") == 0 || wcscmp(rootClass, L"Progman") == 0);
+    POINT local = mouse;
+    ScreenToClient(r->window, &local);
+    const float ndcX = local.x / std::max(r->frame.viewport[0], 1.0f) * 2 - 1;
+    const float ndcY = 1 - local.y / std::max(r->frame.viewport[1], 1.0f) * 2;
+    const bool inViewport = local.x >= 0 && local.y >= 0
+        && local.x < r->frame.viewport[0] && local.y < r->frame.viewport[1];
+    const bool eligible = inViewport && pointerRoot && (pointerRoot == wallpaperRoot || shellDesktop);
+    const bool square = r->frame.effectIndex == 2;
+    const float height = square ? 0.68f : 0.56f;
+    const float x = ndcX / (height / r->frame.aspect), y = ndcY / height;
+    const bool onArtwork = square ? std::max(std::abs(x), std::abs(y)) <= 1.18f : x*x+y*y <= 1.18f*1.18f;
+    const float inputScale = std::max(r->frame.viewport[2], 1.0f);
+    const bool down = (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0;
+    const bool alt = (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
+    if (!down) r->resetHeld = false;
+    if (down && alt && eligible && onArtwork && !r->dragging && !r->resetHeld)
+    {
+        const float dx = static_cast<float>(mouse.x - r->pressPoint.x), dy = static_cast<float>(mouse.y - r->pressPoint.y);
+        if (!r->previousDown && now - r->lastPressTime < .32f && dx*dx+dy*dy < 144 * inputScale * inputScale)
+        {
+            r->yaw = r->pitch = r->velocityX = r->velocityY = 0;
+            r->resetHeld = true;
+        }
+        else { r->dragging = true; r->velocityX = r->velocityY = 0; r->previousMouse = mouse; }
+        r->lastPressTime = now; r->pressPoint = mouse;
+    }
+    if (r->dragging && down && alt && eligible)
+    {
+        const float dx = (mouse.x - r->previousMouse.x) * .006f / inputScale;
+        const float dy = (mouse.y - r->previousMouse.y) * .006f / inputScale;
+        r->yaw += dx; r->pitch += dy;
+        if (dt > 0) { r->velocityX = std::clamp(dx/dt*.40f,-5.0f,5.0f); r->velocityY = std::clamp(dy/dt*.40f,-5.0f,5.0f); }
+    }
+    else
+    {
+        if (!down || !alt || !eligible) r->dragging = false;
+        r->yaw += r->velocityX * dt; r->pitch += r->velocityY * dt;
+        r->velocityX *= std::exp(-5.5f*dt); r->velocityY *= std::exp(-5.5f*dt);
+    }
+    r->hover += ((eligible ? 1.0f : 0.0f) - r->hover) * (1 - std::exp(-12*std::max(dt,.001f)));
+    r->pressDepth += ((eligible && onArtwork && down && !alt ? 1.0f : 0.0f) - r->pressDepth) * (1 - std::exp(-15*std::max(dt,.001f)));
+    r->previousMouse = mouse; r->previousDown = down;
+    r->frame.coverRotation[0] = r->yaw; r->frame.coverRotation[1] = r->pitch;
+    r->frame.coverRotation[2] = 1; r->frame.coverRotation[3] = 0;
+    r->frame.coverPointer[0] = ndcX; r->frame.coverPointer[1] = ndcY;
+    r->frame.coverPointer[2] = r->hover*.22f - r->pressDepth*1.22f; r->frame.coverPointer[3] = .30f;
 }
 
 extern "C" __declspec(dllexport) int __cdecl WallpaperD3D_Render(void* handle, const WallpaperFrame* frame)
@@ -318,7 +432,14 @@ extern "C" __declspec(dllexport) int __cdecl WallpaperD3D_Render(void* handle, c
     renderer->context->RSSetViewports(1, &viewport);
     renderer->context->RSSetState(renderer->rasterizer.Get());
     renderer->context->ClearRenderTargetView(renderer->renderTarget.Get(), clear);
+    renderer->frame.viewport[0] = viewport.Width;
+    renderer->frame.viewport[1] = viewport.Height;
+    renderer->frame.viewport[2] = static_cast<float>(GetDpiForWindow(renderer->window)) / 96.0f;
+    renderer->frame.aspect = viewport.Width / viewport.Height;
+    UpdateCoverInteraction(renderer);
     renderer->context->UpdateSubresource(renderer->constants.Get(), 0, nullptr, &renderer->frame, 0, 0);
+    renderer->context->VSSetConstantBuffers(0, 1, renderer->constants.GetAddressOf());
+    renderer->context->OMSetBlendState(nullptr, nullptr, 0xffffffff);
     renderer->context->VSSetShader(renderer->vertexShader.Get(), nullptr, 0);
     renderer->context->PSSetShader(renderer->pixelShader.Get(), nullptr, 0);
     renderer->context->PSSetConstantBuffers(0, 1, renderer->constants.GetAddressOf());
@@ -326,8 +447,36 @@ extern "C" __declspec(dllexport) int __cdecl WallpaperD3D_Render(void* handle, c
     renderer->context->PSSetShaderResources(0, 1, &artwork);
     auto* sampler = renderer->sampler.Get();
     renderer->context->PSSetSamplers(0, 1, &sampler);
+    renderer->context->VSSetShaderResources(0, 1, &artwork);
+    renderer->context->VSSetSamplers(0, 1, &sampler);
     renderer->context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
     renderer->context->Draw(3, 0);
+    if (frame->effectIndex <= 2)
+    {
+        renderer->context->OMSetBlendState(renderer->particleBlend.Get(), nullptr, 0xffffffff);
+        if (frame->effectIndex == 2)
+        {
+            const UINT rows = std::max(1u, static_cast<UINT>(std::round(256.0f / renderer->frame.aspect)));
+            renderer->context->VSSetShader(renderer->fieldVS.Get(), nullptr, 0);
+            renderer->context->PSSetShader(renderer->fieldPS.Get(), nullptr, 0);
+            renderer->context->DrawInstanced(6, 256 * rows, 0, 0);
+        }
+        if (frame->effectIndex == 1)
+        {
+            renderer->context->VSSetShader(renderer->backingVS.Get(), nullptr, 0);
+            renderer->context->PSSetShader(renderer->backingPS.Get(), nullptr, 0);
+            renderer->context->Draw(6, 0);
+        }
+        if (frame->hasArtwork > 0.5f)
+        {
+            const float height = frame->effectIndex == 2 ? 0.68f : 0.56f;
+            const UINT columns = static_cast<UINT>(std::clamp(std::round(height * viewport.Height
+                / std::max(renderer->frame.viewport[2], 1.0f) / 2.8f), 2.0f, 512.0f));
+            renderer->context->VSSetShader(renderer->reliefVS.Get(), nullptr, 0);
+            renderer->context->PSSetShader(renderer->reliefPS.Get(), nullptr, 0);
+            renderer->context->DrawInstanced(6, columns * columns, 0, 0);
+        }
+    }
     const HRESULT present = renderer->swapChain->Present(0, 0);
     if (present != S_OK) { SetError(L"IDXGISwapChain::Present", present); return 0; }
     return 1;

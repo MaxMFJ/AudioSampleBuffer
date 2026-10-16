@@ -5,7 +5,7 @@ using System.Windows.Media;
 
 namespace SoundDesk;
 
-/// <summary>Audio-reactive desktop background matching the four macOS background choices.</summary>
+/// <summary>WPF fallback surface; native D3D implements the full desktop effects.</summary>
 public sealed class DesktopWallpaperSurface : FrameworkElement
 {
     private readonly AudioReactiveMonitor _audio;

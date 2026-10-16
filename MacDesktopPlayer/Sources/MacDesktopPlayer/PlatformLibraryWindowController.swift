@@ -2,7 +2,7 @@ import AppKit
 
 @MainActor
 final class PlatformLibraryWindowController: NSWindowController {
-    init(play: @escaping (URL, String, String, URL?) -> Void) {
+    init(play: @escaping (URL, String, String, URL?, String?) -> Void) {
         let view = PlatformLibraryView(play: play)
         let window = NSWindow(contentViewController: NSViewController())
         window.title = "平台歌单"
@@ -18,7 +18,7 @@ final class PlatformLibraryWindowController: NSWindowController {
 
 @MainActor
 private final class PlatformLibraryView: NSView, NSTableViewDataSource, NSTableViewDelegate {
-    private let play: (URL, String, String, URL?) -> Void
+    private let play: (URL, String, String, URL?, String?) -> Void
     private let playlistsTable = NSTableView()
     private let tracksTable = NSTableView()
     private let status = NSTextField(labelWithString: "正在读取网易云歌单…")
@@ -28,7 +28,7 @@ private final class PlatformLibraryView: NSView, NSTableViewDataSource, NSTableV
     private let playbackLoadingView = PlatformPlaybackLoadingView()
     private var playbackRequestGeneration = 0
 
-    init(play: @escaping (URL, String, String, URL?) -> Void) {
+    init(play: @escaping (URL, String, String, URL?, String?) -> Void) {
         self.play = play
         super.init(frame: .zero)
         appearance = NSAppearance(named: .darkAqua)
@@ -170,7 +170,8 @@ private final class PlatformLibraryView: NSView, NSTableViewDataSource, NSTableV
                 let prepared = try await PlatformBridgeClient.shared.preparedAudioFile(for: track)
                 guard self.playbackRequestGeneration == request else { return }
                 self.playbackLoadingView.dismiss()
-                self.play(prepared.fileURL, track.name, track.displayArtist, track.coverURL)
+                self.play(prepared.fileURL, track.name, track.displayArtist, track.coverURL,
+                          track.provider == .netease ? track.id : nil)
                 self.status.stringValue = "正在播放：\(track.name)"
                 if let index = self.tracks.firstIndex(where: { $0.id == track.id }),
                    self.tracks.indices.contains(index + 1) {

@@ -103,16 +103,16 @@ final class LocalAudioPlayer {
         play(url: url)
     }
 
-    func play(url: URL, title: String? = nil, artist: String? = nil) {
+    func play(url: URL, title: String? = nil, artist: String? = nil, neteaseTrackID: String? = nil) {
         playRequestGeneration &+= 1
         let request = playRequestGeneration
         stopPlayback { [weak self] in
             guard let self, self.playRequestGeneration == request else { return }
-            self.beginPlayback(url: url, title: title, artist: artist)
+            self.beginPlayback(url: url, title: title, artist: artist, neteaseTrackID: neteaseTrackID)
         }
     }
 
-    private func beginPlayback(url: URL, title: String?, artist: String?) {
+    private func beginPlayback(url: URL, title: String?, artist: String?, neteaseTrackID: String? = nil) {
         do {
             electricGuitarConfidence = 0
             dspFeatureSignals = SIMD4<Float>(repeating: 0)
@@ -126,7 +126,8 @@ final class LocalAudioPlayer {
             pausedPlaybackTime = nil
             currentTitle = title ?? url.deletingPathExtension().lastPathComponent
             currentArtist = artist
-            lyricsController.load(for: url, title: title ?? url.deletingPathExtension().lastPathComponent, artist: artist)
+            lyricsController.load(for: url, title: title ?? url.deletingPathExtension().lastPathComponent,
+                                 artist: artist, neteaseTrackID: neteaseTrackID, duration: duration)
             let format = audioFile.processingFormat
             // Configure both ends before installing the analysis tap. A tap can
             // change the player's format without updating an existing mixer

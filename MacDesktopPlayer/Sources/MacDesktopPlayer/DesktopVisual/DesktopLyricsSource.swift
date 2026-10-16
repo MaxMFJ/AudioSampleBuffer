@@ -1,5 +1,6 @@
 import Foundation
 import AVFoundation
+import CryptoKit
 
 struct TimedLyric {
     let time: Double
@@ -12,14 +13,17 @@ final class DesktopLyricsSource {
     private var task: Task<Void, Never>?
     private var generation = 0
 
-    func load(for audioURL: URL, title: String, artist: String?) {
+    func load(for audioURL: URL, title: String, artist: String?, neteaseTrackID: String? = nil, duration: Double? = nil) {
         task?.cancel()
         generation += 1
         let currentGeneration = generation
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
             .appendingPathComponent("MacDesktopPlayer/Lyrics", isDirectory: true)
-        let localCandidates = [audioURL.deletingPathExtension().appendingPathExtension("lrc"),
-                               support.appendingPathComponent(audioURL.deletingPathExtension().lastPathComponent).appendingPathExtension("lrc")]
+        // Separate provider caches from older QQ matches and avoid basename collisions.
+        let identity = neteaseTrackID.map { "netease:\($0)" } ?? "\(audioURL.absoluteString)|\(title)|\(artist ?? "")"
+        let digest = SHA256.hash(data: Data(identity.utf8)).map { String(format: "%02x", $0) }.joined()
+        let cacheURL = support.appendingPathComponent("netease-v1-" + digest).appendingPathExtension("lrc")
+        let localCandidates = [audioURL.deletingPathExtension().appendingPathExtension("lrc"), cacheURL]
         if let content = localCandidates.compactMap({ try? String(contentsOf: $0, encoding: .utf8) }).first {
             lines = Self.parseLRC(content)
             task = nil
@@ -37,13 +41,21 @@ final class DesktopLyricsSource {
                 self.lines = Self.parseLRC(text)
                 return
             }
-            guard !Task.isCancelled,
-                  let lrc = await Self.fetchQQLyrics(title: title, artist: artist),
+            guard !Task.isCancelled else { return }
+            let trackID: String?
+            if let neteaseTrackID {
+                trackID = neteaseTrackID
+            } else {
+                trackID = try? await NativeNetEaseClient.shared.matchedLyricTrackID(title: title, artist: artist, duration: duration)
+            }
+            guard !Task.isCancelled, self.generation == currentGeneration,
+                  let trackID,
+                  let lrc = try? await NativeNetEaseClient.shared.lyrics(trackID: trackID),
                   !Self.parseLRC(lrc).isEmpty,
                   !Task.isCancelled, self.generation == currentGeneration else { return }
             try? FileManager.default.createDirectory(at: support, withIntermediateDirectories: true)
             guard !Task.isCancelled, self.generation == currentGeneration else { return }
-            try? lrc.write(to: support.appendingPathComponent(audioURL.deletingPathExtension().lastPathComponent).appendingPathExtension("lrc"), atomically: true, encoding: .utf8)
+            try? lrc.write(to: cacheURL, atomically: true, encoding: .utf8)
             guard !Task.isCancelled, self.generation == currentGeneration else { return }
             self.lines = Self.parseLRC(lrc)
         }
@@ -79,28 +91,4 @@ final class DesktopLyricsSource {
         }.sorted { $0.time < $1.time }
     }
 
-    private static func fetchQQLyrics(title: String, artist: String?) async -> String? {
-        var search = URLComponents(string: "https://c.y.qq.com/soso/fcgi-bin/client_search_cp")!
-        search.queryItems = [URLQueryItem(name: "p", value: "1"), URLQueryItem(name: "n", value: "1"),
-                             URLQueryItem(name: "w", value: [artist, title].compactMap { $0 }.joined(separator: " ")),
-                             URLQueryItem(name: "format", value: "json")]
-        guard let searchURL = search.url else { return nil }
-        var request = URLRequest(url: searchURL)
-        request.setValue("https://y.qq.com/", forHTTPHeaderField: "Referer")
-        request.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)", forHTTPHeaderField: "User-Agent")
-        guard let (data, _) = try? await URLSession.shared.data(for: request),
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let response = json["data"] as? [String: Any], let song = response["song"] as? [String: Any],
-              let list = song["list"] as? [[String: Any]], let mid = list.first?["songmid"] as? String else { return nil }
-        var lyric = URLComponents(string: "https://c.y.qq.com/lyric/fcgi-bin/fcg_query_lyric_new.fcg")!
-        lyric.queryItems = [URLQueryItem(name: "songmid", value: mid), URLQueryItem(name: "format", value: "json")]
-        guard let lyricURL = lyric.url else { return nil }
-        var lyricRequest = URLRequest(url: lyricURL)
-        lyricRequest.setValue("https://y.qq.com/", forHTTPHeaderField: "Referer")
-        lyricRequest.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)", forHTTPHeaderField: "User-Agent")
-        guard let (lyricData, _) = try? await URLSession.shared.data(for: lyricRequest),
-              let lyricJSON = try? JSONSerialization.jsonObject(with: lyricData) as? [String: Any],
-              let encoded = lyricJSON["lyric"] as? String, let decoded = Data(base64Encoded: encoded) else { return nil }
-        return String(data: decoded, encoding: .utf8)
-    }
 }

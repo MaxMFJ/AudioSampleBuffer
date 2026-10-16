@@ -131,7 +131,7 @@ final class DesktopRenderer: NSObject, MTKViewDelegate {
             fatalError("无法初始化桌面 Metal 渲染器")
         }
 #if SWIFT_PACKAGE
-        let shaderNames = ["Aurora", "Tyndall", "CoverDotMatrix", "CellularHive"]
+        let shaderNames = ["GuitarSurge", "Tyndall", "CoverDotMatrix", "CellularHive"]
         let shaderSources = shaderNames.compactMap { name -> String? in
             guard let url = bundledResource(name, "metal") else { return nil }
             return try? String(contentsOf: url, encoding: .utf8)

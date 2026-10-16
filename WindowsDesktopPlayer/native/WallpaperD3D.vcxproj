@@ -35,6 +35,6 @@
     <ClCompile><WarningLevel>Level4</WarningLevel><FunctionLevelLinking>true</FunctionLevelLinking><IntrinsicFunctions>true</IntrinsicFunctions><SDLCheck>true</SDLCheck><PreprocessorDefinitions>NOMINMAX;NDEBUG;WALLPAPERD3D_EXPORTS;_WINDOWS;_USRDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions><ConformanceMode>true</ConformanceMode><LanguageStandard>stdcpp17</LanguageStandard><RuntimeLibrary>MultiThreaded</RuntimeLibrary></ClCompile>
     <Link><SubSystem>Windows</SubSystem><EnableCOMDATFolding>true</EnableCOMDATFolding><OptimizeReferences>true</OptimizeReferences><GenerateDebugInformation>true</GenerateDebugInformation></Link>
   </ItemDefinitionGroup>
-  <ItemGroup><ClCompile Include="WallpaperD3D.cpp" /><ClInclude Include="WallpaperD3D.h" /><None Include="WallpaperShaders.hlsl" /></ItemGroup>
+  <ItemGroup><ClCompile Include="WallpaperD3D.cpp" /><ClInclude Include="WallpaperD3D.h" /><None Include="WallpaperShaders.hlsl" /><None Include="CellularHive.hlsli" /><None Include="Tyndall.hlsli" /><None Include="CoverParticles.hlsli" /></ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
 </Project>

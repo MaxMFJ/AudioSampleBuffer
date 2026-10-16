@@ -615,7 +615,8 @@ final class PlaylistDrawerView: NSView, NSSearchFieldDelegate {
                 self.playbackLoadingView.dismiss()
                 self.currentPlatformCachedPath = prepared.fileURL.path
                 self.platformTrackSwitchInProgress = false
-                self.audio.play(url: prepared.fileURL, title: track.name, artist: track.displayArtist)
+                self.audio.play(url: prepared.fileURL, title: track.name, artist: track.displayArtist,
+                                neteaseTrackID: track.provider == .netease ? track.id : nil)
                 self.platformArtworkGeneration += 1
                 let generation = self.platformArtworkGeneration
                 self.onArtworkChange(nil)

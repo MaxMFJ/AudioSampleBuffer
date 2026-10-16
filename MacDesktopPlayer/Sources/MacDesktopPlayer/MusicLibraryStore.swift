@@ -57,6 +57,7 @@ final class MusicLibraryStore {
             tracks = library.tracks
             playlists = library.playlists
         }
+        importBundledDemoMusicIfNeeded()
     }
 
     func add(_ urls: [URL], to playlistID: String?) {
@@ -190,6 +191,48 @@ final class MusicLibraryStore {
         try? FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
         try? data.write(to: fileURL, options: .atomic)
         NotificationCenter.default.post(name: .desktopMusicLibraryChanged, object: self)
+    }
+
+    private func importBundledDemoMusicIfNeeded() {
+        let defaultsKey = "BundledDemoMusicImported.v1"
+        guard !UserDefaults.standard.bool(forKey: defaultsKey),
+              let bundledDirectory = Bundle.main.resourceURL?.appendingPathComponent("DemoMusic", isDirectory: true),
+              let manifestData = try? Data(contentsOf: bundledDirectory.appendingPathComponent("library.json")),
+              let demoLibrary = try? JSONDecoder().decode(SavedLibrary.self, from: manifestData),
+              !demoLibrary.tracks.isEmpty else { return }
+
+        try? FileManager.default.createDirectory(at: audioDirectory, withIntermediateDirectories: true)
+        var importedAny = false
+        for bundledTrack in demoLibrary.tracks {
+            let filename = URL(fileURLWithPath: bundledTrack.path).lastPathComponent
+            let source = bundledDirectory.appendingPathComponent(filename)
+            let destination = audioDirectory.appendingPathComponent(filename)
+            guard FileManager.default.fileExists(atPath: source.path),
+                  !tracks.contains(where: { $0.id == bundledTrack.id }) else { continue }
+            do {
+                if !FileManager.default.fileExists(atPath: destination.path) {
+                    try FileManager.default.copyItem(at: source, to: destination)
+                }
+                let coverBase = URL(fileURLWithPath: filename).deletingPathExtension().lastPathComponent + "_cover"
+                for coverExtension in ["jpg", "jpeg", "png", "webp"] {
+                    let coverSource = bundledDirectory.appendingPathComponent(coverBase).appendingPathExtension(coverExtension)
+                    let coverDestination = audioDirectory.appendingPathComponent(coverBase).appendingPathExtension(coverExtension)
+                    if FileManager.default.fileExists(atPath: coverSource.path),
+                       !FileManager.default.fileExists(atPath: coverDestination.path) {
+                        try? FileManager.default.copyItem(at: coverSource, to: coverDestination)
+                    }
+                }
+                var importedTrack = bundledTrack
+                importedTrack.path = destination.path
+                tracks.append(importedTrack)
+                importedAny = true
+            } catch {
+                NSLog("Unable to import bundled demo audio %@: %@", filename, error.localizedDescription)
+            }
+        }
+        guard importedAny else { return }
+        save()
+        UserDefaults.standard.set(true, forKey: defaultsKey)
     }
 }
 

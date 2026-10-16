@@ -13,6 +13,10 @@ internal sealed class NativeWallpaperRenderer : IDisposable
 {
     private readonly Stopwatch _clock = Stopwatch.StartNew();
     private readonly WallpaperFrame _frame = new();
+    private WallpaperAnimationState _animation = new();
+    private float _lastPlaybackTime = -1;
+    private float _lastFrameTime = -1;
+    public bool IsOperational => _handle != IntPtr.Zero && !_failed;
     private IntPtr _handle;
     private bool _hasArtwork;
     private bool _failed;
@@ -23,7 +27,7 @@ internal sealed class NativeWallpaperRenderer : IDisposable
         error = "";
         try
         {
-            if (Native.GetApiVersion() != 2)
+            if (Native.GetApiVersion() != 4)
             {
                 error = "WallpaperD3D.dll is outdated. Rebuild native/WallpaperD3D.vcxproj with Visual Studio MSBuild.";
                 return null;
@@ -32,7 +36,7 @@ internal sealed class NativeWallpaperRenderer : IDisposable
             var handle = Native.Create(parent, width, height, shader);
             if (handle != IntPtr.Zero)
             {
-                WallpaperDiagnostics.Write($"Direct3D API 2 initialized: {width}x{height}; shader={shader}");
+                WallpaperDiagnostics.Write($"Direct3D API 4 initialized: {width}x{height}; shader={shader}");
                 return new NativeWallpaperRenderer { _handle = handle };
             }
             error = Native.GetLastError();
@@ -48,20 +52,47 @@ internal sealed class NativeWallpaperRenderer : IDisposable
         if (_handle != IntPtr.Zero) Native.Show(_handle, visible && !_failed ? 1 : 0);
     }
 
-    public bool Render(int effectIndex, float[] spectrum)
+    public bool Render(int effectIndex, float[] spectrum, VisualAudioSnapshot audio, bool playing, float playbackTime)
     {
         if (_handle == IntPtr.Zero || _failed) return false;
         _frame.Time = (float)_clock.Elapsed.TotalSeconds;
         _frame.EffectIndex = (uint)Math.Clamp(effectIndex, 0, 3);
         _frame.HasArtwork = _hasArtwork ? 1 : 0;
         var count = Math.Min(spectrum.Length, _frame.Bands.Length);
+        Array.Clear(_frame.Bands);
         Array.Copy(spectrum, _frame.Bands, count);
-        _frame.Low = Average(spectrum, 0, 8);
-        _frame.Mid = Average(spectrum, 8, 16);
-        _frame.High = Average(spectrum, 24, Math.Max(0, spectrum.Length - 24));
-        _frame.Guitar = Math.Clamp(_frame.High * 0.78f, 0, 1);
-        _frame.Piano = Math.Clamp(_frame.Mid * 0.72f, 0, 1);
-        _frame.Drums = Math.Clamp(_frame.Low * 0.92f, 0, 1);
+        _frame.Low = audio.Low;
+        _frame.Mid = audio.Mid;
+        _frame.High = audio.High;
+        Array.Copy(audio.Signals, _frame.DspFeatureSignals, 4);
+        Array.Copy(audio.Texture, _frame.DspFeatureTexture, 4);
+        _frame.Guitar = Math.Clamp(_frame.Mid * .55f + _frame.High * .85f, 0, 1);
+        _frame.Piano = Math.Clamp(_frame.Mid * .55f, 0, 1);
+        _frame.Drums = _frame.Low;
+        if (!playing)
+        {
+            _frame.Low = _frame.Mid = _frame.High = _frame.Guitar = _frame.Piano = _frame.Drums = 0;
+            Array.Clear(_frame.DspFeatureSignals);
+            Array.Clear(_frame.DspFeatureTexture);
+        }
+        var dt = _lastFrameTime >= 0 ? Math.Max(0, _frame.Time - _lastFrameTime) : 0;
+        if (_lastPlaybackTime >= 0 && Math.Abs(playbackTime - _lastPlaybackTime) > Math.Max(.35f, dt * 3))
+            _animation = new WallpaperAnimationState();
+        _lastFrameTime = _frame.Time;
+        _lastPlaybackTime = playbackTime;
+        // FFT instrument estimates remain a fallback until the model port is available.
+        _frame.Viewport[3] = playing ? 1 : 0;
+        _animation.Update(_frame.Time, _frame.Low, _frame.Mid, _frame.High,
+            _frame.Guitar, _frame.Piano, _frame.Drums, playing);
+        Array.Copy(_animation.Dynamics, _frame.Dynamics, 4);
+        Array.Copy(_animation.HiveWaves, _frame.HiveWaves, 32);
+        Array.Copy(_animation.AnimationStarts, _frame.AnimationStarts, 4);
+        Array.Copy(_animation.AnimationStrengths, _frame.AnimationStrengths, 4);
+        Array.Copy(_animation.AnimationPeak, _frame.AnimationPeak, 4);
+        Array.Copy(_animation.TyndallBands, _frame.TyndallBands, 3);
+        _frame.InstrumentEnvelopes[0] = _animation.GuitarEnvelope;
+        _frame.InstrumentEnvelopes[1] = _animation.PianoEnvelope;
+        _frame.InstrumentEnvelopes[2] = playbackTime;
         if (Native.Render(_handle, _frame) != 0)
         {
             if (!_presented) WallpaperDiagnostics.Write("First Direct3D frame submitted (culling disabled).");
@@ -80,6 +111,7 @@ internal sealed class NativeWallpaperRenderer : IDisposable
         if (image is not BitmapSource source || source.PixelWidth <= 0 || source.PixelHeight <= 0)
         {
             _hasArtwork = false;
+            _animation = new WallpaperAnimationState();
             Native.SetArtwork(_handle, IntPtr.Zero, 0, 0, 0);
             return;
         }
@@ -93,6 +125,9 @@ internal sealed class NativeWallpaperRenderer : IDisposable
         try
         {
             _hasArtwork = Native.SetArtwork(_handle, pin.AddrOfPinnedObject(), converted.PixelWidth, converted.PixelHeight, stride) != 0;
+            WallpaperDiagnostics.Write(_hasArtwork
+                ? $"Direct3D artwork uploaded: {converted.PixelWidth}x{converted.PixelHeight}; relief particles enabled."
+                : $"Direct3D artwork upload failed: {Native.GetLastError()}");
         }
         finally { pin.Free(); }
     }
@@ -102,15 +137,6 @@ internal sealed class NativeWallpaperRenderer : IDisposable
         if (_handle == IntPtr.Zero) return;
         Native.Destroy(_handle);
         _handle = IntPtr.Zero;
-    }
-
-    private static float Average(float[] values, int start, int count)
-    {
-        if (count <= 0 || values.Length <= start) return 0;
-        var end = Math.Min(values.Length, start + count);
-        var total = 0f;
-        for (var index = start; index < end; index++) total += values[index];
-        return total / (end - start);
     }
 
     [StructLayout(LayoutKind.Sequential, Pack = 4)]
@@ -128,6 +154,21 @@ internal sealed class NativeWallpaperRenderer : IDisposable
         public float HasArtwork;
         [MarshalAs(UnmanagedType.ByValArray, SizeConst = 2)] public float[] Padding = new float[2];
         [MarshalAs(UnmanagedType.ByValArray, SizeConst = 128)] public float[] Bands = new float[128];
+        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 4)] public float[] Viewport = new float[4];
+        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 4)] public float[] Dynamics = new float[4];
+        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 4)] public float[] AnimationStarts = new float[4];
+        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 4)] public float[] AnimationStrengths = new float[4];
+        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 4)] public float[] AnimationPeak = new float[4];
+        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 4)] public float[] LaserGeometry = [12, .60f, 8, 12];
+        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 4)] public float[] LaserMotion = [7, .90f, .24f, .28f];
+        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 4)] public float[] LaserAppearance = [1, .12f, .90f, 1];
+        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 32)] public float[] HiveWaves = new float[32];
+        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 4)] public float[] CoverRotation = [0, 0, 1, 0];
+        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 4)] public float[] CoverPointer = [-10, -10, 0, .22f];
+        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 4)] public float[] TyndallBands = new float[4];
+        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 4)] public float[] InstrumentEnvelopes = new float[4];
+        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 4)] public float[] DspFeatureSignals = new float[4];
+        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 4)] public float[] DspFeatureTexture = new float[4];
     }
 
     private static class Native

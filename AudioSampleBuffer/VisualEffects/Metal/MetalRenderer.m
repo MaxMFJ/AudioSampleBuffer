@@ -2451,6 +2451,9 @@ typedef struct {
 @property (nonatomic) float guitarLaserEnvelope;
 @property (nonatomic) NSTimeInterval guitarLaserHoldUntil;
 @property (nonatomic) NSTimeInterval guitarLaserLastUpdate;
+@property (nonatomic) float fftLaserEnvelope;
+@property (nonatomic) NSTimeInterval fftLaserHoldUntil;
+@property (nonatomic) NSTimeInterval fftLaserLastUpdate;
 @end
 
 @implementation TyndallBeamRenderer
@@ -2486,6 +2489,8 @@ typedef struct {
         self.currentAIConfig = config;
         self.guitarLaserEnvelope = 0.0f;
         self.guitarLaserHoldUntil = 0.0;
+        self.fftLaserEnvelope = 0.0f;
+        self.fftLaserHoldUntil = 0.0;
         NSLog(@"🎨 丁达尔: 已应用 AI 配色 %@ - %@", config.songName, config.artist ?: @"");
     }
 }
@@ -2537,6 +2542,21 @@ typedef struct {
     self.guitarLaserEnvelope += (target - self.guitarLaserEnvelope) * (1.0f - expf(-rate * dt));
     // Tyndall alone owns this otherwise-unused UniformsAI slot.
     uniforms->galaxyParams3.x = self.guitarLaserEnvelope;
+
+    // Hold the smoothed high-band briefly across FFT gaps, then release slowly.
+    // The shader uses this as a visibility floor while live high still drives
+    // the musical brightness.
+    float high = 0.0f;
+    for (int i = 50; i < 80; i += 2) high += uniforms->audioData[i].y;
+    high /= 15.0f;
+    if (high >= 0.02f) self.fftLaserHoldUntil = time + 0.65;
+    float fftTarget = time < self.fftLaserHoldUntil ? fmaxf(high, 0.055f) : 0.0f;
+    float fftDt = self.fftLaserLastUpdate > 0.0 && time >= self.fftLaserLastUpdate
+                ? (float)fmin(time - self.fftLaserLastUpdate, 0.1) : (1.0f / 30.0f);
+    self.fftLaserLastUpdate = time;
+    float fftRate = fftTarget > self.fftLaserEnvelope ? 8.0f : 1.6f;
+    self.fftLaserEnvelope += (fftTarget - self.fftLaserEnvelope) * (1.0f - expf(-fftRate * fftDt));
+    uniforms->galaxyParams3.y = self.fftLaserEnvelope;
     
     if (config) {
         // 使用 AI 分析返回的配色

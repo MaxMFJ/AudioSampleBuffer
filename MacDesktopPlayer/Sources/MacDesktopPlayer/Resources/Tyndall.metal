@@ -437,45 +437,10 @@ static float3 laserSystem(float2 p, float pixelStep, float time, float treble, f
     float distSq = dot(p, p);
     float dist = sqrt(distSq);
     
-    // ====== A. Laser Fan Top + Bottom（蓝色激光扇形，优化版：12 条总 + 锁定包络）======
-    // 性能优化：顶+底合并为 12 条（原 14），触发后锁定包络期间不计算 DSP
-    float fanCycleDuration = 14.0;  // 完整周期 14 秒
-    // Match iOS: the fan's motion cycle follows the shared animation clock.
-    // The latched activation envelope controls visibility independently.
-    float fanPhase = fract(time / fanCycleDuration);
-    
-    // 三阶段包络（超柔和渐显，完全避免突然出现）：
-    // [0, 0.28): 渐渐出现 + DSP 触发监听（约 3.9s 渐显，更长更柔和）
-    // [0.28, 0.72): 展示锁定阶段（不计算 DSP，固定 envelope=1.0）
-    // [0.72, 1.0): 渐消阶段（3.92s）
-    float fanEnvelope = 0.0;
-    bool fanNeedTrigger = false;
-    
-    if (fanPhase < 0.28) {
-        // 渐显：smoothstep 本身是 S 曲线，再套一层 smoothstep 使开始更缓慢（ease-in-out²）
-        float rawEnv = smoothstep(0.0, 0.28, fanPhase);
-        fanEnvelope = rawEnv * rawEnv * (3.0 - 2.0 * rawEnv);  // 二次缓动，开始极慢
-        fanNeedTrigger = true;
-    } else if (fanPhase < 0.72) {
-        fanEnvelope = 1.0;
-        fanNeedTrigger = false;  // 锁定期，跳过 DSP
-    } else {
-        fanEnvelope = smoothstep(1.0, 0.72, fanPhase);
-        fanNeedTrigger = false;
-    }
-    
-    // 只在渐显阶段检查 DSP 触发（拉长触发区间，避免 DSP 突变）
-    if (fanNeedTrigger) {
-        // 触发区间从 [0.02, 0.07] 拉长到 [0.015, 0.12]，更柔和
-        float fanTrigger = smoothstep(0.015, 0.12, treble);
-        fanEnvelope *= fanTrigger;
-    }
-    
-    float regularFan = fanEnvelope * smoothstep(0.02, 0.12, treble);
-    // A guitar crest keeps the blue fan sweeping throughout its latched
-    // activation, including quiet treble passages and the fan cycle's fade.
+    // ====== A. Laser Fan Top + Bottom（蓝色激光扇形）======
+    // The trigger envelope stays latched; FFT only modulates its brightness.
     float guitarClimax = smoothstep(0.28, 0.62, max(guitarPeak, liveGuitarPeak));
-    fanEnvelope = max(regularFan, guitarClimax);
+    float fanEnvelope = max(smoothstep(0.02, 0.12, treble), guitarClimax);
     if (fanEnvelope > 0.01) {
         float3 blueColor = mood.laserFanBlue.rgb;
         if (!colorIsSet(blueColor)) {
@@ -790,10 +755,10 @@ fragment float4 desktopTyndallFragment(TyndallVertexOut in [[stage_in]],
     float4 elapsed = max(float4(time) - animation.starts, 0.0);
     float peakElapsed = max(time - animation.peak.x, 0.0);
     float floorMid = animation.strengths.x * activationEnvelope(elapsed.x, 12.0);
-    float treble = animation.strengths.y * activationEnvelope(elapsed.y, 14.0);
+    float treble = animation.strengths.y * activationEnvelope(elapsed.y, 3.0);
     float piano = animation.strengths.z * activationEnvelope(elapsed.z, 15.384615);
     float guitar = animation.strengths.w * activationEnvelope(elapsed.w, 9.0);
-    float guitarPeak = animation.peak.y * activationEnvelope(peakElapsed, 13.0);
+    float guitarPeak = animation.peak.y * activationEnvelope(peakElapsed, 3.0);
 
     float totalEnergy = (bass + mid + high) / 3.0;
     float peakValue = max(max(bass, mid), high);
@@ -831,7 +796,7 @@ fragment float4 desktopTyndallFragment(TyndallVertexOut in [[stage_in]],
 
     float liveGuitarPeak = uniforms.guitarPeak * uniforms.playing;
     float laserActivity = max(max(treble, piano), max(guitar, max(guitarPeak, liveGuitarPeak)));
-    float unlock3 = smoothstep(0.03, 0.12, max(energy, laserActivity * 0.16));
+    float unlock3 = smoothstep(0.015, 0.12, max(energy, laserActivity));
     if (unlock3 > 0.01) {
         float3 laser = laserSystem(p, pixelStep, animTime, treble, piano, mid, guitarPeak, liveGuitarPeak,
                                    mood, laserSettings) * unlock3 * aiBright;

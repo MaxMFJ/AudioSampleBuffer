@@ -44,21 +44,19 @@ struct DesktopDotParticle {
 }
 
 enum DesktopBackgroundEffect: Int {
-    case aurora = 0
     case tyndall = 1
     case coverDots = 2
     case cellularHive = 3
 
     var title: String {
         switch self {
-        case .aurora: "极光波纹"
         case .tyndall: "丁达尔光束"
         case .coverDots: "封面点阵"
         case .cellularHive: "深空蜂巢"
         }
     }
     static var saved: DesktopBackgroundEffect {
-        let stored = DesktopBackgroundEffect(rawValue: UserDefaults.standard.integer(forKey: "desktopBackgroundEffect")) ?? .aurora
+        let stored = DesktopBackgroundEffect(rawValue: UserDefaults.standard.integer(forKey: "desktopBackgroundEffect")) ?? .tyndall
         return stored
     }
 }

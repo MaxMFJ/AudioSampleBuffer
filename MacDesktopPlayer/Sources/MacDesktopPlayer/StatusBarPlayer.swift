@@ -19,7 +19,7 @@ final class StatusBarPlayerController: NSObject, NSPopoverDelegate {
         statusItem.button?.action = #selector(togglePopover)
         popover.behavior = .transient
         popover.delegate = self
-        popover.contentSize = NSSize(width: 360, height: 292)
+        popover.contentSize = NSSize(width: 360, height: 332)
         popover.contentViewController = StatusBarPlayerViewController(audio: audio, library: library, onOpenControls: { [weak self] in
             guard let self else { return }
             self.opensControlsAfterClose = true
@@ -70,6 +70,7 @@ final class StatusBarPlayerViewController: NSViewController {
     private let playButton = NSButton()
     private let repeatButton = NSButton()
     private let openControlsButton = NSButton()
+    private let quitButton = NSButton()
     private let artworkView = AspectFillArtworkView()
     private var timer: Timer?
     private var artworkTask: Task<Void, Never>?
@@ -189,7 +190,19 @@ final class StatusBarPlayerViewController: NSViewController {
         openControlsButton.action = #selector(openControls)
         openControlsButton.heightAnchor.constraint(equalToConstant: 28).isActive = true
 
-        let stack = NSStackView(views: [metadata, times, buttons, repeatButton, openControlsButton])
+        quitButton.title = "退出程序"
+        quitButton.image = NSImage(systemSymbolName: "power", accessibilityDescription: nil)
+        quitButton.imagePosition = .imageLeading
+        quitButton.imageHugsTitle = true
+        quitButton.font = .systemFont(ofSize: 12, weight: .semibold)
+        quitButton.contentTintColor = NSColor.systemRed.withAlphaComponent(0.92)
+        quitButton.bezelStyle = .regularSquare
+        quitButton.isBordered = false
+        quitButton.target = NSApplication.shared
+        quitButton.action = #selector(NSApplication.terminate(_:))
+        quitButton.heightAnchor.constraint(equalToConstant: 28).isActive = true
+
+        let stack = NSStackView(views: [metadata, times, buttons, repeatButton, openControlsButton, quitButton])
         stack.orientation = .vertical
         stack.alignment = .centerX
         stack.spacing = 12
@@ -199,7 +212,8 @@ final class StatusBarPlayerViewController: NSViewController {
             stack.centerXAnchor.constraint(equalTo: root.centerXAnchor),
             stack.centerYAnchor.constraint(equalTo: root.centerYAnchor),
             buttons.centerXAnchor.constraint(equalTo: stack.centerXAnchor),
-            openControlsButton.centerXAnchor.constraint(equalTo: stack.centerXAnchor)
+            openControlsButton.centerXAnchor.constraint(equalTo: stack.centerXAnchor),
+            quitButton.centerXAnchor.constraint(equalTo: stack.centerXAnchor)
         ])
         view = root
     }

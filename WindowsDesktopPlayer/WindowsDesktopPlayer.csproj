@@ -18,6 +18,7 @@
     <PackageReference Include="TagLibSharp" Version="2.3.0" />
   </ItemGroup>
   <ItemGroup>
+    <Content Include="native\*.hlsli" Link="%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Include="native\WallpaperShaders.hlsl" Link="WallpaperShaders.hlsl" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
   <Target Name="BuildNativeWallpaperRenderer" BeforeTargets="Build" Condition="'$(OS)' == 'Windows_NT' and '$(SkipNativeBuild)' != 'true'">
