@@ -3,16 +3,17 @@ using System.ComponentModel;
 using System.IO;
 using System.Net.Http;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Data;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
+using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using Microsoft.Win32;
-using Rectangle = System.Windows.Shapes.Rectangle;
 
 namespace SoundDesk;
 
@@ -20,39 +21,39 @@ public partial class MainWindow : Window
 {
     private readonly ObservableCollection<LocalTrack> _tracks = [];
     private IReadOnlyList<LocalTrack> _playbackQueue = [];
-    private readonly ICollectionView _tracksView;
+    private IReadOnlyList<PlatformTrack> _platformQueue = [];
+    private int _platformIndex = -1;
+    private int _platformGeneration;
     private readonly DispatcherTimer _positionTimer;
     private readonly DispatcherTimer _visualTimer;
     private readonly AudioReactiveMonitor _reactiveMonitor = new();
     private readonly DesktopWallpaperController _desktopWallpaper;
-    private readonly Rectangle[] _spectrumBars = new Rectangle[48];
-    private readonly Brush[] _spectrumBrushes = new Brush[48];
     private readonly string _libraryPath = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "SoundDesk", "library.json");
-    private readonly string _playlistsPath = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "SoundDesk", "playlists.json");
     private readonly string _playbackSettingsPath = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "SoundDesk", "playback-settings.json");
-    private readonly ObservableCollection<UserPlaylist> _playlists = [];
     private readonly LyricsService _lyricsService = new();
+    private readonly OnlineMusicService _online = new();
+    private readonly PlatformMusicService _platform = new();
+    private readonly ObservableCollection<OnlineSearchResult> _onlineResults = [];
+    private CancellationTokenSource? _onlineSearch;
     private IReadOnlyList<TimedLyric> _lyrics = [];
     private CancellationTokenSource? _lyricsCancellation;
     private LyricsOverlayWindow? _lyricsOverlay;
-    private PlatformWindow? _platformWindow;
     private LyricsSettingsWindow? _lyricsSettings;
+    private PlatformAccountWindow? _accountWindow;
+    private PlatformLibraryWindow? _libraryWindow;
+    private WindowMonitorWindow? _monitorWindow;
     private WindowsStatusBarPlayer? _statusPlayer;
     private SongListDrawerWindow? _songListDrawer;
-    private string? _selectedPlaylistId;
+    private readonly ToggleButton[] _effectButtons;
     private int _lyricsGeneration;
-    private int _visualizationMode;
-    private int _brushMode = -1;
     private int _artworkGeneration;
-    private double _visualTime;
     private LocalTrack? _currentTrack;
     private ImageSource? _currentArtwork;
-    private bool _isSeeking;
     private bool _isPlaying;
     private bool _allowExit;
+    private bool _downloading;
     private int _repeatMode;
 
     public MainWindow()
@@ -65,41 +66,40 @@ public partial class MainWindow : Window
                 _repeatMode = Math.Clamp(JsonSerializer.Deserialize<int>(File.ReadAllText(_playbackSettingsPath)), 0, 2);
         }
         catch (Exception error) when (error is IOException or JsonException) { }
-        _visualizationMode = _desktopWallpaper.EffectIndex;
-        EffectSelector.SelectedIndex = _visualizationMode;
+        _effectButtons = [TyndallEffect, CoverDotsEffect, CellularEffect, HexagonEffect];
+        SyncEffectButtons();
+        GuitarSurgeToggle.IsChecked = _desktopWallpaper.GuitarSurgeEnabled;
+        CenterRecordToggle.IsChecked = _desktopWallpaper.CenterRecordVisible;
         RepeatButton.Content = RepeatModeTitle();
-        _tracksView = CollectionViewSource.GetDefaultView(_tracks);
-        _tracksView.Filter = FilterTrack;
-        TrackList.ItemsSource = _tracksView;
-        PlaylistList.ItemsSource = _playlists;
+        OnlineResults.ItemsSource = _onlineResults;
+        SearchBox.TextChanged += (_, _) =>
+            SearchPlaceholder.Visibility = SearchBox.Text.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
         _positionTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
         _positionTimer.Tick += (_, _) => RefreshPosition();
-        for (var index = 0; index < _spectrumBars.Length; index++)
-        {
-            var bar = new Rectangle { RadiusX = 4, RadiusY = 4, Opacity = 0.24, IsHitTestVisible = false };
-            _spectrumBars[index] = bar;
-            SpectrumCanvas.Children.Add(bar);
-        }
-        SpectrumCanvas.SizeChanged += (_, _) => RenderSpectrum();
         _visualTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(33) };
-        _visualTimer.Tick += (_, _) => RenderSpectrum();
+        _visualTimer.Tick += (_, _) =>
+        {
+            _desktopWallpaper.UpdatePlayback(_isPlaying, Player.Position.TotalSeconds);
+            WallpaperRendererStatus.Text = _desktopWallpaper.RenderingStatus;
+        };
+        SourceInitialized += (_, _) => ApplySystemBackdrop();
         Loaded += (_, _) =>
         {
             _statusPlayer = new WindowsStatusBarPlayer(
-                ShowConsoleFromTray, TogglePlaybackFromTray, PreviousFromTray, NextFromTray,
-                RepeatFromTray, SeekFromTray, OpenSongListFromTray, OpenLyricsFromTray, ExitFromTray);
+                ShowConsoleFromTray, TogglePlayback, () => MoveTrack(-1), () => MoveTrack(1),
+                () => Repeat_Click(this, new RoutedEventArgs()), SeekFromTray,
+                () => _songListDrawer?.OpenDrawer(), OpenLyricsFromTray, ExitApplication);
             RefreshTrayState();
-            _songListDrawer = new SongListDrawerWindow(_tracks, PlayTrackFromDrawer, RemoveTrackFromLibrary, PlayPlatformTrackFromDrawer);
+            _songListDrawer = new SongListDrawerWindow(_tracks, PlayTrackFromDrawer, RemoveTrackFromLibrary, PlayPlatformTrack, ShowConsoleFromTray);
             _songListDrawer.Show();
             _reactiveMonitor.Start();
             _desktopWallpaper.Show();
+            WallpaperToggle.IsChecked = _desktopWallpaper.IsVisible;
             if (_desktopWallpaper.Error is { } wallpaperError)
                 MessageBox.Show(this, wallpaperError, "动态桌面启动失败", MessageBoxButton.OK, MessageBoxImage.Warning);
             _visualTimer.Start();
         };
         LoadLibrary();
-        LoadPlaylists();
-        RefreshLibraryState();
         Closing += (_, e) =>
         {
             if (_allowExit) return;
@@ -108,104 +108,188 @@ public partial class MainWindow : Window
         };
     }
 
-    private bool FilterTrack(object item)
+    // Windows 11 22H2+ draws an acrylic system backdrop behind the client area,
+    // matching the Mac console's NSVisualEffectView. Older builds keep the gradient.
+    private void ApplySystemBackdrop()
     {
-        if (item is not LocalTrack track) return false;
-        var query = SearchBox?.Text?.Trim();
-        return string.IsNullOrEmpty(query)
-            || track.Title.Contains(query, StringComparison.CurrentCultureIgnoreCase)
-            || track.Artist.Contains(query, StringComparison.CurrentCultureIgnoreCase)
-            || track.Album.Contains(query, StringComparison.CurrentCultureIgnoreCase);
+        if (Environment.OSVersion.Version.Build < 22621) return;
+        try
+        {
+            var hwnd = new WindowInteropHelper(this).Handle;
+            var dark = 1;
+            DwmSetWindowAttribute(hwnd, 20, ref dark, sizeof(int));
+            var margins = new Margins { Left = -1, Right = -1, Top = -1, Bottom = -1 };
+            if (DwmExtendFrameIntoClientArea(hwnd, ref margins) != 0) return;
+            var backdrop = 3;
+            if (DwmSetWindowAttribute(hwnd, 38, ref backdrop, sizeof(int)) != 0) return;
+            if (HwndSource.FromHwnd(hwnd)?.CompositionTarget is { } target) target.BackgroundColor = Colors.Transparent;
+            Background = Brushes.Transparent;
+            RootSurface.Background = new SolidColorBrush(Color.FromArgb(0x70, 0x0C, 0x10, 0x1A));
+        }
+        catch (Exception error) when (error is DllNotFoundException or EntryPointNotFoundException) { }
     }
 
-    private void Import_Click(object sender, RoutedEventArgs e)
+    private void SearchBox_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter) Search_Click(sender, e);
+    }
+
+    private async void Search_Click(object sender, RoutedEventArgs e)
+    {
+        var keyword = SearchBox.Text.Trim();
+        if (keyword.Length == 0) { SearchStatus.Text = "请输入歌曲或歌手"; return; }
+        _onlineSearch?.Cancel();
+        var cancellation = new CancellationTokenSource();
+        _onlineSearch = cancellation;
+        SearchStatus.Text = "正在搜索…";
+        _onlineResults.Clear();
+        try
+        {
+            var results = await _online.SearchAsync(keyword, cancellation.Token);
+            if (cancellation.IsCancellationRequested) return;
+            foreach (var result in results) _onlineResults.Add(result);
+            SearchStatus.Text = results.Count == 0 ? "没有找到相关歌曲" : $"找到 {results.Count} 首歌曲";
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception error)
+        {
+            if (!cancellation.IsCancellationRequested) SearchStatus.Text = $"搜索失败：{error.Message}";
+        }
+    }
+
+    private async void DownloadResult_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is not OnlineSearchResult result) return;
+        if (_downloading) { SearchStatus.Text = "正在下载另一首歌曲，请稍候"; return; }
+        _downloading = true;
+        try
+        {
+            var status = new Progress<string>(message => SearchStatus.Text = message);
+            var (path, title, artist) = await _online.DownloadAsync(result, status, CancellationToken.None);
+            var track = _tracks.FirstOrDefault(item => string.Equals(item.Path, path, StringComparison.OrdinalIgnoreCase));
+            if (track is null)
+            {
+                track = new LocalTrack { Path = path, Title = title, Artist = artist, Album = "" };
+                _tracks.Add(track);
+                SaveLibrary();
+            }
+            SearchStatus.Text = $"下载完成：{title} - {artist}";
+            _playbackQueue = _tracks.ToList();
+            PlayTrack(track, updateQueue: false);
+        }
+        catch (Exception error)
+        {
+            SearchStatus.Text = $"下载失败：{error.Message}";
+        }
+        finally { _downloading = false; }
+    }
+
+    private void Effect_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { Tag: string tag } && int.TryParse(tag, out var index))
+            _desktopWallpaper.SetEffect(index);
+        SyncEffectButtons();
+    }
+
+    private void SyncEffectButtons()
+    {
+        foreach (var button in _effectButtons)
+            button.IsChecked = (string)button.Tag == _desktopWallpaper.EffectIndex.ToString();
+    }
+
+    private void GuitarSurge_Click(object sender, RoutedEventArgs e) =>
+        _desktopWallpaper.SetGuitarSurgeEnabled(GuitarSurgeToggle.IsChecked == true);
+
+    private void CenterRecord_Click(object sender, RoutedEventArgs e) =>
+        _desktopWallpaper.SetCenterRecordVisible(CenterRecordToggle.IsChecked == true);
+
+    private void WallpaperToggle_Click(object sender, RoutedEventArgs e)
+    {
+        if (WallpaperToggle.IsChecked == true)
+        {
+            _desktopWallpaper.Show();
+            if (_desktopWallpaper.Error is { } error)
+                MessageBox.Show(this, error, "动态桌面启动失败", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+        else _desktopWallpaper.Hide();
+        WallpaperToggle.IsChecked = _desktopWallpaper.IsVisible;
+    }
+
+    private void MoodSettings_Click(object sender, RoutedEventArgs e)
+    {
+        var window = new MoodSettingsWindow { Owner = this };
+        if (window.ShowDialog() == true && _currentTrack is not null)
+            DesktopMoodService.Shared.Analyze(_currentTrack.Title, _currentTrack.Artist);
+    }
+
+    private void OpenLocal_Click(object sender, RoutedEventArgs e)
     {
         var picker = new OpenFileDialog
         {
-            Title = "导入音乐",
-            Filter = "音频文件|*.mp3;*.wav;*.wma;*.m4a;*.aac;*.flac;*.ogg|所有文件|*.*",
-            Multiselect = true
+            Title = "选择本地歌曲",
+            Filter = "音频文件|*.mp3;*.wav;*.wma;*.m4a;*.aac;*.flac;*.ogg|所有文件|*.*"
         };
         if (picker.ShowDialog(this) != true) return;
-        var added = 0;
-        foreach (var path in picker.FileNames)
+        var path = picker.FileName;
+        var track = _tracks.FirstOrDefault(item => string.Equals(item.Path, path, StringComparison.OrdinalIgnoreCase));
+        if (track is null)
         {
-            if (_tracks.Any(track => string.Equals(track.Path, path, StringComparison.OrdinalIgnoreCase))) continue;
-            var title = Path.GetFileNameWithoutExtension(path);
-            _tracks.Add(new LocalTrack { Path = path, Title = title, Artist = "本地文件", Album = "" });
-            if (_selectedPlaylistId is not null)
-                _playlists.FirstOrDefault(item => item.Id == _selectedPlaylistId)?.TrackPaths.Add(path);
-            added++;
+            track = new LocalTrack { Path = path, Title = Path.GetFileNameWithoutExtension(path), Artist = "本地文件", Album = "" };
+            _tracks.Add(track);
+            SaveLibrary();
         }
-        SaveLibrary();
-        SavePlaylists();
-        RefreshLibraryState();
-        if (added > 0 && _currentTrack is null) TrackList.SelectedItem = _tracks.LastOrDefault();
+        _playbackQueue = [track];
+        PlayTrack(track, updateQueue: false);
     }
 
-    private void TrackList_DoubleClick(object sender, MouseButtonEventArgs e)
-    {
-        if (TrackList.SelectedItem is LocalTrack track) PlayTrack(track);
-    }
+    private void Play_Click(object sender, RoutedEventArgs e) => TogglePlayback();
 
-    private void TrackList_RightClick(object sender, MouseButtonEventArgs e)
-    {
-        if (ItemsControl.ContainerFromElement(TrackList, e.OriginalSource as DependencyObject) is ListBoxItem item)
-            TrackList.SelectedItem = item.DataContext;
-    }
-
-    private void TrackList_SelectionChanged(object sender, SelectionChangedEventArgs e)
-    {
-        if (TrackList.SelectedItem is LocalTrack track && _currentTrack is null)
-            SetTrackLabels(track);
-    }
-
-    private void Play_Click(object sender, RoutedEventArgs e)
+    private void TogglePlayback()
     {
         if (_currentTrack is null)
         {
-            if (TrackList.SelectedItem is LocalTrack selected) PlayTrack(selected);
-            else if (_tracksView.Cast<LocalTrack>().FirstOrDefault() is LocalTrack first) PlayTrack(first);
-            else Import_Click(sender, e);
+            if (_tracks.FirstOrDefault() is { } first) PlayTrack(first);
+            else OpenLocal_Click(this, new RoutedEventArgs());
             return;
         }
-
-        if (Player.Source is null) { PlayTrack(_currentTrack); return; }
+        if (Player.Source is null) { PlayTrack(_currentTrack, updateQueue: false, keepPlatformQueue: _platformIndex >= 0); return; }
         if (_isPlaying)
         {
             Player.Pause();
             _isPlaying = false;
-            PlayButton.Content = "▶";
             _positionTimer.Stop();
         }
         else
         {
             Player.Play();
             _isPlaying = true;
-            PlayButton.Content = "Ⅱ";
             _positionTimer.Start();
         }
+        PlayButton.Content = _isPlaying ? "Ⅱ" : "▶";
         RefreshTrayState();
     }
 
-    private void PlayTrack(LocalTrack track, bool updateQueue = true)
+    private void PlayTrack(LocalTrack track, bool updateQueue = true, bool keepPlatformQueue = false)
     {
         if (!File.Exists(track.Path))
         {
             MessageBox.Show(this, "找不到这个音频文件。请重新导入后再播放。", "无法播放", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
+        if (!keepPlatformQueue)
+        {
+            _platformQueue = [];
+            _platformIndex = -1;
+            _platformGeneration++;
+            _songListDrawer?.SetLoading(null);
+        }
         try
         {
-            if (updateQueue)
-            {
-                var visible = _tracksView.Cast<LocalTrack>().ToList();
-                _playbackQueue = visible.Contains(track) ? visible : [track];
-            }
+            if (updateQueue) _playbackQueue = _tracks.ToList();
             _currentTrack = track;
             _currentArtwork = null;
-            TrackList.SelectedItem = track;
             SetTrackLabels(track);
+            DesktopMoodService.Shared.Analyze(track.Title, track.Artist);
             LoadLyricsForTrack(track);
             if (_lyricsService.Settings.Enabled) ShowLyricsOverlay();
             LoadTrackArtwork(track);
@@ -230,6 +314,12 @@ public partial class MainWindow : Window
 
     private void MoveTrack(int delta)
     {
+        if (_platformIndex >= 0 && _platformQueue.Count > 0)
+        {
+            var next = (_platformIndex + delta + _platformQueue.Count) % _platformQueue.Count;
+            PlayPlatformTrack(_platformQueue[next], _platformQueue);
+            return;
+        }
         var queue = _playbackQueue;
         if (queue.Count == 0) return;
         var index = _currentTrack is null ? -1 : queue.ToList().IndexOf(_currentTrack);
@@ -256,8 +346,6 @@ public partial class MainWindow : Window
         _isPlaying = false;
         _positionTimer.Stop();
         PlayButton.Content = "▶";
-        ProgressSlider.Value = 0;
-        ElapsedText.Text = "0:00";
         RefreshTrayState();
     }
 
@@ -267,34 +355,34 @@ public partial class MainWindow : Window
         _currentTrack.IsFavorite = !_currentTrack.IsFavorite;
         FavoriteButton.Content = _currentTrack.IsFavorite ? "♥" : "♡";
         SaveLibrary();
-        if (SectionTitle.Text == "我的收藏") _tracksView.Refresh();
     }
 
     private void Player_MediaOpened(object sender, RoutedEventArgs e)
     {
-        if (Player.NaturalDuration.HasTimeSpan)
+        if (Player.NaturalDuration.HasTimeSpan && _currentTrack is not null)
         {
-            var duration = Player.NaturalDuration.TimeSpan;
-            DurationText.Text = FormatTime(duration);
-            ProgressSlider.Maximum = Math.Max(1, duration.TotalSeconds);
-            if (_currentTrack is not null)
-            {
-                _currentTrack.DurationSeconds = duration.TotalSeconds;
-                SaveLibrary();
-                RefreshLibraryState();
-            }
+            _currentTrack.DurationSeconds = Player.NaturalDuration.TimeSpan.TotalSeconds;
+            SaveLibrary();
         }
+        RefreshTrayState();
     }
 
     private void Player_MediaEnded(object sender, RoutedEventArgs e)
     {
-        if (_repeatMode == 2 && _currentTrack is not null) { PlayTrack(_currentTrack); return; }
-        if (_repeatMode == 0 && _currentTrack is not null && _playbackQueue.ToList().IndexOf(_currentTrack) >= _playbackQueue.Count - 1)
+        if (_repeatMode == 2 && _currentTrack is not null)
+        {
+            Player.Position = TimeSpan.Zero;
+            Player.Play();
+            return;
+        }
+        var atEnd = _platformIndex >= 0
+            ? _platformIndex >= _platformQueue.Count - 1
+            : _currentTrack is not null && _playbackQueue.ToList().IndexOf(_currentTrack) >= _playbackQueue.Count - 1;
+        if (_repeatMode == 0 && atEnd)
         {
             _isPlaying = false;
             _positionTimer.Stop();
             PlayButton.Content = "▶";
-            ProgressSlider.Value = ProgressSlider.Maximum;
             RefreshTrayState();
             return;
         }
@@ -311,76 +399,10 @@ public partial class MainWindow : Window
         MessageBox.Show(this, $"当前文件无法播放。\n\n{detail}", "播放失败", MessageBoxButton.OK, MessageBoxImage.Warning);
     }
 
-    private void Progress_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
-    {
-        if (ElapsedText is not null) ElapsedText.Text = FormatTime(TimeSpan.FromSeconds(e.NewValue));
-    }
-
-    private void Progress_MouseDown(object sender, MouseButtonEventArgs e) => _isSeeking = true;
-
-    private void Progress_MouseUp(object sender, MouseButtonEventArgs e)
-    {
-        _isSeeking = false;
-        if (Player.Source is not null) Player.Position = TimeSpan.FromSeconds(ProgressSlider.Value);
-    }
-
-    private void Favorite_Click(object sender, RoutedEventArgs e)
-    {
-        if (TrackList.SelectedItem is not LocalTrack track) return;
-        track.IsFavorite = !track.IsFavorite;
-        if (ReferenceEquals(track, _currentTrack)) FavoriteButton.Content = track.IsFavorite ? "♥" : "♡";
-        SaveLibrary();
-        if (SectionTitle.Text == "我的收藏") _tracksView.Refresh();
-    }
-
-    private void RemoveFromPlaylist_Click(object sender, RoutedEventArgs e)
-    {
-        if (_selectedPlaylistId is null || TrackList.SelectedItem is not LocalTrack track) return;
-        var playlist = _playlists.FirstOrDefault(item => item.Id == _selectedPlaylistId);
-        playlist?.TrackPaths.RemoveAll(path => string.Equals(path, track.Path, StringComparison.OrdinalIgnoreCase));
-        SavePlaylists();
-        _tracksView.Refresh();
-    }
-
-    private void TrackContextMenu_Opened(object sender, RoutedEventArgs e)
-    {
-        if (sender is not ContextMenu menu) return;
-        var addToPlaylist = menu.Items.OfType<MenuItem>().FirstOrDefault(item => Equals(item.Header, "添加到歌单"));
-        if (addToPlaylist is null) return;
-        addToPlaylist.Items.Clear();
-        if (_playlists.Count == 0)
-        {
-            addToPlaylist.Items.Add(new MenuItem { Header = "请先新建歌单", IsEnabled = false });
-            return;
-        }
-        foreach (var playlist in _playlists)
-        {
-            var item = new MenuItem { Header = playlist.Name, Tag = playlist.Id };
-            item.Click += (_, _) =>
-            {
-                if (TrackList.SelectedItem is not LocalTrack track) return;
-                var target = _playlists.FirstOrDefault(candidate => candidate.Id == (string)item.Tag);
-                if (target is null || target.TrackPaths.Contains(track.Path, StringComparer.OrdinalIgnoreCase)) return;
-                target.TrackPaths.Add(track.Path);
-                SavePlaylists();
-                _tracksView.Refresh();
-            };
-            addToPlaylist.Items.Add(item);
-        }
-    }
-
-    private void RemoveFromLibrary_Click(object sender, RoutedEventArgs e)
-    {
-        if (TrackList.SelectedItem is not LocalTrack track) return;
-        RemoveTrackFromLibrary(track);
-    }
-
     private void RemoveTrackFromLibrary(LocalTrack track)
     {
         _tracks.Remove(track);
         _playbackQueue = _playbackQueue.Where(item => !ReferenceEquals(item, track)).ToList();
-        foreach (var playlist in _playlists)
-            playlist.TrackPaths.RemoveAll(path => string.Equals(path, track.Path, StringComparison.OrdinalIgnoreCase));
         if (ReferenceEquals(_currentTrack, track))
         {
             Player.Stop();
@@ -388,106 +410,91 @@ public partial class MainWindow : Window
             _currentTrack = null;
             _isPlaying = false;
             PlayButton.Content = "▶";
+            NowPlaying.Text = "尚未播放";
             _positionTimer.Stop();
             RefreshTrayState();
         }
         SaveLibrary();
-        SavePlaylists();
-        RefreshLibraryState();
     }
 
-    private void PlayTrackFromDrawer(LocalTrack track)
-    {
-        _playbackQueue = _tracks.ToList();
-        PlayTrack(track, updateQueue: false);
-    }
+    private void PlayTrackFromDrawer(LocalTrack track) => PlayTrack(track);
 
-    private async void PlayPlatformTrackFromDrawer(PlatformTrack track)
+    /// <summary>Plays a platform track and keeps <paramref name="queue"/> as the
+    /// previous/next context, like the Mac drawer's onPlatformAdjacentTrack.</summary>
+    public async void PlayPlatformTrack(PlatformTrack track, IReadOnlyList<PlatformTrack> queue)
     {
+        var generation = ++_platformGeneration;
+        _platformQueue = queue.Count > 0 ? queue : [track];
+        _platformIndex = Math.Max(0, IndexOfPlatformTrack(_platformQueue, track));
+        _songListDrawer?.SetLoading($"正在加载 {track.Title}");
         try
         {
-            var service = new PlatformMusicService();
-            var path = await service.DownloadTrackAsync(track);
-            var local = new LocalTrack
+            var path = await _platform.DownloadTrackAsync(track);
+            if (generation != _platformGeneration) return;
+            var local = _tracks.FirstOrDefault(item => string.Equals(item.Path, path, StringComparison.OrdinalIgnoreCase));
+            if (local is null)
             {
-                Path = path, Title = track.Title, Artist = track.Artist, Album = track.Album,
-                CoverUrl = track.CoverUrl, DurationSeconds = track.DurationSeconds
-            };
-            OnPlatformTrackDownloaded(local);
+                local = new LocalTrack
+                {
+                    Path = path, Title = track.Title, Artist = track.Artist, Album = track.Album,
+                    CoverUrl = track.CoverUrl, DurationSeconds = track.DurationSeconds
+                };
+                _tracks.Add(local);
+            }
+            _songListDrawer?.SetLoading(null);
+            PlayTrack(local, updateQueue: false, keepPlatformQueue: true);
+            PrefetchNextPlatformTrack(generation);
         }
         catch (Exception error)
         {
+            if (generation != _platformGeneration) return;
+            _songListDrawer?.SetLoading(null);
             MessageBox.Show(this, error.Message, "平台歌曲播放失败", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
     }
 
+    private async void PrefetchNextPlatformTrack(int generation)
+    {
+        if (_platformQueue.Count < 2) return;
+        var next = _platformQueue[(_platformIndex + 1) % _platformQueue.Count];
+        try { await _platform.DownloadTrackAsync(next); }
+        catch (Exception error)
+        {
+            if (generation == _platformGeneration) WallpaperDiagnostics.Write($"Prefetch skipped: {error.Message}");
+        }
+    }
+
+    private static int IndexOfPlatformTrack(IReadOnlyList<PlatformTrack> queue, PlatformTrack track)
+    {
+        for (var index = 0; index < queue.Count; index++)
+            if (queue[index].Provider == track.Provider && queue[index].Id == track.Id) return index;
+        return -1;
+    }
+
     private void SongList_Click(object sender, RoutedEventArgs e) => _songListDrawer?.OpenDrawer();
 
-    private void EffectSelector_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    private void Accounts_Click(object sender, RoutedEventArgs e)
     {
-        if (EffectSelector is not null) _visualizationMode = Math.Max(0, EffectSelector.SelectedIndex);
-        _desktopWallpaper?.SetEffect(_visualizationMode);
-        RenderSpectrum();
+        if (_accountWindow is { IsVisible: true }) { _accountWindow.Activate(); return; }
+        _accountWindow = new PlatformAccountWindow { Owner = this };
+        _accountWindow.Closed += (_, _) => _accountWindow = null;
+        _accountWindow.Show();
     }
 
-    private void RenderSpectrum()
+    private void PlatformLibrary_Click(object sender, RoutedEventArgs e)
     {
-        if (_desktopWallpaper is not null && Player is not null)
-        {
-            _desktopWallpaper.UpdatePlayback(_isPlaying, Player.Position.TotalSeconds);
-            if (WallpaperRendererStatus is not null) WallpaperRendererStatus.Text = _desktopWallpaper.RenderingStatus;
-        }
-        if (SpectrumCanvas is null || SpectrumCanvas.ActualWidth <= 0 || SpectrumCanvas.ActualHeight <= 0) return;
-        var width = SpectrumCanvas.ActualWidth;
-        var height = SpectrumCanvas.ActualHeight;
-        var values = _reactiveMonitor.Spectrum;
-        if (_brushMode != _visualizationMode) BuildSpectrumBrushes();
-        var barSlot = width / _spectrumBars.Length;
-        var baseline = Math.Max(0, height - 18);
-        var maxHeight = Math.Min(height * 0.48, 230);
-        _visualTime += 1d / 30;
-        for (var index = 0; index < _spectrumBars.Length; index++)
-        {
-            var amplitude = values[index];
-            var bar = _spectrumBars[index];
-            var widthFactor = _visualizationMode switch { 1 => 0.12, 2 => 0.28, 3 => 0.48, _ => 0.64 };
-            var barWidth = Math.Max(2, barSlot * widthFactor);
-            var barHeight = 5 + Math.Pow(amplitude, 0.72) * maxHeight;
-            var centerX = index * barSlot + barSlot / 2;
-            Canvas.SetLeft(bar, centerX - barWidth / 2);
-            Canvas.SetTop(bar, Math.Max(0, baseline - barHeight));
-            bar.Width = barWidth;
-            bar.Height = _visualizationMode == 2 ? Math.Max(4, barWidth) : barHeight;
-            if (_visualizationMode == 2)
-                Canvas.SetTop(bar, Math.Max(0, baseline - amplitude * maxHeight));
-
-            bar.Fill = _spectrumBrushes[index];
-            bar.Opacity = Math.Clamp(0.12 + amplitude * 1.8, 0.12, 0.82);
-            if (_visualizationMode == 1)
-            {
-                var sway = Math.Sin(_visualTime * 0.8 + index * 0.35) * 16;
-                Canvas.SetLeft(bar, centerX - barWidth / 2 + sway);
-                bar.Opacity = Math.Clamp(0.08 + amplitude * 1.4, 0.08, 0.62);
-            }
-        }
+        if (_libraryWindow is { IsVisible: true }) { _libraryWindow.Activate(); return; }
+        _libraryWindow = new PlatformLibraryWindow(PlayPlatformTrack) { Owner = this };
+        _libraryWindow.Closed += (_, _) => _libraryWindow = null;
+        _libraryWindow.Show();
     }
 
-    private void BuildSpectrumBrushes()
+    private void WindowMonitor_Click(object sender, RoutedEventArgs e)
     {
-        for (var index = 0; index < _spectrumBrushes.Length; index++)
-        {
-            var color = _visualizationMode switch
-            {
-                1 => Color.FromRgb((byte)(255 - index * 2), (byte)(158 + index % 5 * 9), 105),
-                2 => Color.FromRgb(138, (byte)(174 + index % 5 * 12), 255),
-                3 => index % 3 == 0 ? Color.FromRgb(118, 255, 104) : Color.FromRgb(48, 226, 231),
-                _ => Color.FromRgb((byte)(108 + index % 4 * 12), (byte)(165 + index % 5 * 9), 255)
-            };
-            var brush = new SolidColorBrush(color);
-            brush.Freeze();
-            _spectrumBrushes[index] = brush;
-        }
-        _brushMode = _visualizationMode;
+        if (_monitorWindow is { IsVisible: true }) { _monitorWindow.Activate(); return; }
+        _monitorWindow = new WindowMonitorWindow();
+        _monitorWindow.Closed += (_, _) => _monitorWindow = null;
+        _monitorWindow.Show();
     }
 
     private async void LoadLyricsForTrack(LocalTrack track)
@@ -513,8 +520,6 @@ public partial class MainWindow : Window
                 _lyricsOverlay?.ShowFrame("", $"歌词加载失败：{error.Message}", "");
         }
     }
-
-    private void Lyrics_Click(object sender, RoutedEventArgs e) => LyricsSettings_Click(sender, e);
 
     private void UpdateLyrics(double time)
     {
@@ -560,72 +565,13 @@ public partial class MainWindow : Window
 
     private void RefreshPosition()
     {
-        if (Player.Source is null || _isSeeking) { RefreshTrayState(); return; }
-        _isSeeking = true;
-        try
-        {
-            var position = Player.Position;
-            if (Player.NaturalDuration.HasTimeSpan)
-                ProgressSlider.Maximum = Math.Max(1, Player.NaturalDuration.TimeSpan.TotalSeconds);
-            ProgressSlider.Value = Math.Min(position.TotalSeconds, ProgressSlider.Maximum);
-            ElapsedText.Text = FormatTime(position);
-            UpdateLyrics(position.TotalSeconds);
-            RefreshTrayState();
-        }
-        finally { _isSeeking = false; }
+        if (Player.Source is not null) UpdateLyrics(Player.Position.TotalSeconds);
+        RefreshTrayState();
     }
 
     private void Volume_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
         if (Player is not null) Player.Volume = e.NewValue;
-    }
-
-    private void Search_TextChanged(object sender, TextChangedEventArgs e) => _tracksView.Refresh();
-    private void AllSongs_Click(object sender, RoutedEventArgs e) { _selectedPlaylistId = null; PlaylistList.SelectedItem = null; SectionTitle.Text = "所有歌曲"; _tracksView.Filter = FilterTrack; _tracksView.Refresh(); }
-    private void Recent_Click(object sender, RoutedEventArgs e)
-    {
-        SectionTitle.Text = "最近播放";
-        _selectedPlaylistId = null;
-        PlaylistList.SelectedItem = null;
-        _tracksView.Filter = item => item is LocalTrack track && track.LastPlayedUtc.HasValue && FilterTrack(track);
-        _tracksView.Refresh();
-    }
-    private void Favorites_Click(object sender, RoutedEventArgs e)
-    {
-        SectionTitle.Text = "我的收藏";
-        _selectedPlaylistId = null;
-        PlaylistList.SelectedItem = null;
-        _tracksView.Filter = item => item is LocalTrack track && track.IsFavorite && FilterTrack(track);
-        _tracksView.Refresh();
-    }
-
-    private void PlaylistList_SelectionChanged(object sender, SelectionChangedEventArgs e)
-    {
-        if (PlaylistList.SelectedItem is not UserPlaylist playlist) return;
-        _selectedPlaylistId = playlist.Id;
-        SectionTitle.Text = playlist.Name;
-        _tracksView.Filter = item => item is LocalTrack track
-            && playlist.TrackPaths.Contains(track.Path, StringComparer.OrdinalIgnoreCase)
-            && FilterTrack(track);
-        _tracksView.Refresh();
-    }
-
-    private void CreatePlaylist_Click(object sender, RoutedEventArgs e)
-    {
-        var name = TextPromptWindow.Show(this, "新建歌单", "歌单名称");
-        if (string.IsNullOrWhiteSpace(name)) return;
-        var playlist = new UserPlaylist { Name = name.Trim() };
-        _playlists.Add(playlist);
-        SavePlaylists();
-        PlaylistList.SelectedItem = playlist;
-    }
-
-    private void DeletePlaylist_Click(object sender, RoutedEventArgs e)
-    {
-        if (PlaylistList.SelectedItem is not UserPlaylist playlist) return;
-        _playlists.Remove(playlist);
-        if (_selectedPlaylistId == playlist.Id) { _selectedPlaylistId = null; AllSongs_Click(sender, e); }
-        SavePlaylists();
     }
 
     private void LyricsSettings_Click(object sender, RoutedEventArgs e)
@@ -658,53 +604,12 @@ public partial class MainWindow : Window
         _lyricsOverlay = null;
     }
 
-    private void OnlineSearch_Click(object sender, RoutedEventArgs e) => OpenPlatformWindow();
-    private void Accounts_Click(object sender, RoutedEventArgs e) => OpenPlatformWindow();
-    private void Monitor_Click(object sender, RoutedEventArgs e)
-    {
-        if (_desktopWallpaper.IsVisible)
-        {
-            _desktopWallpaper.Hide();
-            MonitorButton.Content = "启用桌面背景";
-        }
-        else
-        {
-            _desktopWallpaper.Show();
-            MonitorButton.Content = "关闭桌面背景";
-        }
-    }
-
-    private void OpenPlatformWindow()
-    {
-        if (_platformWindow is { IsVisible: true }) { _platformWindow.Activate(); return; }
-        _platformWindow = new PlatformWindow(OnPlatformTrackDownloaded) { Owner = this };
-        _platformWindow.Closed += (_, _) => _platformWindow = null;
-        _platformWindow.Show();
-    }
-
-    private void OnPlatformTrackDownloaded(LocalTrack track)
-    {
-        var existing = _tracks.FirstOrDefault(item => string.Equals(item.Path, track.Path, StringComparison.OrdinalIgnoreCase));
-        if (existing is null) _tracks.Add(track);
-        else track = existing;
-        SaveLibrary();
-        RefreshLibraryState();
-        PlayTrack(track);
-    }
-
     private void SetTrackLabels(LocalTrack track)
     {
-        NowPlayingTitle.Text = track.Title;
-        NowPlayingArtist.Text = string.IsNullOrWhiteSpace(track.Artist) ? "本地文件" : track.Artist;
+        NowPlaying.Text = string.IsNullOrWhiteSpace(track.Artist) ? track.Title : $"{track.Title} - {track.Artist}";
+        NowPlaying.Foreground = (Brush)FindResource("TextBrush");
         FavoriteButton.Content = track.IsFavorite ? "♥" : "♡";
         RefreshTrayState();
-    }
-
-    private void RefreshLibraryState()
-    {
-        TrackCount.Text = $"{_tracks.Count} 首歌曲";
-        EmptyState.Visibility = _tracks.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
-        _tracksView.Refresh();
     }
 
     private void LoadLibrary()
@@ -719,27 +624,6 @@ public partial class MainWindow : Window
         {
             MessageBox.Show(this, $"读取本地曲库失败：{error.Message}", "Sound Desk", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
-    }
-
-    private void LoadPlaylists()
-    {
-        try
-        {
-            if (!File.Exists(_playlistsPath)) return;
-            var loaded = JsonSerializer.Deserialize<List<UserPlaylist>>(File.ReadAllText(_playlistsPath)) ?? [];
-            foreach (var playlist in loaded.Where(item => !string.IsNullOrWhiteSpace(item.Name))) _playlists.Add(playlist);
-        }
-        catch (Exception error) { MessageBox.Show(this, $"读取歌单失败：{error.Message}", "Sound Desk", MessageBoxButton.OK, MessageBoxImage.Warning); }
-    }
-
-    private void SavePlaylists()
-    {
-        try
-        {
-            Directory.CreateDirectory(Path.GetDirectoryName(_playlistsPath)!);
-            File.WriteAllText(_playlistsPath, JsonSerializer.Serialize(_playlists));
-        }
-        catch (IOException) { }
     }
 
     private void SaveLibrary()
@@ -761,6 +645,7 @@ public partial class MainWindow : Window
         _statusPlayer?.UpdateState(_isPlaying, _repeatMode, _currentTrack?.Title ?? "Sound Desk",
             _currentTrack?.Artist, _currentArtwork, Player?.Position.TotalSeconds ?? 0, duration);
     }
+
     private string RepeatModeTitle() => _repeatMode switch { 1 => "列表循环", 2 => "单曲循环", _ => "顺序播放" };
 
     private void ShowConsoleFromTray()
@@ -770,32 +655,24 @@ public partial class MainWindow : Window
         Activate();
     }
 
-    private void TogglePlaybackFromTray() => Play_Click(this, new RoutedEventArgs());
-    private void PreviousFromTray() => Previous_Click(this, new RoutedEventArgs());
-    private void NextFromTray() => Next_Click(this, new RoutedEventArgs());
-    private void RepeatFromTray() => Repeat_Click(this, new RoutedEventArgs());
     private void SeekFromTray(double seconds)
     {
         if (Player.Source is null) return;
         Player.Position = TimeSpan.FromSeconds(Math.Clamp(seconds, 0, Player.NaturalDuration.HasTimeSpan ? Player.NaturalDuration.TimeSpan.TotalSeconds : seconds));
         RefreshPosition();
     }
-    private void OpenSongListFromTray()
-    {
-        _songListDrawer?.OpenDrawer();
-    }
+
     private void OpenLyricsFromTray()
     {
         ShowConsoleFromTray();
         LyricsSettings_Click(this, new RoutedEventArgs());
     }
-    private void ExitFromTray()
+
+    private void ExitApplication()
     {
         _allowExit = true;
         Close();
     }
-
-    private static string FormatTime(TimeSpan time) => $"{(int)time.TotalMinutes}:{time.Seconds:00}";
 
     protected override void OnClosed(EventArgs e)
     {
@@ -807,16 +684,24 @@ public partial class MainWindow : Window
         _reactiveMonitor.Dispose();
         Player.Stop();
         _lyricsCancellation?.Cancel();
+        _onlineSearch?.Cancel();
         _lyricsOverlay?.Close();
         _lyricsSettings?.Close();
-        _platformWindow?.Close();
+        _accountWindow?.Close();
+        _libraryWindow?.Close();
+        _monitorWindow?.Close();
         _songListDrawer?.Close();
         Interlocked.Increment(ref _artworkGeneration);
         SaveLibrary();
-        SavePlaylists();
         base.OnClosed(e);
         Application.Current.Shutdown();
     }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct Margins { public int Left, Right, Top, Bottom; }
+
+    [DllImport("dwmapi.dll")] private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attribute, ref int value, int size);
+    [DllImport("dwmapi.dll")] private static extern int DwmExtendFrameIntoClientArea(IntPtr hwnd, ref Margins margins);
 }
 
 public sealed class LocalTrack : INotifyPropertyChanged

@@ -18,6 +18,9 @@ struct WallpaperFrame
     float coverRotation[4], coverPointer[4];
     float tyndallBands[4], instrumentEnvelopes[4];
     float dspFeatureSignals[4], dspFeatureTexture[4];
+    float moodColors[40];
+    float guitarSurgePhase[4], guitarSurgeLevels[4];
+    float displayOptions[4];
 };
 
 extern "C" __declspec(dllexport) unsigned __cdecl WallpaperD3D_GetApiVersion();

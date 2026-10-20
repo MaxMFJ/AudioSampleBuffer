@@ -422,9 +422,15 @@ static float dualFanLaserPitchCrossing(float2 p, float pixelStep, float time, fl
         float3 direction = normalize(camera.right * (sin(yaw) * cos(pitch))
                                    + camera.up * sin(pitch)
                                    - camera.forward * (cos(yaw) * cos(pitch)));
-        // Keep scan velocity independent of per-frame FFT changes.
-        float speed = max(settings.motion.x, 0.0);
-        float scanTravel = fract(time * speed / beamLength - float(i) * 0.071) * beamLength;
+        // Keep scan velocity independent of per-frame FFT changes. Travel in
+        // one direction, then hide at the end while resetting to the emitter;
+        // the short dead-time avoids a visible fract() snap-back.
+        float speed = max(settings.motion.x, 0.0) * 0.40;
+        float resetGap = max(beamLength * 0.12, 0.65);
+        float cycleDistance = beamLength + resetGap;
+        float scanDistance = fmod(time * speed + float(i) * beamLength * 0.071, cycleDistance);
+        if (scanDistance < 0.0) scanDistance += cycleDistance;
+        float scanTravel = min(scanDistance, beamLength);
         sum += laserVolume(p, origin, direction, beamLength, scanTravel, pixelStep, camera);
     }
     return sum * max(settings.appearance.x, 0.0);

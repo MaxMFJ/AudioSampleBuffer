@@ -1,8 +1,8 @@
 // CellularHive port of MacDesktopPlayer/Resources/CellularHive.metal.
 // Include after WallpaperShaders.hlsl so time, low/mid/high, guitar, drums
-// and aspect are available.  Windows has no Mood/GuitarUniform buffers;
-// the adapter below uses DesktopMoodService's default colors and hiveWaves,
-// while retaining the original geometry and lighting math.
+// and aspect are available.  Mood colors and guitar waves arrive through the
+// shared constant buffer (moodColors, hiveWaves) instead of separate Metal
+// buffers, while retaining the original geometry and lighting math.
 
 float cellularHiveHash(float2 p)
 {
@@ -64,13 +64,12 @@ float3 cellular(float2 uv)
     float ridge = 0.68 + 0.32 * sin(depth * 2.5 - t * 0.35 + angle * 2.0);
     float nearLight = smoothstep(0.0, 0.55, wallRadius);
 
-    // DesktopMoodService defaults; dynamic mood colors can be supplied by the
-    // caller later without changing the CellularHive math.
-    float3 atmosphere = float3(1.0, 0.88, 0.72);
-    float3 volumetricBeam = float3(1.0, 0.85, 0.65);
-    float3 topLightArray = float3(0.3, 0.6, 1.0);
-    float3 coronaFilaments = float3(0.9, 0.6, 0.8);
-    float3 pulseRing = float3(0.8, 0.3, 1.0);
+    float3 atmosphere = moodColors[0].rgb;
+    float3 volumetricBeam = moodColors[1].rgb;
+    float3 topLightArray = moodColors[2].rgb;
+    float3 rotatingBeam = moodColors[5].rgb;
+    float3 coronaFilaments = moodColors[8].rgb;
+    float3 pulseRing = moodColors[9].rgb;
     float3 theme = lerp(atmosphere, volumetricBeam, 0.38);
     float3 accent = lerp(coronaFilaments, pulseRing, 0.30);
     float3 highlight = lerp(theme, float3(1.0, 1.0, 1.0), 0.22);
@@ -90,7 +89,7 @@ float3 cellular(float2 uv)
         float confidence = smoothstep(0.12, 0.80, waveStrength);
         float opacity = (0.38 + confidence * 0.62) * exp(-waveAge * 0.22) * lifeFade;
         int paletteIndex = clamp((int)(wave.z + 0.5), 0, 3);
-        float3 waveColor = paletteIndex == 0 ? pulseRing : paletteIndex == 1 ? coronaFilaments : paletteIndex == 2 ? volumetricBeam : float3(1.0, 0.4, 0.8);
+        float3 waveColor = paletteIndex == 0 ? pulseRing : paletteIndex == 1 ? coronaFilaments : paletteIndex == 2 ? volumetricBeam : rotatingBeam;
         waveColor = lerp(waveColor, float3(1.0, 1.0, 1.0), 0.10);
         float trailWeight = waveReached * opacity;
         waveTrailColor += waveColor * trailWeight;

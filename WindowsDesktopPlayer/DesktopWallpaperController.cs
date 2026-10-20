@@ -18,6 +18,8 @@ public sealed class DesktopWallpaperController : IDisposable
     };
     private readonly string _settingsPath = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "SoundDesk", "desktop-effect.txt");
+    private readonly string _optionsPath = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "SoundDesk", "desktop-options.json");
     private WallpaperWindow? _window;
     private NativeWallpaperRenderer? _nativeRenderer;
     private ImageSource? _artwork;
@@ -25,7 +27,9 @@ public sealed class DesktopWallpaperController : IDisposable
     private bool _playing;
     private float _playbackTime;
 
-    public int EffectIndex { get; private set; }
+    public int EffectIndex { get; private set; } = 1;
+    public bool GuitarSurgeEnabled { get; private set; } = true;
+    public bool CenterRecordVisible { get; private set; } = true;
     public bool IsVisible => _window?.IsVisible == true;
     public string? Error { get; private set; }
     public string RenderingStatus => !IsVisible ? "桌面背景已关闭"
@@ -45,12 +49,39 @@ public sealed class DesktopWallpaperController : IDisposable
                 EffectIndex = Math.Clamp(saved, 0, DesktopEffectCount - 1);
         }
         catch (IOException) { }
+        try
+        {
+            if (File.Exists(_optionsPath)
+                && System.Text.Json.JsonSerializer.Deserialize<DesktopOptions>(File.ReadAllText(_optionsPath)) is { } options)
+            {
+                GuitarSurgeEnabled = options.GuitarSurgeEnabled;
+                CenterRecordVisible = options.CenterRecordVisible;
+            }
+        }
+        catch (Exception error) when (error is IOException or System.Text.Json.JsonException) { }
         _timer.Tick += (_, _) =>
         {
-            if (_nativeRenderer?.Render(EffectIndex, _audio.Spectrum, _audio.VisualAudio, _playing, _playbackTime) != true)
+            if (_nativeRenderer?.Render(EffectIndex, _audio.Spectrum, _audio.VisualAudio, _playing, _playbackTime,
+                    GuitarSurgeEnabled, CenterRecordVisible) != true)
                 _window?.Surface.InvalidateVisual();
         };
     }
+
+    public void SetGuitarSurgeEnabled(bool enabled) { GuitarSurgeEnabled = enabled; SaveOptions(); }
+    public void SetCenterRecordVisible(bool visible) { CenterRecordVisible = visible; SaveOptions(); }
+
+    private void SaveOptions()
+    {
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(_optionsPath)!);
+            File.WriteAllText(_optionsPath, System.Text.Json.JsonSerializer.Serialize(
+                new DesktopOptions(GuitarSurgeEnabled, CenterRecordVisible)));
+        }
+        catch (IOException) { }
+    }
+
+    private sealed record DesktopOptions(bool GuitarSurgeEnabled, bool CenterRecordVisible);
 
     public void SetEffect(int effectIndex)
     {

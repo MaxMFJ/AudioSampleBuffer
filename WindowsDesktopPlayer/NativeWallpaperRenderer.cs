@@ -14,6 +14,7 @@ internal sealed class NativeWallpaperRenderer : IDisposable
     private readonly Stopwatch _clock = Stopwatch.StartNew();
     private readonly WallpaperFrame _frame = new();
     private WallpaperAnimationState _animation = new();
+    private readonly GuitarSurgeState _guitarSurge = new();
     private float _lastPlaybackTime = -1;
     private float _lastFrameTime = -1;
     public bool IsOperational => _handle != IntPtr.Zero && !_failed;
@@ -27,7 +28,7 @@ internal sealed class NativeWallpaperRenderer : IDisposable
         error = "";
         try
         {
-            if (Native.GetApiVersion() != 4)
+            if (Native.GetApiVersion() != 5)
             {
                 error = "WallpaperD3D.dll is outdated. Rebuild native/WallpaperD3D.vcxproj with Visual Studio MSBuild.";
                 return null;
@@ -36,7 +37,7 @@ internal sealed class NativeWallpaperRenderer : IDisposable
             var handle = Native.Create(parent, width, height, shader);
             if (handle != IntPtr.Zero)
             {
-                WallpaperDiagnostics.Write($"Direct3D API 4 initialized: {width}x{height}; shader={shader}");
+                WallpaperDiagnostics.Write($"Direct3D API 5 initialized: {width}x{height}; shader={shader}");
                 return new NativeWallpaperRenderer { _handle = handle };
             }
             error = Native.GetLastError();
@@ -52,7 +53,8 @@ internal sealed class NativeWallpaperRenderer : IDisposable
         if (_handle != IntPtr.Zero) Native.Show(_handle, visible && !_failed ? 1 : 0);
     }
 
-    public bool Render(int effectIndex, float[] spectrum, VisualAudioSnapshot audio, bool playing, float playbackTime)
+    public bool Render(int effectIndex, float[] spectrum, VisualAudioSnapshot audio, bool playing, float playbackTime,
+        bool guitarSurgeEnabled, bool centerRecordVisible)
     {
         if (_handle == IntPtr.Zero || _failed) return false;
         _frame.Time = (float)_clock.Elapsed.TotalSeconds;
@@ -93,6 +95,12 @@ internal sealed class NativeWallpaperRenderer : IDisposable
         _frame.InstrumentEnvelopes[0] = _animation.GuitarEnvelope;
         _frame.InstrumentEnvelopes[1] = _animation.PianoEnvelope;
         _frame.InstrumentEnvelopes[2] = playbackTime;
+        Array.Copy(DesktopMoodService.Shared.Colors, _frame.MoodColors, _frame.MoodColors.Length);
+        _guitarSurge.Update(_frame.Time, playbackTime, _frame.Low, _frame.Mid, _frame.High,
+            _frame.Guitar, _frame.Drums, 0, guitarSurgeEnabled);
+        Array.Copy(_guitarSurge.Phase, _frame.GuitarSurgePhase, 4);
+        Array.Copy(_guitarSurge.Levels, _frame.GuitarSurgeLevels, 4);
+        _frame.DisplayOptions[0] = centerRecordVisible ? 1 : 0;
         if (Native.Render(_handle, _frame) != 0)
         {
             if (!_presented) WallpaperDiagnostics.Write("First Direct3D frame submitted (culling disabled).");
@@ -169,6 +177,10 @@ internal sealed class NativeWallpaperRenderer : IDisposable
         [MarshalAs(UnmanagedType.ByValArray, SizeConst = 4)] public float[] InstrumentEnvelopes = new float[4];
         [MarshalAs(UnmanagedType.ByValArray, SizeConst = 4)] public float[] DspFeatureSignals = new float[4];
         [MarshalAs(UnmanagedType.ByValArray, SizeConst = 4)] public float[] DspFeatureTexture = new float[4];
+        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 40)] public float[] MoodColors = new float[40];
+        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 4)] public float[] GuitarSurgePhase = new float[4];
+        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 4)] public float[] GuitarSurgeLevels = new float[4];
+        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 4)] public float[] DisplayOptions = new float[4];
     }
 
     private static class Native

@@ -306,7 +306,6 @@ private final class FullscreenDesktopEffectRenderer: DesktopEffectRenderer {
     private var tyndallActivations = Array(repeating: TyndallActivation(), count: 5)
     private var tyndallBands = SIMD3<Float>(repeating: 0)
     private var lastTyndallTime: Float = -1
-    private var lastTyndallPlaybackTime: Float = -1
 
     init(effect: DesktopBackgroundEffect, vertexName: String, fragmentName: String, device: MTLDevice, pixelFormat: MTLPixelFormat, library: MTLLibrary) {
         self.effect = effect
@@ -331,14 +330,14 @@ private final class FullscreenDesktopEffectRenderer: DesktopEffectRenderer {
         if effect == .tyndall {
             let playing = audio.playing > 0.5
             let dt = lastTyndallTime >= 0 ? min(max(audio.time - lastTyndallTime, 0), 0.1) : 1.0 / 60.0
-            let playbackJump = lastTyndallPlaybackTime >= 0
-                && abs(audio.playbackTime - lastTyndallPlaybackTime) > max(0.35, dt * 3)
-            if !playing || playbackJump {
+            // Playback position can briefly be unavailable during an audio
+            // render hiccup. It must not reset the independent laser trigger
+            // envelope and make the beams flash out mid-sweep.
+            if !playing {
                 tyndallActivations = Array(repeating: TyndallActivation(), count: 5)
                 tyndallBands = SIMD3<Float>(repeating: 0)
             }
             lastTyndallTime = audio.time
-            lastTyndallPlaybackTime = audio.playbackTime
 
             // The Mac analyzer scales its FFT bands by 5; iOS Tyndall consumes
             // the normalized 0...1 bands directly.

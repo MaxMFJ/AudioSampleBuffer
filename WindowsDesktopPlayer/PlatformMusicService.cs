@@ -148,6 +148,26 @@ public sealed class PlatformMusicService
         return (json["cdlist"]?[0]?["songlist"]?.AsArray() ?? []).Select(DecodeQQTrack).Where(x => x is not null).Cast<PlatformTrack>().ToArray();
     }
 
+    public async Task<(bool LoggedIn, string? Account)> GetLoginStatusAsync(MusicProvider provider, CancellationToken ct = default)
+    {
+        var cookie = LoadCookie(provider) ?? "";
+        switch (provider)
+        {
+            case MusicProvider.NetEase:
+                if (CookieValue(cookie, "MUSIC_U") is null) return (false, null);
+                var account = await NetEaseRequestAsync("/api/nuser/account/get", new JsonObject(), ct);
+                var nickname = NodeText(account["profile"]?["nickname"]) ?? NodeText(account["account"]?["id"]);
+                return (nickname is not null, nickname);
+            case MusicProvider.QQ:
+                var uin = CookieValue(cookie, "uin") ?? CookieValue(cookie, "qqmusic_uin");
+                var key = CookieValue(cookie, "qm_keyst") ?? CookieValue(cookie, "qqmusic_key") ?? CookieValue(cookie, "music_key");
+                return (uin is not null && key is not null, uin?.TrimStart('o'));
+            default:
+                var auth = KugouAuth.From(cookie);
+                return (auth.UserId is not null && auth.Token is not null, auth.UserId);
+        }
+    }
+
     public string? LoadCookie(MusicProvider provider) => _credentials.Load(provider.ToString());
     public void SaveCookie(MusicProvider provider, string cookie) => _credentials.Save(provider.ToString(), NormalizeCookie(cookie));
     public void DeleteCookie(MusicProvider provider) => _credentials.Delete(provider.ToString());
@@ -209,11 +229,13 @@ public sealed class PlatformMusicService
 
     private async Task<IReadOnlyList<PlatformTrack>> SearchKugouAsync(string query, int limit, CancellationToken cancellationToken)
     {
+        var auth = KugouAuth.From(_credentials.Load("Kugou") ?? "");
         var parameters = new Dictionary<string, string>
         {
             ["keyword"] = query, ["page"] = "1", ["pagesize"] = Math.Clamp(limit, 1, 20).ToString(),
-            ["userid"] = "-1", ["clientver"] = "2000", ["platform"] = "WebFilter", ["tag"] = "em",
-            ["filter"] = "2", ["iscorrection"] = "1", ["privilege_filter"] = "0", ["filter_ver"] = "2", ["appid"] = "1014", ["token"] = ""
+            ["userid"] = auth.UserId ?? "-1", ["clientver"] = "2000", ["platform"] = "WebFilter", ["tag"] = "em",
+            ["filter"] = "2", ["iscorrection"] = "1", ["privilege_filter"] = "0", ["filter_ver"] = "2", ["appid"] = "1014",
+            ["token"] = auth.Token ?? "", ["mid"] = auth.Mid
         };
         var url = "https://songsearch.kugou.com/song_search_v2?" + string.Join("&", parameters.Select(pair => $"{Uri.EscapeDataString(pair.Key)}={Uri.EscapeDataString(pair.Value)}"));
         using var request = new HttpRequestMessage(HttpMethod.Get, url);
@@ -271,31 +293,209 @@ public sealed class PlatformMusicService
         return new Uri(sip + purl);
     }
 
+    private const string KugouH5Salt = "NVPh5oo715z5DIWAeQlhMDsWXXQV4hwt";
+    private const string KugouSignSalt = "57ae12eb6890223e355ccfcb74edf70d";
+    private const string KugouGatewayAgent = "Android15-1070-11083-46-0-DiscoveryDRADProtocol-wifi";
+
+    private sealed record KugouAuth(string? UserId, string? Token, string Mid, string Dfid)
+    {
+        public static KugouAuth From(string cookie)
+        {
+            var userId = CookieValue(cookie, "userid") ?? CookieValue(cookie, "KugooID") ?? CookieValue(cookie, "kugouID");
+            var token = CookieValue(cookie, "token") ?? CookieValue(cookie, "t");
+            var mid = CookieValue(cookie, "kg_mid") ?? CookieValue(cookie, "KUGOU_API_MID") ?? CookieValue(cookie, "mid")
+                ?? Md5("mineradio-kugou:" + (userId ?? token ?? "guest"));
+            var dfid = CookieValue(cookie, "kg_dfid") ?? CookieValue(cookie, "dfid") ?? "-";
+            return new KugouAuth(userId, token, mid, dfid);
+        }
+    }
+
     private async Task<Uri> ResolveKugouAsync(PlatformTrack track, CancellationToken cancellationToken)
     {
         var cookie = _credentials.Load("Kugou") ?? "";
-        var userId = CookieValue(cookie, "userid") ?? CookieValue(cookie, "KugooID");
-        var token = CookieValue(cookie, "token") ?? CookieValue(cookie, "t");
-        if (string.IsNullOrWhiteSpace(userId) || string.IsNullOrWhiteSpace(token) || string.IsNullOrWhiteSpace(track.Hash))
-            throw new InvalidOperationException("酷狗播放需要登录凭据。请在平台账号窗口保存酷狗 Cookie 后重试。");
-        var mid = CookieValue(cookie, "kg_mid") ?? Md5("mineradio-kugou:" + (userId ?? token));
+        var auth = KugouAuth.From(cookie);
+        if (string.IsNullOrWhiteSpace(track.Hash)) throw new InvalidOperationException("缺少酷狗歌曲 hash。");
+        if (string.IsNullOrWhiteSpace(auth.UserId) || string.IsNullOrWhiteSpace(auth.Token))
+            throw new InvalidOperationException("酷狗播放需要登录。请在平台账号窗口登录酷狗后重试。");
+        // The web/mobile endpoints are more reliable for current tracks; the gateway remains the final fallback.
+        foreach (var (endpoint, referer) in new[]
+        {
+            ("https://wwwapi.kugou.com/play/songinfo", "https://www.kugou.com/"),
+            ("https://m.kugou.com/app/i/getSongInfo.php", "https://m.kugou.com/"),
+            ("https://wwwapiretry.kugou.com/play/songinfo", "https://www.kugou.com/")
+        })
+        {
+            var parameters = endpoint.Contains("m.kugou.com")
+                ? new Dictionary<string, string>
+                {
+                    ["cmd"] = "playInfo", ["hash"] = track.Hash, ["key"] = Md5(track.Hash + "kgcloud"),
+                    ["album_id"] = track.AlbumId ?? "0", ["pid"] = "1", ["forceDown"] = "0",
+                    ["userid"] = auth.UserId, ["token"] = auth.Token
+                }
+                : new Dictionary<string, string>
+                {
+                    ["hash"] = track.Hash, ["album_id"] = track.AlbumId ?? "0", ["album_audio_id"] = track.AlbumAudioId ?? "0",
+                    ["srcappid"] = "2919", ["clientver"] = "20000", ["uuid"] = auth.Mid, ["mid"] = auth.Mid,
+                    ["userid"] = auth.UserId, ["token"] = auth.Token
+                };
+            parameters["signature"] = KugouSignature(parameters, "");
+            try
+            {
+                using var request = new HttpRequestMessage(HttpMethod.Get, endpoint + "?" + QueryString(parameters));
+                request.Headers.TryAddWithoutValidation("Cookie", cookie);
+                AddProviderHeaders(request, referer, "Mozilla/5.0");
+                using var response = await Http.SendAsync(request, cancellationToken);
+                if (!response.IsSuccessStatusCode) continue;
+                if (Uri.TryCreate(KugouStreamUrl(JsonNode.Parse(await response.Content.ReadAsStringAsync(cancellationToken))), UriKind.Absolute, out var url))
+                    return url;
+            }
+            catch (Exception error) when (error is HttpRequestException or JsonException or InvalidOperationException) { }
+        }
+
+        var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds().ToString();
+        var hash = track.Hash.ToLowerInvariant();
+        var gateway = new Dictionary<string, string>
+        {
+            ["srcappid"] = "2919", ["clientver"] = "20000", ["clienttime"] = now, ["mid"] = auth.Mid,
+            ["uuid"] = now, ["dfid"] = auth.Dfid, ["appid"] = "1014", ["token"] = auth.Token,
+            ["userid"] = auth.UserId, ["album_id"] = track.AlbumId ?? "0", ["area_code"] = "1",
+            ["hash"] = hash, ["ssa_flag"] = "is_fromtrack", ["version"] = "11430",
+            ["quality"] = "128", ["album_audio_id"] = track.AlbumAudioId ?? "0", ["behavior"] = "play",
+            ["pid"] = "2", ["cmd"] = "26", ["pidversion"] = "3001", ["IsFreePart"] = "1",
+            ["cdnBackup"] = "1", ["module"] = ""
+        };
+        gateway["key"] = Md5(hash + KugouSignSalt + "1014" + auth.Mid + auth.UserId);
+        gateway["signature"] = KugouSignature(gateway, "");
+        using var gatewayRequest = new HttpRequestMessage(HttpMethod.Get, "https://gateway.kugou.com/v5/url?" + QueryString(gateway));
+        gatewayRequest.Headers.TryAddWithoutValidation("x-router", "trackercdn.kugou.com");
+        gatewayRequest.Headers.TryAddWithoutValidation("Cookie", cookie);
+        AddProviderHeaders(gatewayRequest, "https://www.kugou.com/", KugouGatewayAgent);
+        using var gatewayResponse = await Http.SendAsync(gatewayRequest, cancellationToken);
+        gatewayResponse.EnsureSuccessStatusCode();
+        var stream = KugouStreamUrl(JsonNode.Parse(await gatewayResponse.Content.ReadAsStringAsync(cancellationToken)));
+        return Uri.TryCreate(stream, UriKind.Absolute, out var result) ? result : throw new InvalidOperationException("酷狗未返回可播放地址（可能受版权或会员限制）。");
+    }
+
+    private static string? KugouStreamUrl(JsonNode? root)
+    {
+        static string? Text(JsonNode? node) => node is JsonValue value && value.TryGetValue<string>(out var text) && text.Length > 0 ? text : null;
+        var url = Text(root?["url"]) ?? Text(root?["play_url"]) ?? Text(root?["data"]?["url"]) ?? Text(root?["data"]?["play_url"]);
+        if (url is null && root?["data"]?["url"] is JsonArray urls) url = urls.Select(Text).FirstOrDefault(item => item is not null);
+        return url;
+    }
+
+    private static string KugouSignature(Dictionary<string, string> parameters, string body) =>
+        Md5(KugouH5Salt + string.Concat(parameters.OrderBy(pair => pair.Key, StringComparer.Ordinal).Select(pair => pair.Key + "=" + pair.Value)) + body + KugouH5Salt);
+
+    private static string QueryString(Dictionary<string, string> parameters) =>
+        string.Join("&", parameters.Select(pair => $"{Uri.EscapeDataString(pair.Key)}={Uri.EscapeDataString(pair.Value)}"));
+
+    private async Task<JsonNode> KugouH5RequestAsync(string path, KugouAuth auth, string cookie, IReadOnlyList<(string Key, JsonNode Value)> body, CancellationToken ct)
+    {
+        var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds().ToString();
         var parameters = new Dictionary<string, string>
         {
-            ["hash"] = track.Hash, ["album_id"] = track.AlbumId ?? "0", ["album_audio_id"] = track.AlbumAudioId ?? "0",
-            ["srcappid"] = "2919", ["clientver"] = "20000", ["uuid"] = mid, ["mid"] = mid,
-            ["userid"] = userId!, ["token"] = token!
+            ["srcappid"] = "2919", ["clientver"] = "20000", ["clienttime"] = now, ["mid"] = auth.Mid,
+            ["uuid"] = now, ["dfid"] = auth.Dfid, ["appid"] = "1014", ["token"] = auth.Token ?? "",
+            ["userid"] = auth.UserId ?? "0", ["plat"] = "1"
         };
-        const string salt = "NVPh5oo715z5DIWAeQlhMDsWXXQV4hwt";
-        parameters["signature"] = Md5(salt + string.Join("", parameters.OrderBy(pair => pair.Key).Select(pair => pair.Key + "=" + pair.Value)) + salt);
-        var url = "https://wwwapi.kugou.com/play/songinfo?" + string.Join("&", parameters.Select(pair => $"{Uri.EscapeDataString(pair.Key)}={Uri.EscapeDataString(pair.Value)}"));
-        using var request = new HttpRequestMessage(HttpMethod.Get, url);
-        request.Headers.TryAddWithoutValidation("Cookie", cookie);
-        AddProviderHeaders(request, "https://www.kugou.com/", "Mozilla/5.0");
-        using var response = await Http.SendAsync(request, cancellationToken);
+        // The signature covers the exact body text, so fields keep the Mac/Bridge order.
+        var bodyText = "{" + string.Join(",", body.Select(field => JsonSerializer.Serialize(field.Key) + ":" + field.Value.ToJsonString())) + "}";
+        parameters["signature"] = KugouSignature(parameters, bodyText);
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"https://gateway.kugou.com{path}?{QueryString(parameters)}")
+        {
+            Content = new StringContent(bodyText, Encoding.UTF8, "application/json")
+        };
+        request.Headers.TryAddWithoutValidation("x-router", "cloudlist.service.kugou.com");
+        if (!string.IsNullOrWhiteSpace(cookie)) request.Headers.TryAddWithoutValidation("Cookie", cookie);
+        AddProviderHeaders(request, "https://www.kugou.com/", KugouGatewayAgent);
+        using var response = await Http.SendAsync(request, ct);
         response.EnsureSuccessStatusCode();
-        var root = JsonNode.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
-        var stream = root?["url"]?.GetValue<string>() ?? root?["play_url"]?.GetValue<string>() ?? root?["data"]?["url"]?.GetValue<string>();
-        return Uri.TryCreate(stream, UriKind.Absolute, out var result) ? result : throw new InvalidOperationException("酷狗未返回可播放地址。");
+        var root = JsonNode.Parse(await response.Content.ReadAsStringAsync(ct)) ?? new JsonObject();
+        if (root["status"] is JsonValue status && status.TryGetValue<int>(out var code) && code != 1)
+            throw new InvalidOperationException("酷狗接口拒绝了请求，请重新登录酷狗后再试。");
+        return root;
+    }
+
+    private async Task<IReadOnlyList<PlatformPlaylist>> GetKugouPlaylistsAsync(int limit, CancellationToken ct)
+    {
+        var cookie = _credentials.Load("Kugou") ?? "";
+        var auth = KugouAuth.From(cookie);
+        if (string.IsNullOrWhiteSpace(auth.UserId) || string.IsNullOrWhiteSpace(auth.Token))
+            throw new InvalidOperationException("请先登录酷狗音乐。");
+        var root = await KugouH5RequestAsync("/v7/get_all_list", auth, cookie,
+        [
+            ("userid", JsonValue.Create(long.TryParse(auth.UserId, out var uid) ? uid : 0)), ("token", JsonValue.Create(auth.Token)),
+            ("total_ver", JsonValue.Create(979)), ("type", JsonValue.Create(2)), ("page", JsonValue.Create(1)),
+            ("pagesize", JsonValue.Create(Math.Clamp(limit, 50, 100)))
+        ], ct);
+        var data = root["data"] as JsonObject ?? new JsonObject();
+        var info = data["info"] as JsonObject ?? data;
+        var rows = new[] { data["info"], data["list"], info["collect"], info["love"], info["self"], info["list"] }
+            .OfType<JsonArray>().SelectMany(array => array);
+        var seen = new HashSet<string>();
+        var playlists = new List<PlatformPlaylist>();
+        foreach (var row in rows)
+        {
+            var id = NodeText(row?["global_collection_id"]) ?? NodeText(row?["specialid"]) ?? NodeText(row?["listid"])
+                ?? NodeText(row?["list_id"]) ?? NodeText(row?["id"]);
+            if (id is null || !seen.Add(id)) continue;
+            var name = StripHtml(NodeText(row?["name"]) ?? NodeText(row?["listname"]) ?? NodeText(row?["specialname"]) ?? NodeText(row?["title"]) ?? "酷狗歌单");
+            var cover = NodeText(row?["pic"]) ?? NodeText(row?["img"]) ?? NodeText(row?["imgurl"]) ?? NodeText(row?["sizable_cover"]) ?? NodeText(row?["create_user_pic"]);
+            var count = NodeText(row?["count"]) ?? NodeText(row?["m_count"]) ?? NodeText(row?["song_count"]) ?? NodeText(row?["total"]);
+            playlists.Add(new PlatformPlaylist(id, MusicProvider.Kugou, name, cover?.Replace("{size}", "240"), int.TryParse(count, out var parsed) ? parsed : null));
+        }
+        return playlists;
+    }
+
+    private async Task<IReadOnlyList<PlatformTrack>> GetKugouPlaylistTracksAsync(string id, int limit, int offset, CancellationToken ct)
+    {
+        var cookie = _credentials.Load("Kugou") ?? "";
+        var auth = KugouAuth.From(cookie);
+        if (string.IsNullOrWhiteSpace(auth.UserId) || string.IsNullOrWhiteSpace(auth.Token))
+            throw new InvalidOperationException("请先登录酷狗音乐。");
+        var digits = System.Text.RegularExpressions.Regex.Match(id, @"\d+").Value;
+        var pageSize = Math.Clamp(limit, 1, 50);
+        JsonNode listId = long.TryParse(digits, out var numericId) ? JsonValue.Create(numericId) : JsonValue.Create(id);
+        var root = await KugouH5RequestAsync("/v4/get_list_all_file", auth, cookie,
+        [
+            ("listid", listId), ("userid", JsonValue.Create(long.TryParse(auth.UserId, out var uid) ? uid : 0)),
+            ("area_code", JsonValue.Create(1)), ("show_relate_goods", JsonValue.Create(0)), ("pagesize", JsonValue.Create(pageSize)),
+            ("allplatform", JsonValue.Create(1)), ("show_cover", JsonValue.Create(1)), ("type", JsonValue.Create(0)),
+            ("token", JsonValue.Create(auth.Token)), ("page", JsonValue.Create(Math.Max(0, offset) / pageSize + 1))
+        ], ct);
+        var data = root["data"] as JsonObject ?? new JsonObject();
+        var info = data["info"] ?? data["songs"] ?? data["lists"] ?? data["file"];
+        var rows = info as JsonArray ?? info?["file"] as JsonArray ?? [];
+        return rows.Select(DecodeKugouPlaylistTrack).OfType<PlatformTrack>().ToArray();
+    }
+
+    private static PlatformTrack? DecodeKugouPlaylistTrack(JsonNode? row)
+    {
+        var hash = NodeText(row?["hash"]) ?? NodeText(row?["FileHash"]);
+        if (hash is null) return null;
+        var singers = (row?["singerinfo"] ?? row?["Singers"]) as JsonArray ?? [];
+        var singer = string.Join(" / ", singers.Select(item => NodeText(item?["name"]) ?? NodeText(item?["SingerName"])).Where(name => name is not null));
+        var title = NodeText(row?["name"]) ?? NodeText(row?["SongName"]) ?? NodeText(row?["filename"]) ?? "";
+        if (singer.Length == 0) singer = NodeText(row?["SingerName"]) ?? "";
+        if (title.Length == 0) return null;
+        var duration = double.TryParse(NodeText(row?["duration"]) ?? NodeText(row?["Duration"]), out var seconds) ? seconds
+            : double.TryParse(NodeText(row?["timelen"]), out var milliseconds) ? milliseconds / 1000 : 0;
+        var cover = NodeText(row?["cover"]) ?? NodeText(row?["img"]) ?? NodeText(row?["Image"]) ?? NodeText(row?["trans_param"]?["union_cover"]);
+        return new PlatformTrack(hash, MusicProvider.Kugou, StripHtml(title), singer,
+            NodeText(row?["album_name"]) ?? NodeText(row?["AlbumName"]) ?? NodeText(row?["albuminfo"]?["name"]) ?? "",
+            duration, cover?.Replace("{size}", "240"), Hash: hash,
+            AlbumId: NodeText(row?["album_id"]) ?? NodeText(row?["AlbumID"]) ?? NodeText(row?["albuminfo"]?["id"]),
+            AlbumAudioId: NodeText(row?["album_audio_id"]) ?? NodeText(row?["mixsongid"]) ?? NodeText(row?["MixSongID"]));
+    }
+
+    private static string? NodeText(JsonNode? node)
+    {
+        if (node is not JsonValue value) return null;
+        if (value.TryGetValue<string>(out var text)) return text.Length > 0 ? text : null;
+        if (value.TryGetValue<long>(out var integer)) return integer.ToString();
+        if (value.TryGetValue<double>(out var number)) return number.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        return null;
     }
 
     private async Task<JsonNode> NetEaseRequestAsync(string path, JsonObject payload, CancellationToken cancellationToken)
@@ -332,9 +532,6 @@ public sealed class PlatformMusicService
             catch { throw new InvalidOperationException("网易云接口返回了无法识别的数据。"); }
         }
     }
-
-    private async Task<IReadOnlyList<PlatformPlaylist>> GetKugouPlaylistsAsync(int limit, CancellationToken ct) => throw new NotSupportedException("Windows 酷狗歌单读取需要当前登录会话支持 cloudlist H5 接口，暂未移植。");
-    private async Task<IReadOnlyList<PlatformTrack>> GetKugouPlaylistTracksAsync(string id, int limit, int offset, CancellationToken ct) => throw new NotSupportedException("Windows 酷狗歌单歌曲读取需要当前登录会话支持 cloudlist H5 接口，暂未移植。");
 
     private async Task<JsonNode> GetJsonAsync(string endpoint, Dictionary<string, string> parameters, string cookie, CancellationToken ct)
     {

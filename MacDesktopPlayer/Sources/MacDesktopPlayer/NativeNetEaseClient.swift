@@ -189,6 +189,36 @@ actor NativeNetEaseClient {
                                 ))
     }
 
+    /// Temporary MV stream for an account that can already play the song.
+    /// The URL expires and is only for in-player seeking, not a saved clip.
+    func musicVideoURL(trackID: String) async throws -> URL? {
+        let cookie = try PlatformCredentialStore.shared.load(for: .netease)
+        let idJSON = "[{\"id\":\(trackID)}]"
+        let detail = try await request("/api/v3/song/detail", payload: ["c": idJSON], cookie: cookie, mode: .weapi)
+        guard let song = (detail["songs"] as? [[String: Any]])?.first else { return nil }
+        let mvID = Self.integer(song["mv"]) ?? Self.integer(song["mvid"]) ?? 0
+        guard mvID > 0 else { return nil }
+        var lastError: Error?
+        for resolution in [1080, 720, 480] {
+            do {
+                let response = try await request("/api/song/enhance/play/mv/url", payload: [
+                    "id": mvID,
+                    "r": resolution
+                ], cookie: cookie, mode: .eapi)
+                let row = (response["data"] as? [String: Any])
+                    ?? (response["data"] as? [[String: Any]])?.first
+                    ?? [:]
+                if let url = URL(string: Self.string(row["url"]) ?? ""), url.scheme?.hasPrefix("http") == true {
+                    return url
+                }
+            } catch {
+                lastError = error
+            }
+        }
+        if let lastError { throw lastError }
+        return nil
+    }
+
     private enum RequestMode: Equatable { case eapi, weapi }
 
     private func request(_ uri: String, payload: [String: Any], cookie: String?, mode: RequestMode) async throws -> [String: Any] {

@@ -260,11 +260,11 @@ DesktopDotParticleOut desktopCoverReliefVertex(
 
 CoverMoodColors coverMood() {
     CoverMoodColors m;
-    m.atmosphere=float4(1,.88,.72,1); m.volumetricBeam=float4(1,.85,.65,1);
-    m.topLightArray=float4(.3,.6,1,1); m.laserFanBlue=float4(.25,.55,1,1);
-    m.laserFanGreen=float4(.35,1,.45,1); m.rotatingBeam=float4(1,.4,.8,1);
-    m.rotatingBeamExtra=float4(1,.5,.9,1); m.edgeLight=float4(1,.75,.35,1);
-    m.coronaFilaments=float4(.9,.6,.8,1); m.pulseRing=float4(.8,.3,1,1);
+    m.atmosphere=moodColors[0]; m.volumetricBeam=moodColors[1];
+    m.topLightArray=moodColors[2]; m.laserFanBlue=moodColors[3];
+    m.laserFanGreen=moodColors[4]; m.rotatingBeam=moodColors[5];
+    m.rotatingBeamExtra=moodColors[6]; m.edgeLight=moodColors[7];
+    m.coronaFilaments=moodColors[8]; m.pulseRing=moodColors[9];
     return m;
 }
 CoverDotVisualAudio coverAudio() {

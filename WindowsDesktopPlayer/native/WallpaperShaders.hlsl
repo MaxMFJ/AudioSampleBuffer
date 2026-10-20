@@ -31,6 +31,13 @@ cbuffer WallpaperConstants : register(b0)
     float4 instrumentEnvelopes;
     float4 dspFeatureSignals;
     float4 dspFeatureTexture;
+    // DesktopMoodService order: atmosphere, volumetricBeam, topLightArray,
+    // laserFanBlue, laserFanGreen, rotatingBeam, rotatingBeamExtra, edgeLight,
+    // coronaFilaments, pulseRing.
+    float4 moodColors[10];
+    float4 guitarSurgePhase;  // cycle phase, beat phase, bpm, guitar drive
+    float4 guitarSurgeLevels; // drum pulse, activity, enabled
+    float4 displayOptions;    // x: circular record on effects without a cover stage
 };
 
 Texture2D artwork : register(t0);
@@ -103,6 +110,35 @@ float3 hexMorph(float2 uv) {
     }
     return color;
 }
+// Port of GuitarSurge.metal, drawn additively over the selected effect.
+float4 guitarSurgePS(VSOut input) : SV_Target {
+    float2 uv = float2(input.uv.x, 1.0 - input.uv.y);
+    float phase = frac(guitarSurgePhase.x);
+    float beat = frac(guitarSurgePhase.y);
+    float scanX = lerp(-0.18, 1.18, phase);
+    float ripple = 0.025 * sin(uv.y * 12.0 - beat * 6.2831853 + uv.x * 3.0);
+    float distance = uv.x - scanX + ripple;
+    float head = exp(-distance * distance * 1700.0);
+    float glow = exp(-distance * distance * 90.0);
+    float tail = distance > 0.0 ? exp(-distance * 9.0) : 0.0;
+    float sweep = saturate(head * 0.95 + glow * 0.42 + tail * 0.10);
+
+    float2 centered = (uv - 0.5) * float2(1.0, 0.70);
+    float radius = length(centered);
+    float drumPulse = guitarSurgeLevels.x;
+    // HLSL pow() is undefined for negative bases; square explicitly.
+    float ringOffset = (radius - beat * 0.95) / 0.018;
+    float drumRing = exp(-ringOffset * ringOffset) * drumPulse;
+    float drumFlash = drumPulse * 0.11;
+
+    float guitarDrive = saturate(guitarSurgePhase.w);
+    float intensity = saturate(guitarSurgeLevels.y) * (0.30 + guitarDrive * 0.42);
+    float3 waveColor = lerp(moodColors[1].rgb, float3(1.0, 0.91, 0.76), saturate(head * 0.85 + guitarDrive * 0.25));
+    float3 color = waveColor * sweep * intensity + moodColors[9].rgb * (drumRing * 0.72 + drumFlash);
+    float alpha = saturate(sweep * intensity * 0.68 + drumRing * 0.40 + drumFlash * 0.65);
+    return float4(color, alpha);
+}
+
 float4 wallpaperPS(VSOut input) : SV_Target {
     float3 color=float3(0,0,0);
     if(effectIndex==0) color=cellular(input.uv);

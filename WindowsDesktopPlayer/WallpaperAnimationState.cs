@@ -15,7 +15,7 @@ internal sealed class WallpaperAnimationState
     public float PianoEnvelope { get; private set; }
 
     private readonly float[] _previous = new float[2];
-    private readonly float[] _activationDurations = { 12f, 14f, 15.384615f, 9f };
+    private readonly float[] _activationDurations = { 12f, 3f, 15.384615f, 9f };
     private readonly float[] _thresholds = { .02f, .02f, .12f, .13f };
     private readonly float[] _minimums = { .08f, .13f, .20f, .20f };
     private float _lastTime = -1;
@@ -76,10 +76,103 @@ internal sealed class WallpaperAnimationState
     {
         if (!playing) { AnimationStarts[i] = -1; AnimationStrengths[i] = 0; return; }
         bool active = AnimationStarts[i] >= 0 && time - AnimationStarts[i] < _activationDurations[i];
-        if (!active && input >= _thresholds[i]) { AnimationStarts[i] = time; AnimationStrengths[i] = Math.Max(input, _minimums[i]); return; }
+        if (!active && input >= _thresholds[i])
+        {
+            // Restarting an expired window skips the fade-in so continuous music never flashes dark.
+            AnimationStarts[i] = AnimationStarts[i] >= 0 ? time - .45f : time;
+            AnimationStrengths[i] = Math.Max(input, _minimums[i]);
+            return;
+        }
         if (!active) { AnimationStarts[i] = -1; AnimationStrengths[i] = 0; return; }
         float target = Math.Max(input, _minimums[i]);
         float rate = target > AnimationStrengths[i] ? 10 : 4;
         AnimationStrengths[i] += (target - AnimationStrengths[i]) * (1 - MathF.Exp(-rate * dt));
+    }
+}
+
+/// <summary>Beat-locked full-screen guitar sweep, ported from the Mac GuitarSurgeOverlayRenderer.</summary>
+internal sealed class GuitarSurgeState
+{
+    /// <summary>cyclePhase, beatPhase, bpm, guitar drive.</summary>
+    public float[] Phase { get; } = new float[4];
+    /// <summary>drum pulse, activity, enabled, unused.</summary>
+    public float[] Levels { get; } = new float[4];
+
+    private readonly List<float> _beatIntervals = [];
+    private float _lastTime;
+    private float _previousBass, _previousDrums;
+    private float _lastBeatTime = -10;
+    private float _beatPosition;
+    private bool _hasBeatAnchor;
+    private float _lastPlaybackTime;
+    private float _bpm = 120;
+    private float _beatPulse;
+    private float _activity;
+    private bool _guitarWasActive;
+
+    public void Update(float now, float playbackTime, float bassInput, float mid, float treble,
+                       float guitarInput, float drumsInput, float electricGuitarConfidence, bool enabled)
+    {
+        Levels[2] = 0;
+        float dt = _lastTime > 0 ? Math.Clamp(now - _lastTime, 0, .1f) : 0;
+        _lastTime = now;
+        if (dt <= 0) return;
+        if (playbackTime + .1f < _lastPlaybackTime)
+        {
+            _beatIntervals.Clear();
+            _bpm = 120; _beatPosition = 0; _hasBeatAnchor = false;
+            _lastBeatTime = -10; _beatPulse = 0; _activity = 0; _guitarWasActive = false;
+        }
+        _lastPlaybackTime = playbackTime;
+
+        float bass = Math.Clamp(bassInput, 0, 1), drums = Math.Clamp(drumsInput, 0, 1), guitar = Math.Clamp(guitarInput, 0, 1);
+        bool bassHit = bass > .18f && bass - _previousBass > Math.Max(.055f, bass * .14f);
+        bool drumHit = drums > .58f && drums - _previousDrums > .10f;
+        if ((bassHit || drumHit) && now - _lastBeatTime > .24f)
+        {
+            float interval = now - _lastBeatTime;
+            if (interval is >= .28f and <= 1f)
+            {
+                float candidate = 60 / interval;
+                float normalized = candidate > 180 ? candidate / 2 : candidate < 70 ? candidate * 2 : candidate;
+                if (normalized is >= 70 and <= 180)
+                {
+                    _beatIntervals.Add(normalized);
+                    if (_beatIntervals.Count > 6) _beatIntervals.RemoveAt(0);
+                    var sorted = _beatIntervals.Order().ToArray();
+                    _bpm += (sorted[sorted.Length / 2] - _bpm) * .20f;
+                }
+            }
+            _lastBeatTime = now;
+            _beatPosition = _hasBeatAnchor ? (_beatPosition + 1) % 4 : 0;
+            _hasBeatAnchor = true;
+            _beatPulse = Math.Max(_beatPulse, drumHit ? Math.Max(drums, .65f) : Math.Max(bass, .45f));
+        }
+        _beatPulse *= MathF.Exp(-8.5f * dt);
+        _previousBass = bass;
+        _previousDrums = drums;
+
+        bool electricClassified = electricGuitarConfidence >= .28f;
+        float spectralGuitar = Math.Clamp(mid * .55f + treble * .85f, 0, 1);
+        float drive = Math.Max(guitar, electricClassified ? spectralGuitar * electricGuitarConfidence : 0);
+        bool gate = _guitarWasActive
+            ? drive >= (electricClassified ? .36f : .62f) && treble >= .18f
+            : (electricClassified && drive >= .50f && treble >= .22f)
+              || (guitar >= .76f && treble >= .28f)
+              || (mid >= .42f && treble >= .43f);
+        _guitarWasActive = gate;
+        float target = enabled && gate ? Math.Max(drive, .58f) : 0;
+        float smoothing = target > _activity ? 7f : 2.2f;
+        _activity += (target - _activity) * (1 - MathF.Exp(-smoothing * dt));
+
+        if (!enabled || (_activity <= .015f && _beatPulse <= .02f)) return;
+        float beatPhase = Math.Max(0, now - _lastBeatTime) / (60 / Math.Max(_bpm, 70)) % 1;
+        Phase[0] = (_beatPosition + beatPhase) / 4 % 1;
+        Phase[1] = beatPhase;
+        Phase[2] = _bpm;
+        Phase[3] = drive;
+        Levels[0] = _beatPulse;
+        Levels[1] = _activity;
+        Levels[2] = 1;
     }
 }

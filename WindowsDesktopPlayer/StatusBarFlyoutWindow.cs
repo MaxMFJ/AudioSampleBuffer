@@ -1,30 +1,35 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
-using System.Windows.Media.Imaging;
+using System.Windows.Media.Effects;
 
 namespace SoundDesk;
 
+/// <summary>Notification-area popover mirroring the Mac status bar player: artwork backdrop
+/// under a dark scrim, centered metadata, seek bar, transport, console and quit actions.</summary>
 public sealed class StatusBarFlyoutWindow : Window
 {
-    private readonly TextBlock _title = new() { Text = "尚未播放", FontSize = 14, FontWeight = FontWeights.SemiBold, Foreground = Brushes.White, TextTrimming = TextTrimming.CharacterEllipsis };
-    private readonly TextBlock _artist = new() { Foreground = Brushes.LightGray, FontSize = 11 };
-    private readonly TextBlock _elapsed = new() { Width = 40, Foreground = Brushes.LightGray, FontSize = 10 };
-    private readonly TextBlock _duration = new() { Width = 40, Foreground = Brushes.LightGray, FontSize = 10, TextAlignment = TextAlignment.Right };
-    private readonly Image _artwork = new() { Width = 58, Height = 58, Stretch = Stretch.UniformToFill };
-    private readonly Slider _progress = new() { Minimum = 0, Maximum = 1, Height = 24 };
-    private readonly Button _play = new() { Content = "▶", Width = 42 };
-    private readonly Button _repeat = new() { Content = "顺序播放", MinWidth = 76 };
-    private readonly Action _toggle, _previous, _next, _repeatAction, _openConsole, _openSongs, _openLyrics;
+    private const double PopoverWidth = 360;
+    private const double PopoverHeight = 292;
+
+    private readonly TextBlock _title = new() { Text = "尚未播放", FontSize = 16, FontWeight = FontWeights.SemiBold, Foreground = Brushes.White, TextTrimming = TextTrimming.CharacterEllipsis, TextAlignment = TextAlignment.Center };
+    private readonly TextBlock _artist = new() { Foreground = new SolidColorBrush(Color.FromArgb(200, 255, 255, 255)), FontSize = 12, Margin = new Thickness(0, 4, 0, 0), TextTrimming = TextTrimming.CharacterEllipsis, TextAlignment = TextAlignment.Center };
+    private readonly TextBlock _elapsed = new() { Width = 40, Foreground = Brushes.Gainsboro, FontSize = 10, VerticalAlignment = VerticalAlignment.Center };
+    private readonly TextBlock _duration = new() { Width = 40, Foreground = Brushes.Gainsboro, FontSize = 10, TextAlignment = TextAlignment.Right, VerticalAlignment = VerticalAlignment.Center };
+    private readonly Image _artwork = new() { Stretch = Stretch.UniformToFill, Effect = new BlurEffect { Radius = 18 }, Margin = new Thickness(-24) };
+    private readonly Slider _progress = new() { Minimum = 0, Maximum = 1, VerticalAlignment = VerticalAlignment.Center };
+    private readonly Button _play = new() { Content = "▶", Width = 54, Height = 40, FontSize = 16 };
+    private readonly Button _repeat = new() { Content = "顺序播放", Height = 30, Padding = new Thickness(12, 0, 12, 0), FontSize = 12 };
+    private readonly Action _toggle, _previous, _next, _repeatAction, _openConsole, _exit;
     private readonly Action<double> _seek;
     private bool _dragging;
 
     public StatusBarFlyoutWindow(Action toggle, Action previous, Action next, Action repeatAction,
-        Action<double> seek, Action openConsole, Action openSongs, Action openLyrics)
+        Action<double> seek, Action openConsole, Action exit)
     {
         _toggle = toggle; _previous = previous; _next = next; _repeatAction = repeatAction; _seek = seek;
-        _openConsole = openConsole; _openSongs = openSongs; _openLyrics = openLyrics;
-        Width = 360; Height = 290;
+        _openConsole = openConsole; _exit = exit;
+        Width = PopoverWidth; Height = PopoverHeight;
         WindowStyle = WindowStyle.None; ResizeMode = ResizeMode.NoResize;
         ShowInTaskbar = false; Topmost = true; AllowsTransparency = true;
         Background = Brushes.Transparent; ShowActivated = true;
@@ -41,7 +46,7 @@ public sealed class StatusBarFlyoutWindow : Window
         ImageSource? artwork, double position, double duration)
     {
         _title.Text = string.IsNullOrWhiteSpace(title) ? "尚未播放" : title;
-        _artist.Text = artist;
+        _artist.Text = string.IsNullOrWhiteSpace(artist) ? "Sound Desk" : artist;
         _artwork.Source = artwork;
         _play.Content = isPlaying ? "Ⅱ" : "▶";
         _repeat.Content = repeatMode switch { 1 => "列表循环", 2 => "单曲循环", _ => "顺序播放" };
@@ -63,45 +68,56 @@ public sealed class StatusBarFlyoutWindow : Window
 
     private UIElement BuildContent()
     {
-        var panel = new StackPanel { Margin = new Thickness(18) };
-        var card = new Border
-        {
-            CornerRadius = new CornerRadius(18), Padding = new Thickness(16),
-            BorderThickness = new Thickness(1), BorderBrush = new SolidColorBrush(Color.FromArgb(65, 255, 255, 255)),
-            Background = new SolidColorBrush(Color.FromArgb(245, 24, 30, 45)), Child = panel
-        };
-        panel.Children.Add(new TextBlock { Text = "SOUND DESK", Foreground = Brushes.LightSteelBlue, FontSize = 10, FontWeight = FontWeights.Bold, Margin = new Thickness(0, 0, 0, 12) });
-        var meta = new Grid { Height = 58, Margin = new Thickness(0, 0, 0, 8) };
-        meta.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(58) });
-        meta.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(12) });
-        meta.ColumnDefinitions.Add(new ColumnDefinition());
-        _artwork.Clip = new RectangleGeometry(new Rect(0, 0, 58, 58), 10, 10);
-        meta.Children.Add(_artwork);
-        var text = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
-        text.Children.Add(_title); text.Children.Add(_artist);
-        Grid.SetColumn(text, 2); meta.Children.Add(text);
-        panel.Children.Add(meta);
-        var seek = new Grid { Margin = new Thickness(0, 4, 0, 4) };
+        var layers = new Grid();
+        layers.Children.Add(new Border { Background = new SolidColorBrush(Color.FromRgb(24, 30, 45)) });
+        layers.Children.Add(_artwork);
+        layers.Children.Add(new Border { Background = new SolidColorBrush(Color.FromArgb(148, 0, 0, 0)) });
+
+        var panel = new StackPanel { Margin = new Thickness(22, 26, 22, 18), VerticalAlignment = VerticalAlignment.Center };
+        panel.Children.Add(_title);
+        panel.Children.Add(_artist);
+
+        var seek = new Grid { Margin = new Thickness(0, 22, 0, 6) };
         seek.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(40) });
         seek.ColumnDefinitions.Add(new ColumnDefinition());
         seek.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(40) });
-        seek.Children.Add(_elapsed); Grid.SetColumn(_progress, 1); seek.Children.Add(_progress);
-        Grid.SetColumn(_duration, 2); seek.Children.Add(_duration); panel.Children.Add(seek);
-        var controls = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 6, 0, 10) };
-        var previous = new Button { Content = "|◀", Width = 44 }; previous.Click += (_, _) => _previous();
-        var next = new Button { Content = "▶|", Width = 44 }; next.Click += (_, _) => _next();
-        controls.Children.Add(previous); controls.Children.Add(_play); controls.Children.Add(next); controls.Children.Add(_repeat);
+        seek.Children.Add(_elapsed);
+        Grid.SetColumn(_progress, 1); seek.Children.Add(_progress);
+        Grid.SetColumn(_duration, 2); seek.Children.Add(_duration);
+        panel.Children.Add(seek);
+
+        var controls = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 8, 0, 10) };
+        var previous = new Button { Content = "⏮", Width = 44, Height = 34, Margin = new Thickness(0, 0, 14, 0) };
+        previous.Click += (_, _) => _previous();
+        var next = new Button { Content = "⏭", Width = 44, Height = 34, Margin = new Thickness(14, 0, 0, 0) };
+        next.Click += (_, _) => _next();
+        controls.Children.Add(previous); controls.Children.Add(_play); controls.Children.Add(next);
         panel.Children.Add(controls);
-        var actions = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center };
-        var songs = new Button { Content = "歌曲列表", Margin = new Thickness(3), Padding = new Thickness(8, 5, 8, 5) };
-        var lyrics = new Button { Content = "歌词管理", Margin = new Thickness(3), Padding = new Thickness(8, 5, 8, 5) };
-        var console = new Button { Content = "打开控制台", Margin = new Thickness(3), Padding = new Thickness(8, 5, 8, 5) };
-        songs.Click += (_, _) => { Hide(); _openSongs(); };
-        lyrics.Click += (_, _) => { Hide(); _openLyrics(); };
+
+        var repeatRow = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 0, 0, 12) };
+        repeatRow.Children.Add(_repeat);
+        panel.Children.Add(repeatRow);
+
+        var actions = new Grid();
+        actions.ColumnDefinitions.Add(new ColumnDefinition());
+        actions.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(10) });
+        actions.ColumnDefinitions.Add(new ColumnDefinition());
+        var console = new Button { Content = "打开控制台", Height = 32 };
         console.Click += (_, _) => { Hide(); _openConsole(); };
-        actions.Children.Add(songs); actions.Children.Add(lyrics); actions.Children.Add(console);
+        var quit = new Button { Content = "退出程序", Height = 32 };
+        quit.Click += (_, _) => { Hide(); _exit(); };
+        actions.Children.Add(console);
+        Grid.SetColumn(quit, 2); actions.Children.Add(quit);
         panel.Children.Add(actions);
-        return card;
+        layers.Children.Add(panel);
+
+        return new Border
+        {
+            CornerRadius = new CornerRadius(16), ClipToBounds = true,
+            BorderThickness = new Thickness(1), BorderBrush = new SolidColorBrush(Color.FromArgb(65, 255, 255, 255)),
+            Child = layers,
+            Clip = new RectangleGeometry(new Rect(0, 0, PopoverWidth, PopoverHeight), 16, 16)
+        };
     }
 
     private static string TimeLabel(double seconds)

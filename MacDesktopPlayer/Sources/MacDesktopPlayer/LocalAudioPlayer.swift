@@ -52,7 +52,9 @@ final class LocalAudioPlayer {
     private(set) var dspFeatureSignals = SIMD4<Float>(repeating: 0)
     private(set) var dspFeatureTexture = SIMD4<Float>(repeating: 0)
     private(set) var currentURL: URL?
+    private(set) var currentNeteaseTrackID: String?
     let lyricsController = DesktopLyricsController()
+    private let signatureMV = SignatureMVClipPlayer()
     var electricGuitarConfidence: Float = 0
     private(set) var guitarSurgeEnabled = UserDefaults.standard.object(forKey: "desktopGuitarSurgeEnabled") == nil
         ? true : UserDefaults.standard.bool(forKey: "desktopGuitarSurgeEnabled")
@@ -126,6 +128,8 @@ final class LocalAudioPlayer {
             pausedPlaybackTime = nil
             currentTitle = title ?? url.deletingPathExtension().lastPathComponent
             currentArtist = artist
+            currentNeteaseTrackID = neteaseTrackID
+            signatureMV.prepare(trackID: neteaseTrackID, title: currentTitle)
             lyricsController.load(for: url, title: title ?? url.deletingPathExtension().lastPathComponent,
                                  artist: artist, neteaseTrackID: neteaseTrackID, duration: duration)
             let format = audioFile.processingFormat
@@ -178,6 +182,8 @@ final class LocalAudioPlayer {
         // runs so a stopped song cannot restart or advance the new song.
         playbackScheduleGeneration &+= 1
         lyricsController.clear()
+        signatureMV.stop()
+        currentNeteaseTrackID = nil
 #if !SWIFT_PACKAGE
         trackGeneration += 1
         HTDemucsMacAnalyzer.shared().cancelCurrentAnalysis()
@@ -298,7 +304,7 @@ final class LocalAudioPlayer {
             let artist = currentArtist
             let artwork = currentArtwork
             guard let url else { return }
-            play(url: url, title: title, artist: artist)
+            play(url: url, title: title, artist: artist, neteaseTrackID: currentNeteaseTrackID)
             setArtwork(artwork)
         case .all:
             guard let currentTrackID, !playbackQueue.isEmpty,
@@ -308,7 +314,7 @@ final class LocalAudioPlayer {
                 let artist = currentArtist
                 let artwork = currentArtwork
                 if let url {
-                    play(url: url, title: title, artist: artist)
+                    play(url: url, title: title, artist: artist, neteaseTrackID: currentNeteaseTrackID)
                     setArtwork(artwork)
                 }
                 return
@@ -411,6 +417,7 @@ final class LocalAudioPlayer {
             visualGuitarPeak += (peakTarget - visualGuitarPeak) * (1 - exp(-peakRate / 60.0))
         }
         let vocal = vocalCurve.isEmpty ? 0 : interpolated(vocalCurve, at: playbackTime, interval: 0.48)
+        signatureMV.tick(title: currentTitle, time: Double(playbackTime), playing: isPlaying, lines: lyricsController.lyricLines)
         return VisualAudio(time: time, bass: levels.0, mid: levels.1, treble: levels.2,
                            aspectRatio: aspectRatio, guitar: guitar,
                            piano: hasPianoStem

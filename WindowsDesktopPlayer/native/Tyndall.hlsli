@@ -749,11 +749,11 @@ TyndallVisualAudio tyndallAudio() {
 float3 tyndall(float2 inputUV) {
     TyndallVisualAudio uniforms=tyndallAudio();
     DesktopMoodColors mood;
-    mood.atmosphere=float4(1,.88,.72,1); mood.volumetricBeam=float4(1,.85,.65,1);
-    mood.topLightArray=float4(.3,.6,1,1); mood.laserFanBlue=float4(.25,.55,1,1);
-    mood.laserFanGreen=float4(.35,1,.45,1); mood.rotatingBeam=float4(1,.4,.8,1);
-    mood.rotatingBeamExtra=float4(1,.5,.9,1); mood.edgeLight=float4(1,.75,.35,1);
-    mood.coronaFilaments=float4(.9,.6,.8,1); mood.pulseRing=float4(.8,.3,1,1);
+    mood.atmosphere=moodColors[0]; mood.volumetricBeam=moodColors[1];
+    mood.topLightArray=moodColors[2]; mood.laserFanBlue=moodColors[3];
+    mood.laserFanGreen=moodColors[4]; mood.rotatingBeam=moodColors[5];
+    mood.rotatingBeamExtra=moodColors[6]; mood.edgeLight=moodColors[7];
+    mood.coronaFilaments=moodColors[8]; mood.pulseRing=moodColors[9];
     TyndallAnimationUniforms animation; animation.starts=animationStarts; animation.strengths=animationStrengths; animation.peak=animationPeak;
     DesktopLaserTunnelUniforms laserSettings; laserSettings.geometry=laserGeometry; laserSettings.motion=laserMotion; laserSettings.appearance=laserAppearance;
     // CommonVertexShader on iOS maps the top of the screen to uv.y = 0.

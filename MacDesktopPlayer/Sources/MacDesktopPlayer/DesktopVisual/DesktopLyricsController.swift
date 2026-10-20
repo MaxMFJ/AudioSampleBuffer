@@ -203,6 +203,7 @@ final class DesktopLyricsController {
         source.load(for: url, title: title, artist: artist, neteaseTrackID: neteaseTrackID, duration: duration)
     }
     func clear() { source.clear() }
+    var lyricLines: [TimedLyric] { source.lines }
 
     func frame(at time: Double, surface: DesktopLyricsSurface, viewport: CGSize) -> DesktopLyricsFrame {
         let configuration = surface == .overlay ? overlayConfiguration : stageConfiguration

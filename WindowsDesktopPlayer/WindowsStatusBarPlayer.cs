@@ -72,7 +72,7 @@ public sealed class WindowsStatusBarPlayer : IDisposable
         _songList = songList ?? throw new ArgumentNullException(nameof(songList));
         _lyricsManager = lyricsManager ?? throw new ArgumentNullException(nameof(lyricsManager));
         _exit = exit ?? throw new ArgumentNullException(nameof(exit));
-        _flyout = new StatusBarFlyoutWindow(_togglePlayback, _previous, _next, _repeat, _seek, _openConsole, _songList, _lyricsManager);
+        _flyout = new StatusBarFlyoutWindow(_togglePlayback, _previous, _next, _repeat, _seek, _openConsole, _exit);
 
         // This HWND only receives Shell_NotifyIcon callbacks. HwndSource's
         // default style is visible, which otherwise creates a blank window.
@@ -154,7 +154,7 @@ public sealed class WindowsStatusBarPlayer : IDisposable
         AddItem(SongList, "歌曲列表");
         AddItem(LyricsManager, "歌词管理");
         AppendMenu(_menu, MfSeparator, UIntPtr.Zero, string.Empty);
-        AddItem(Exit, "退出");
+        AddItem(Exit, "退出程序");
         GetCursorPos(out var point);
         SetForegroundWindow(_source.Handle);
         var command = TrackPopupMenu(_menu, TpmRightButton | TpmReturnCmd, point.X, point.Y, 0, _source.Handle, IntPtr.Zero);

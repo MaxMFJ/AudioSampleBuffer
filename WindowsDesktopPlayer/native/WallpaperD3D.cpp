@@ -20,7 +20,7 @@
 
 using Microsoft::WRL::ComPtr;
 
-static_assert(sizeof(WallpaperFrame) == 912, "WallpaperFrame must match the HLSL cbuffer layout.");
+static_assert(sizeof(WallpaperFrame) == 1120, "WallpaperFrame must match the HLSL cbuffer layout.");
 
 struct Renderer
 {
@@ -30,7 +30,8 @@ struct Renderer
     ComPtr<IDXGISwapChain> swapChain;
     ComPtr<ID3D11RenderTargetView> renderTarget;
     ComPtr<ID3D11VertexShader> vertexShader;
-    ComPtr<ID3D11PixelShader> pixelShader;
+    ComPtr<ID3D11PixelShader> pixelShader, guitarSurgePS;
+    ComPtr<ID3D11BlendState> additiveBlend;
     ComPtr<ID3D11RasterizerState> rasterizer;
     ComPtr<ID3D11VertexShader> fieldVS, reliefVS, backingVS;
     ComPtr<ID3D11PixelShader> fieldPS, reliefPS, backingPS;
@@ -194,7 +195,8 @@ static bool CreateRenderer(Renderer* renderer, const wchar_t* shaderPath)
     };
     if (!compileVertex("coverFieldVS", renderer->fieldVS) || !compilePixel("coverFieldPS", renderer->fieldPS)
         || !compileVertex("coverReliefVS", renderer->reliefVS) || !compilePixel("coverReliefPS", renderer->reliefPS)
-        || !compileVertex("coverBackingVS", renderer->backingVS) || !compilePixel("coverBackingPS", renderer->backingPS)) return false;
+        || !compileVertex("coverBackingVS", renderer->backingVS) || !compilePixel("coverBackingPS", renderer->backingPS)
+        || !compilePixel("guitarSurgePS", renderer->guitarSurgePS)) return false;
     D3D11_BLEND_DESC blendDesc{};
     auto& targetBlend = blendDesc.RenderTarget[0];
     targetBlend.BlendEnable = TRUE;
@@ -207,6 +209,10 @@ static bool CreateRenderer(Renderer* renderer, const wchar_t* shaderPath)
     targetBlend.RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
     hr = renderer->device->CreateBlendState(&blendDesc, &renderer->particleBlend);
     if (FAILED(hr)) { SetError(L"Create particle blend state", hr); return false; }
+    targetBlend.DestBlend = D3D11_BLEND_ONE;
+    targetBlend.DestBlendAlpha = D3D11_BLEND_ONE;
+    hr = renderer->device->CreateBlendState(&blendDesc, &renderer->additiveBlend);
+    if (FAILED(hr)) { SetError(L"Create guitar surge blend state", hr); return false; }
 
     // A fullscreen triangle has no meaningful back face. The shader's vertex
     // order is counter-clockwise on the render target; D3D's default back-face
@@ -255,7 +261,7 @@ static bool CreateRenderer(Renderer* renderer, const wchar_t* shaderPath)
 
 extern "C" __declspec(dllexport) unsigned __cdecl WallpaperD3D_GetApiVersion()
 {
-    return 4;
+    return 5;
 }
 
 extern "C" __declspec(dllexport) void* __cdecl WallpaperD3D_Create(HWND parent, int width, int height, const wchar_t* shaderPath)
@@ -451,16 +457,25 @@ extern "C" __declspec(dllexport) int __cdecl WallpaperD3D_Render(void* handle, c
     renderer->context->VSSetSamplers(0, 1, &sampler);
     renderer->context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
     renderer->context->Draw(3, 0);
-    if (frame->effectIndex <= 2)
+    if (frame->effectIndex == 2)
+    {
+        const UINT rows = std::max(1u, static_cast<UINT>(std::round(256.0f / renderer->frame.aspect)));
+        renderer->context->OMSetBlendState(renderer->particleBlend.Get(), nullptr, 0xffffffff);
+        renderer->context->VSSetShader(renderer->fieldVS.Get(), nullptr, 0);
+        renderer->context->PSSetShader(renderer->fieldPS.Get(), nullptr, 0);
+        renderer->context->DrawInstanced(6, 256 * rows, 0, 0);
+    }
+    // Tyndall has its own guitar-peak lights, so the Mac skips the sweep there.
+    if (frame->guitarSurgeLevels[2] > 0.5f && frame->effectIndex != 1)
+    {
+        renderer->context->OMSetBlendState(renderer->additiveBlend.Get(), nullptr, 0xffffffff);
+        renderer->context->VSSetShader(renderer->vertexShader.Get(), nullptr, 0);
+        renderer->context->PSSetShader(renderer->guitarSurgePS.Get(), nullptr, 0);
+        renderer->context->Draw(3, 0);
+    }
+    if (frame->effectIndex == 1 || frame->effectIndex == 2 || frame->displayOptions[0] > 0.5f)
     {
         renderer->context->OMSetBlendState(renderer->particleBlend.Get(), nullptr, 0xffffffff);
-        if (frame->effectIndex == 2)
-        {
-            const UINT rows = std::max(1u, static_cast<UINT>(std::round(256.0f / renderer->frame.aspect)));
-            renderer->context->VSSetShader(renderer->fieldVS.Get(), nullptr, 0);
-            renderer->context->PSSetShader(renderer->fieldPS.Get(), nullptr, 0);
-            renderer->context->DrawInstanced(6, 256 * rows, 0, 0);
-        }
         if (frame->effectIndex == 1)
         {
             renderer->context->VSSetShader(renderer->backingVS.Get(), nullptr, 0);

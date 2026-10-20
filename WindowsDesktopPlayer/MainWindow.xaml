@@ -1,7 +1,7 @@
 <Window x:Class="SoundDesk.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Sound Desk" Width="1180" Height="780" MinWidth="900" MinHeight="640"
+        Title="桌面音乐" Width="1040" Height="700" MinWidth="1040" MinHeight="700"
         WindowStartupLocation="CenterScreen" Background="#0C101A" Foreground="#F4F5FF">
     <Window.Resources>
         <LinearGradientBrush x:Key="Backdrop" StartPoint="0,0" EndPoint="1,1">
@@ -9,142 +9,117 @@
             <GradientStop Color="#1C1931" Offset="0.54" />
             <GradientStop Color="#10131F" Offset="1" />
         </LinearGradientBrush>
-        <Style x:Key="SectionLabel" TargetType="TextBlock">
-            <Setter Property="Foreground" Value="{StaticResource MutedBrush}" />
-            <Setter Property="FontSize" Value="11" />
-            <Setter Property="FontWeight" Value="SemiBold" />
+        <Style x:Key="HeaderAction" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="Margin" Value="0,0,8,0" />
+            <Setter Property="Padding" Value="12,6" />
+            <Setter Property="FontWeight" Value="Medium" />
         </Style>
     </Window.Resources>
-    <Grid Background="{StaticResource Backdrop}">
-        <Grid.RowDefinitions><RowDefinition Height="*"/><RowDefinition Height="112"/></Grid.RowDefinitions>
-        <Canvas x:Name="SpectrumCanvas" IsHitTestVisible="False" ClipToBounds="True" />
-        <Grid Margin="28,24,28,16">
-            <Grid.ColumnDefinitions><ColumnDefinition Width="226"/><ColumnDefinition Width="24"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-            <Border Grid.Column="0" Background="#9B141A28" BorderBrush="#33FFFFFF" BorderThickness="1" CornerRadius="22" Padding="18">
-                <DockPanel LastChildFill="True">
-                    <StackPanel DockPanel.Dock="Top" Margin="2,2,2,22">
-                        <TextBlock Text="S O U N D   D E S K" Foreground="#B5BCE0" FontSize="10" FontWeight="Bold" />
-                        <TextBlock Text="音乐控制台" FontSize="23" FontWeight="SemiBold" Margin="0,13,0,3" />
-                        <TextBlock Text="搜索、聆听与塑造你的声音空间" Foreground="{StaticResource MutedBrush}" FontSize="11" TextWrapping="Wrap" />
-                    </StackPanel>
-                    <StackPanel DockPanel.Dock="Bottom" Margin="2,20,2,0">
-                        <Button Content="＋  导入本地音乐" Click="Import_Click" HorizontalContentAlignment="Left" />
-                        <Button Content="⌕  搜索在线音乐" Margin="0,8,0,0" Click="OnlineSearch_Click" HorizontalContentAlignment="Left" />
-                    </StackPanel>
-                    <StackPanel>
-                        <TextBlock Text="音乐库" Style="{StaticResource SectionLabel}" Margin="4,0,0,8" />
-                        <Button Content="♫  所有歌曲" HorizontalContentAlignment="Left" Click="AllSongs_Click" />
-                        <Button Content="◷  最近播放" HorizontalContentAlignment="Left" Margin="0,5,0,0" Click="Recent_Click" />
-                        <Button Content="♡  我的收藏" HorizontalContentAlignment="Left" Margin="0,5,0,0" Click="Favorites_Click" />
-                        <DockPanel Margin="4,18,0,7">
-                            <TextBlock Text="我的歌单" Style="{StaticResource SectionLabel}" VerticalAlignment="Center" />
-                            <Button Content="＋" Padding="7,2" Margin="0,0,0,0" DockPanel.Dock="Right" ToolTip="新建歌单" Click="CreatePlaylist_Click" />
-                        </DockPanel>
-                        <ListBox x:Name="PlaylistList" MaxHeight="150" SelectionChanged="PlaylistList_SelectionChanged">
-                            <ListBox.ItemTemplate><DataTemplate><StackPanel Orientation="Horizontal"><TextBlock Text="♫  " /><TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" /></StackPanel></DataTemplate></ListBox.ItemTemplate>
-                            <ListBox.ContextMenu><ContextMenu><MenuItem Header="删除歌单" Click="DeletePlaylist_Click" /></ContextMenu></ListBox.ContextMenu>
-                        </ListBox>
-                        <TextBlock Text="桌面体验" Style="{StaticResource SectionLabel}" Margin="4,22,0,8" />
-                        <Button x:Name="LyricsButton" Content="▤  歌词管理" HorizontalContentAlignment="Left" Click="LyricsSettings_Click" />
-                        <TextBlock Text="音频响应效果" Style="{StaticResource SectionLabel}" Margin="4,18,0,7" />
-                        <ComboBox x:Name="EffectSelector" SelectedIndex="0" SelectionChanged="EffectSelector_SelectionChanged" Height="34" Background="#202B3E" Foreground="#F4F5FF">
-                            <ComboBoxItem Content="蜂窝（Mac）" />
-                            <ComboBoxItem Content="丁达尔（Mac）" />
-                            <ComboBoxItem Content="点阵封面（Mac）" />
-                            <ComboBoxItem Content="六边形（原版）" />
-                        </ComboBox>
-                        <TextBlock x:Name="WallpaperRendererStatus" FontSize="11" Foreground="#A6B1C8" Margin="4,5,0,3" Text="桌面背景已关闭" />
-                        <Button Content="☷  平台账号" HorizontalContentAlignment="Left" Margin="0,5,0,0" Click="Accounts_Click" />
-                    </StackPanel>
-                </DockPanel>
-            </Border>
-            <Border Grid.Column="2" Background="#97141927" BorderBrush="#33FFFFFF" BorderThickness="1" CornerRadius="22" Padding="26">
-                <Grid>
-                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
-                    <Grid Grid.Row="0" Margin="0,0,0,20">
-                        <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                        <StackPanel>
-                            <TextBlock Text="YOUR SOUND SPACE" Style="{StaticResource SectionLabel}" />
-                            <TextBlock x:Name="SectionTitle" Text="所有歌曲" FontSize="27" FontWeight="SemiBold" Margin="0,7,0,0" />
-                        </StackPanel>
-                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                            <Button x:Name="MonitorButton" Content="关闭桌面背景" Margin="0,0,8,0" Click="Monitor_Click" />
-                            <Button Content="歌曲列表" Margin="0,0,8,0" Click="SongList_Click" />
-                            <Button Content="添加歌曲" Background="#596AE3" BorderBrush="#7C8CFF" Click="Import_Click" />
-                        </StackPanel>
-                    </Grid>
-                    <Grid Grid.Row="1" Margin="0,0,0,14">
-                        <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                        <TextBox x:Name="SearchBox" Height="40" VerticalContentAlignment="Center" ToolTip="搜索本地曲库" TextChanged="Search_TextChanged" />
-                        <TextBlock Text="⌕" FontSize="18" Foreground="#8490AA" Margin="12,0,0,0" VerticalAlignment="Center" IsHitTestVisible="False" />
-                        <TextBlock Grid.Column="1" x:Name="TrackCount" Text="0 首歌曲" Foreground="{StaticResource MutedBrush}" VerticalAlignment="Center" Margin="16,0,0,0" />
-                    </Grid>
-                    <Grid Grid.Row="2">
-                        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
-                        <Grid Margin="12,0,12,8">
-                            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="180"/><ColumnDefinition Width="58"/></Grid.ColumnDefinitions>
-                            <TextBlock Text="歌曲" Style="{StaticResource SectionLabel}" />
-                            <TextBlock Grid.Column="1" Text="艺术家" Style="{StaticResource SectionLabel}" />
-                            <TextBlock Grid.Column="2" Text="时长" Style="{StaticResource SectionLabel}" />
-                        </Grid>
-                        <ListBox x:Name="TrackList" Grid.Row="1" SelectionChanged="TrackList_SelectionChanged" MouseDoubleClick="TrackList_DoubleClick" PreviewMouseRightButtonDown="TrackList_RightClick">
-                            <ListBox.ContextMenu>
-                                <ContextMenu Opened="TrackContextMenu_Opened">
-                                    <MenuItem Header="切换收藏" Click="Favorite_Click" />
-                                    <MenuItem Header="添加到歌单" />
-                                    <MenuItem Header="从当前歌单移除" Click="RemoveFromPlaylist_Click" />
-                                    <MenuItem Header="从曲库移除" Click="RemoveFromLibrary_Click" />
-                                </ContextMenu>
-                            </ListBox.ContextMenu>
-                            <ListBox.ItemTemplate>
-                                <DataTemplate>
-                                    <Grid>
-                                        <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="180"/><ColumnDefinition Width="58"/></Grid.ColumnDefinitions>
-                                        <StackPanel>
-                                            <TextBlock Text="{Binding Title}" FontSize="13" FontWeight="Medium" TextTrimming="CharacterEllipsis" />
-                                            <TextBlock Text="{Binding Album}" FontSize="10" Foreground="#929BB0" TextTrimming="CharacterEllipsis" Margin="0,3,0,0" />
-                                        </StackPanel>
-                                        <TextBlock Grid.Column="1" Text="{Binding Artist}" Foreground="#B3B9C9" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
-                                        <TextBlock Grid.Column="2" Text="{Binding DurationText}" Foreground="#929BB0" VerticalAlignment="Center" />
-                                    </Grid>
-                                </DataTemplate>
-                            </ListBox.ItemTemplate>
-                        </ListBox>
-                        <StackPanel x:Name="EmptyState" Grid.Row="1" HorizontalAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False">
-                            <TextBlock Text="♪" FontSize="42" Foreground="#7783AC" HorizontalAlignment="Center" />
-                            <TextBlock Text="把音乐放进你的声音空间" FontSize="17" FontWeight="Medium" HorizontalAlignment="Center" Margin="0,12,0,5" />
-                            <TextBlock Text="导入本地音频，即可开始播放和探索视觉效果" Foreground="{StaticResource MutedBrush}" FontSize="12" HorizontalAlignment="Center" />
-                        </StackPanel>
-                    </Grid>
-                </Grid>
-            </Border>
-        </Grid>
-        <Border Grid.Row="1" Margin="28,0,28,20" Background="#E0181E2D" BorderBrush="#33FFFFFF" BorderThickness="1" CornerRadius="18" Padding="18,12">
+    <Grid x:Name="RootSurface" Background="{StaticResource Backdrop}">
+        <Border x:Name="GlassPanel" Margin="18" Background="#9B141A28" BorderBrush="#2EFFFFFF" BorderThickness="1" CornerRadius="28" Padding="28,24,28,24">
             <Grid>
-                <Grid.ColumnDefinitions><ColumnDefinition Width="280"/><ColumnDefinition Width="*"/><ColumnDefinition Width="210"/></Grid.ColumnDefinitions>
-                <StackPanel VerticalAlignment="Center">
-                    <TextBlock x:Name="NowPlayingTitle" Text="尚未播放" FontSize="13" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
-                    <TextBlock x:Name="NowPlayingArtist" Text="导入本地音乐开始播放" Foreground="{StaticResource MutedBrush}" FontSize="11" Margin="0,4,0,0" />
-                </StackPanel>
-                <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="24,0">
-                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
-                        <Button x:Name="PreviousButton" Content="|◀" Padding="11,5" Click="Previous_Click" />
-                        <Button x:Name="PlayButton" Content="▶" Padding="18,5" Margin="10,0" Background="#596AE3" Click="Play_Click" />
-                        <Button Content="▶|" Padding="11,5" Click="Next_Click" />
-                        <Button Content="■" Padding="11,5" Margin="8,0,0,0" ToolTip="停止" Click="Stop_Click" />
-                        <Button x:Name="FavoriteButton" Content="♡" Padding="11,5" Margin="8,0,0,0" ToolTip="喜欢" Click="FavoriteCurrent_Click" />
-                        <Button x:Name="RepeatButton" Content="顺序播放" Padding="11,5" Margin="10,0,0,0" Click="Repeat_Click" />
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" MinHeight="130" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <StackPanel Grid.Row="0" Margin="0,0,0,20">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="音乐控制台" FontSize="25" FontWeight="SemiBold" />
+                        <TextBlock Text="S O U N D   D E S K" FontSize="11" FontWeight="Bold" Foreground="{StaticResource MutedBrush}" Margin="12,0,0,4" VerticalAlignment="Bottom" />
                     </StackPanel>
-                    <Grid Margin="0,8,0,0">
-                        <Grid.ColumnDefinitions><ColumnDefinition Width="40"/><ColumnDefinition Width="*"/><ColumnDefinition Width="40"/></Grid.ColumnDefinitions>
-                        <TextBlock x:Name="ElapsedText" Text="0:00" Foreground="{StaticResource MutedBrush}" FontSize="10" VerticalAlignment="Center" />
-                        <Slider x:Name="ProgressSlider" Grid.Column="1" Minimum="0" Maximum="1" ValueChanged="Progress_ValueChanged" PreviewMouseLeftButtonDown="Progress_MouseDown" PreviewMouseLeftButtonUp="Progress_MouseUp" Height="18" />
-                        <TextBlock x:Name="DurationText" Grid.Column="2" Text="0:00" Foreground="{StaticResource MutedBrush}" FontSize="10" VerticalAlignment="Center" HorizontalAlignment="Right" />
-                    </Grid>
+                    <TextBlock Text="搜索、聆听与塑造你的声音空间" FontSize="12" Foreground="{StaticResource MutedBrush}" Margin="0,4,0,10" />
+                    <StackPanel Orientation="Horizontal">
+                        <Button Style="{StaticResource HeaderAction}" Content="♫  歌曲列表" Click="SongList_Click" />
+                        <Button Style="{StaticResource HeaderAction}" Content="▤  歌词管理" Click="LyricsSettings_Click" />
+                        <Button Style="{StaticResource HeaderAction}" Content="◉  平台账号" Click="Accounts_Click" />
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                        <Button Style="{StaticResource HeaderAction}" Content="▣  窗口预览" Click="WindowMonitor_Click" />
+                        <Button Style="{StaticResource HeaderAction}" Content="☁  平台歌单" Click="PlatformLibrary_Click" />
+                    </StackPanel>
                 </StackPanel>
-                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Right">
-                    <TextBlock Text="音量" Foreground="{StaticResource MutedBrush}" VerticalAlignment="Center" Margin="0,0,8,0" />
-                    <Slider x:Name="VolumeSlider" Minimum="0" Maximum="1" Value="0.75" Width="112" ValueChanged="Volume_ValueChanged" />
+
+                <StackPanel Grid.Row="1" Margin="0,0,0,10">
+                    <Grid>
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                        <Border Height="44" Background="#11FFFFFF" BorderBrush="#2EFFFFFF" BorderThickness="1" CornerRadius="14">
+                            <Grid>
+                                <TextBlock Text="⌕" FontSize="17" Foreground="{StaticResource MutedBrush}" Margin="14,0,0,2" VerticalAlignment="Center" IsHitTestVisible="False" />
+                                <TextBox x:Name="SearchBox" Margin="36,0,14,0" Background="Transparent" BorderThickness="0" Padding="0" FontSize="14"
+                                         VerticalContentAlignment="Center" KeyDown="SearchBox_KeyDown" ToolTip="搜索歌曲或歌手" />
+                                <TextBlock x:Name="SearchPlaceholder" Text="搜索歌曲或歌手" FontSize="14" Foreground="#7F8AA3" Margin="38,0,0,0" VerticalAlignment="Center" IsHitTestVisible="False" />
+                            </Grid>
+                        </Border>
+                        <Button Grid.Column="1" Content="搜索" Width="72" Height="38" Margin="10,0,0,0" FontWeight="Medium" Click="Search_Click" />
+                    </Grid>
+                    <TextBlock x:Name="SearchStatus" Text="搜索在线音乐" FontSize="11" Foreground="{StaticResource MutedBrush}" Margin="2,10,0,0" />
+                </StackPanel>
+
+                <ListBox x:Name="OnlineResults" Grid.Row="2" Margin="0,0,0,18">
+                    <ListBox.ItemContainerStyle>
+                        <Style TargetType="ListBoxItem" BasedOn="{StaticResource {x:Type ListBoxItem}}">
+                            <Setter Property="Padding" Value="10,0" />
+                            <Setter Property="Height" Value="44" />
+                        </Style>
+                    </ListBox.ItemContainerStyle>
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <Grid>
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="0.32*" MinWidth="100" MaxWidth="180" /><ColumnDefinition Width="92" /></Grid.ColumnDefinitions>
+                                <TextBlock Text="{Binding Name}" FontSize="14" FontWeight="Medium" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Margin="0,0,10,0" />
+                                <TextBlock Grid.Column="1" Text="{Binding Artist}" FontSize="12" Foreground="{StaticResource MutedBrush}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                                <Button Grid.Column="2" Content="下载" Width="72" Height="28" Padding="0" Click="DownloadResult_Click" />
+                            </Grid>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+
+                <StackPanel Grid.Row="3" Margin="0,0,0,20">
+                    <DockPanel Margin="0,0,0,10">
+                        <TextBlock Text="视觉效果" FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource MutedBrush}" />
+                        <TextBlock x:Name="WallpaperRendererStatus" Text="桌面背景已关闭" FontSize="11" Foreground="#7F8AA3" HorizontalAlignment="Right" />
+                    </DockPanel>
+                    <UniformGrid Rows="1" Columns="4" Margin="0,0,-9,0">
+                        <ToggleButton x:Name="TyndallEffect" Style="{StaticResource EffectToggle}" Tag="1" Content="丁达尔光束" Click="Effect_Click" />
+                        <ToggleButton x:Name="CoverDotsEffect" Style="{StaticResource EffectToggle}" Tag="2" Content="封面点阵" Click="Effect_Click" />
+                        <ToggleButton x:Name="CellularEffect" Style="{StaticResource EffectToggle}" Tag="0" Content="深空蜂巢" Click="Effect_Click" />
+                        <ToggleButton x:Name="HexagonEffect" Style="{StaticResource EffectToggle}" Tag="3" Content="六边形（原版）" Click="Effect_Click" />
+                    </UniformGrid>
+                </StackPanel>
+
+                <DockPanel Grid.Row="4" Margin="0,0,0,20" LastChildFill="True">
+                    <Button Style="{StaticResource IconButton}" Content="⏮" ToolTip="上一首" Click="Previous_Click" />
+                    <Button x:Name="PlayButton" Style="{StaticResource IconButton}" Content="▶" ToolTip="播放 / 暂停" Margin="10,0,0,0" Click="Play_Click" />
+                    <Button Style="{StaticResource IconButton}" Content="⏭" ToolTip="下一首" Margin="10,0,0,0" Click="Next_Click" />
+                    <Button Style="{StaticResource IconButton}" Content="■" ToolTip="停止" Margin="10,0,0,0" Click="Stop_Click" />
+                    <Button x:Name="FavoriteButton" Style="{StaticResource IconButton}" Content="♡" ToolTip="喜欢" Margin="10,0,0,0" Click="FavoriteCurrent_Click" />
+                    <Button x:Name="RepeatButton" Content="顺序播放" Height="32" Padding="12,0" FontSize="12" Margin="10,0,0,0" Click="Repeat_Click" />
+                    <Button Content="选择本地歌曲" Height="32" Padding="12,0" FontSize="12" Margin="10,0,0,0" Click="OpenLocal_Click" />
+                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center" Margin="12,0,0,0">
+                        <TextBlock Text="音量" Foreground="{StaticResource MutedBrush}" FontSize="12" VerticalAlignment="Center" Margin="0,0,8,0" />
+                        <Slider x:Name="VolumeSlider" Minimum="0" Maximum="1" Value="0.75" Width="96" VerticalAlignment="Center" ValueChanged="Volume_ValueChanged" />
+                    </StackPanel>
+                    <TextBlock x:Name="NowPlaying" Text="尚未播放" FontSize="14" FontWeight="Medium" Foreground="{StaticResource MutedBrush}"
+                               VerticalAlignment="Center" Margin="12,0,0,0" TextTrimming="CharacterEllipsis" />
+                </DockPanel>
+
+                <StackPanel Grid.Row="5">
+                    <TextBlock Text="关闭识别与分离时，使用实时 FFT" FontSize="12" Foreground="{StaticResource MutedBrush}" Margin="0,0,0,10" />
+                    <UniformGrid Rows="1" Columns="3" Margin="0,0,0,8">
+                        <CheckBox Content="YAMNet 音乐识别" IsEnabled="False" ToolTipService.ShowOnDisabled="True" ToolTip="需要 ONNX 版 YAMNet 模型，Windows 版尚未接入" />
+                        <CheckBox Content="HTDemucs 乐器分离" IsEnabled="False" ToolTipService.ShowOnDisabled="True" ToolTip="需要 ONNX 版 HTDemucs 模型，Windows 版尚未接入" />
+                        <CheckBox x:Name="WallpaperToggle" Content="显示动态桌面背景" IsChecked="True" Click="WallpaperToggle_Click" />
+                    </UniformGrid>
+                    <UniformGrid Rows="1" Columns="3">
+                        <CheckBox x:Name="GuitarSurgeToggle" Content="吉他高潮全屏扫光（鼓点同步）" Click="GuitarSurge_Click" />
+                        <CheckBox x:Name="CenterRecordToggle" Content="其他特效显示圆形唱片" Click="CenterRecord_Click" />
+                        <Button Content="氛围光 AI 设置…" HorizontalAlignment="Left" Padding="12,5" Click="MoodSettings_Click" />
+                    </UniformGrid>
                 </StackPanel>
             </Grid>
         </Border>
