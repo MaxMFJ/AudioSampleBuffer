@@ -13,10 +13,11 @@
 #import "../../AI/MusicStyleClassifier.h"
 #import "../../AI/AudioFeatureExtractor.h"
 #import "../../AI/MusicAIAnalyzer.h"
+#import <WebKit/WebKit.h>
 
 static const CGFloat kDefaultEffectRenderScale = 0.85f;
 
-@interface VisualEffectManager () <MetalRendererDelegate, VisualEffectAIControllerDelegate>
+@interface VisualEffectManager () <MetalRendererDelegate, VisualEffectAIControllerDelegate, WKNavigationDelegate>
 
 @property (nonatomic, strong) UIView *effectContainerView;
 @property (nonatomic, strong) MTKView *metalView;
@@ -45,6 +46,9 @@ static const CGFloat kDefaultEffectRenderScale = 0.85f;
 // 🤖 AI控制器 (readwrite for internal use, header declares readonly)
 @property (nonatomic, strong, readwrite) VisualEffectAIController *aiController;
 @property (nonatomic, strong) UIImage *albumArtwork;
+@property (nonatomic, strong) WKWebView *vectorAssaultCanvasView;
+@property (nonatomic, assign) BOOL vectorAssaultCanvasReady;
+@property (nonatomic, assign) CFTimeInterval lastVectorAssaultCanvasBeatTime;
 
 @end
 
@@ -227,6 +231,22 @@ static const CGFloat kDefaultEffectRenderScale = 0.85f;
             settings[@"darkroomGrain"] = @(0.42);
             settings[@"darkroomExposure"] = @(1.0);
             settings[@"audioSensitivity"] = @(1.0);
+            break;
+
+        case VisualEffectTypeVectorAssault:
+        case VisualEffectTypeVectorAssaultCanvas:
+            settings[@"enabled"] = @(YES);
+            settings[@"arrowCount"] = @(22);
+            settings[@"attackSpeed"] = @(1.2);
+            settings[@"trailLengthMultiplier"] = @(1.4);
+            settings[@"arrowWidthMultiplier"] = @(1.0);
+            settings[@"turnDensity"] = @(1.0);
+            settings[@"cameraTracking"] = @(0.75);
+            settings[@"beatSensitivity"] = @(1.0);
+            settings[@"attackAngle"] = @(-45.0);
+            settings[@"seed"] = @(7640891576956012809ULL);
+            settings[@"audioResponseEnabled"] = @(YES);
+            settings[@"demoMode"] = @(NO);
             break;
             
         case VisualEffectTypeQuantumField:
@@ -432,7 +452,8 @@ static const CGFloat kDefaultEffectRenderScale = 0.85f;
                                      effectType != VisualEffectTypeMirrorStrata &&
                                      effectType != VisualEffectTypeLiquidPigment &&
                                      effectType != VisualEffectTypeOpticalDarkroom &&
-                                     effectType != VisualEffectTypeCoverDotMatrix);
+                                     effectType != VisualEffectTypeCoverDotMatrix &&
+                                     effectType != VisualEffectTypeVectorAssault);
     if (effectType == VisualEffectTypeGlassResonance) {
         if (squareSize <= 0.0 || !isfinite(squareSize)) return;
         // Square logical camera; cap HDR allocation and fill cost on large devices.
@@ -468,6 +489,12 @@ static const CGFloat kDefaultEffectRenderScale = 0.85f;
         if (squareSize <= 0.0 || !isfinite(squareSize)) return;
         // Full-resolution square so the cover samples stay smaller than a phone pixel cluster.
         CGFloat side = MAX(1.0, round(MIN(2048.0, squareSize * screenScale)));
+        _metalView.drawableSize = CGSizeMake(side, side);
+    } else if (effectType == VisualEffectTypeVectorAssault) {
+        if (squareSize <= 0.0 || !isfinite(squareSize)) return;
+        // The effect uses hard-edged, multi-layer geometry; a 1440px ceiling
+        // substantially reduces fill cost while retaining crisp arrow contours.
+        CGFloat side = MAX(1.0, round(MIN(1440.0, squareSize * screenScale * 0.62)));
         _metalView.drawableSize = CGSizeMake(side, side);
     } else if (effectType == VisualEffectTypeWormholeDrive) {
         // 虫洞特效本身已针对宽屏做过专门调优，保留原有低功耗缩放。
@@ -528,14 +555,95 @@ static const CGFloat kDefaultEffectRenderScale = 0.85f;
     _originalSpectrumView = spectrumView;
 }
 
+- (void)ensureVectorAssaultCanvasView {
+    if (_vectorAssaultCanvasView) return;
+    NSURL *url = [[NSBundle mainBundle] URLForResource:@"VectorAssaultCanvas" withExtension:@"html"];
+    if (!url) {
+        NSLog(@"[VectorAssaultCanvas] bundled HTML is missing");
+        return;
+    }
+    WKWebViewConfiguration *configuration = [WKWebViewConfiguration new];
+    _vectorAssaultCanvasView = [[WKWebView alloc] initWithFrame:_metalView ? _metalView.frame : _effectContainerView.bounds
+                                                  configuration:configuration];
+    _vectorAssaultCanvasView.navigationDelegate = self;
+    _vectorAssaultCanvasView.userInteractionEnabled = NO;
+    _vectorAssaultCanvasView.opaque = NO;
+    _vectorAssaultCanvasView.backgroundColor = [UIColor clearColor];
+    _vectorAssaultCanvasView.scrollView.backgroundColor = [UIColor clearColor];
+    if (_metalView.superview == _effectContainerView) {
+        [_effectContainerView insertSubview:_vectorAssaultCanvasView belowSubview:_metalView];
+    } else {
+        [_effectContainerView insertSubview:_vectorAssaultCanvasView atIndex:0];
+    }
+    _vectorAssaultCanvasView.hidden = YES;
+    [_vectorAssaultCanvasView loadFileURL:url allowingReadAccessToURL:[url URLByDeletingLastPathComponent]];
+}
+
+- (void)sendVectorAssaultCanvasParameters:(NSDictionary *)parameters {
+    if (!_vectorAssaultCanvasReady || !parameters.count) return;
+    NSData *data = [NSJSONSerialization dataWithJSONObject:parameters options:0 error:nil];
+    if (!data) return;
+    NSString *json = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
+    [_vectorAssaultCanvasView evaluateJavaScript:[NSString stringWithFormat:@"window.vectorAssault.setParameters(%@)", json]
+                                     completionHandler:nil];
+}
+
+- (void)setVectorAssaultCanvasRunning:(BOOL)running {
+    if (!_vectorAssaultCanvasReady) return;
+    [_vectorAssaultCanvasView evaluateJavaScript:[NSString stringWithFormat:@"window.vectorAssault.setRunning(%@)", running ? @"true" : @"false"]
+                                     completionHandler:nil];
+}
+
+- (void)webView:(WKWebView *)webView didFinishNavigation:(WKNavigation *)navigation {
+    if (webView != _vectorAssaultCanvasView) return;
+    _vectorAssaultCanvasReady = YES;
+    NSString *key = [NSString stringWithFormat:@"effect_%lu", (unsigned long)VisualEffectTypeVectorAssaultCanvas];
+    NSDictionary *settings = _effectSettings[key];
+    [self sendVectorAssaultCanvasParameters:settings];
+    [self setVectorAssaultCanvasRunning:_currentEffectType == VisualEffectTypeVectorAssaultCanvas && _isEffectActive];
+}
+
 - (void)setCurrentEffect:(VisualEffectType)effectType animated:(BOOL)animated {
+    // Canvas was a legacy implementation; preserve its numeric slot but always use Metal.
+    if (effectType == VisualEffectTypeVectorAssaultCanvas) {
+        effectType = VisualEffectTypeVectorAssault;
+    }
     if (_currentEffectType == effectType) return;
+    if (effectType == VisualEffectTypeVectorAssault) {
+        // Always start Vector Assault from its audio-reactive defaults; do not
+        // carry forward demo/fixed-time or prior user-tuned values.
+        [self loadDefaultSettingsForEffect:VisualEffectTypeVectorAssault];
+    }
     
     // 🔋 优化：简化切换日志
     NSLog(@"🎨 切换特效: %lu->%lu", (unsigned long)_currentEffectType, (unsigned long)effectType);
     
     // 停止当前渲染器
     [_currentRenderer stopRendering];
+    [self setVectorAssaultCanvasRunning:NO];
+    _vectorAssaultCanvasView.hidden = YES;
+
+    if (effectType == VisualEffectTypeVectorAssaultCanvas) {
+        [self ensureVectorAssaultCanvasView];
+        if (!_vectorAssaultCanvasView) return;
+        _currentRenderer = nil;
+        _lastVectorAssaultCanvasBeatTime = 0;
+        _currentEffectType = effectType;
+        _effectSelector.currentEffectType = effectType;
+        _originalSpectrumView.hidden = YES;
+        [_originalSpectrumView pauseRendering];
+        _metalView.hidden = YES;
+        _metalView.paused = YES;
+        _vectorAssaultCanvasView.hidden = NO;
+        _isEffectActive = YES;
+        NSString *key = [NSString stringWithFormat:@"effect_%lu", (unsigned long)effectType];
+        [self sendVectorAssaultCanvasParameters:_effectSettings[key]];
+        [self setVectorAssaultCanvasRunning:YES];
+        if ([_delegate respondsToSelector:@selector(visualEffectManager:didChangeEffect:)]) {
+            [_delegate visualEffectManager:self didChangeEffect:effectType];
+        }
+        return;
+    }
     
     // 特别处理流体模拟效果 - 添加性能检查
     if (effectType == VisualEffectTypeFluidSimulation) {
@@ -606,7 +714,9 @@ static const CGFloat kDefaultEffectRenderScale = 0.85f;
                 [self updateMetalViewDrawableSizeForEffect:effectType];
 
                 // 神经共振在 A15（iPhone 13 Pro Max）上使用更稳的帧率，显著降GPU占用
-                if (effectType == VisualEffectTypeNeuralResonance) {
+                if (effectType == VisualEffectTypeVectorAssault) {
+                    _metalView.preferredFramesPerSecond = 60;
+                } else if (effectType == VisualEffectTypeNeuralResonance) {
                     NSInteger targetFPS = 24;
                     if (_metalView.preferredFramesPerSecond != targetFPS) {
                         _metalView.preferredFramesPerSecond = targetFPS;
@@ -729,6 +839,10 @@ static const CGFloat kDefaultEffectRenderScale = 0.85f;
 
 - (void)startRendering {
     _isEffectActive = YES;
+    if (_currentEffectType == VisualEffectTypeVectorAssaultCanvas) {
+        [self setVectorAssaultCanvasRunning:YES];
+        return;
+    }
     [_currentRenderer startRendering];
     
     // 重置性能统计
@@ -739,10 +853,15 @@ static const CGFloat kDefaultEffectRenderScale = 0.85f;
 
 - (void)stopRendering {
     _isEffectActive = NO;
+    [self setVectorAssaultCanvasRunning:NO];
     [_currentRenderer stopRendering];
 }
 
 - (void)pauseRendering {
+    if (_currentEffectType == VisualEffectTypeVectorAssaultCanvas) {
+        [self setVectorAssaultCanvasRunning:NO];
+        return;
+    }
     [_currentRenderer pauseRendering];
     
     // 🔧 如果当前不是Metal特效，也要暂停原生频谱视图
@@ -752,6 +871,10 @@ static const CGFloat kDefaultEffectRenderScale = 0.85f;
 }
 
 - (void)resumeRendering {
+    if (_currentEffectType == VisualEffectTypeVectorAssaultCanvas) {
+        [self setVectorAssaultCanvasRunning:YES];
+        return;
+    }
     [_currentRenderer resumeRendering];
     
     // 🔧 如果当前不是Metal特效，也要恢复原生频谱视图
@@ -761,6 +884,43 @@ static const CGFloat kDefaultEffectRenderScale = 0.85f;
 }
 
 - (void)setRenderParameters:(NSDictionary *)parameters {
+    if (_currentEffectType == VisualEffectTypeVectorAssaultCanvas) {
+        NSString *key = [NSString stringWithFormat:@"effect_%lu", (unsigned long)_currentEffectType];
+        static NSSet<NSString *> *canvasKeys;
+        static dispatch_once_t onceToken;
+        dispatch_once(&onceToken, ^{
+            canvasKeys = [NSSet setWithArray:@[@"enabled", @"arrowCount", @"attackSpeed", @"trailLengthMultiplier",
+                @"arrowWidthMultiplier", @"turnDensity", @"cameraTracking", @"attackAngle", @"seed",
+                @"audioResponseEnabled", @"demoMode", @"beatSensitivity", @"fixedTime"]];
+        });
+        NSMutableDictionary *changes = nil;
+        for (NSString *parameterKey in parameters) {
+            if ([canvasKeys containsObject:parameterKey]) {
+                if (!changes) changes = [NSMutableDictionary dictionary];
+                changes[parameterKey] = parameters[parameterKey];
+            }
+        }
+        if (changes.count) {
+            NSMutableDictionary *settings = [_effectSettings[key] mutableCopy] ?: [NSMutableDictionary dictionary];
+            [settings addEntriesFromDictionary:changes];
+            _effectSettings[key] = settings;
+            [self sendVectorAssaultCanvasParameters:changes];
+        }
+        NSDictionary *settings = _effectSettings[key];
+        BOOL responseEnabled = !settings[@"audioResponseEnabled"] || [settings[@"audioResponseEnabled"] boolValue];
+        if (_vectorAssaultCanvasReady && _isEffectActive && responseEnabled && ![settings[@"demoMode"] boolValue] &&
+            [parameters[@"vectorBeatDetected"] boolValue]) {
+            CFTimeInterval now = CACurrentMediaTime();
+            if (now - _lastVectorAssaultCanvasBeatTime >= 0.12) {
+                _lastVectorAssaultCanvasBeatTime = now;
+                float strength = fmaxf(0.0f, fminf(1.0f, [parameters[@"vectorBeatIntensity"] floatValue]));
+                NSInteger kind = [parameters[@"vectorBeatKind"] integerValue] == 1 ? 1 : 2;
+                NSString *script = [NSString stringWithFormat:@"window.vectorAssault.onBeat(%.3f,%ld)", strength, (long)kind];
+                [_vectorAssaultCanvasView evaluateJavaScript:script completionHandler:nil];
+            }
+        }
+        return;
+    }
     [_currentRenderer setRenderParameters:parameters];
     
     // 保存设置
@@ -888,6 +1048,7 @@ static const CGFloat kDefaultEffectRenderScale = 0.85f;
         
         // 更新Metal视图frame为居中的正方形
         _metalView.frame = CGRectMake(x, y, squareSize, squareSize);
+        if (_vectorAssaultCanvasView) _vectorAssaultCanvasView.frame = _metalView.frame;
         
         // 更新绘制尺寸（不同特效可能有不同渲染分辨率策略）
         [self updateMetalViewDrawableSizeForEffect:_currentEffectType];
@@ -941,6 +1102,7 @@ static const CGFloat kDefaultEffectRenderScale = 0.85f;
         case VisualEffectTypeVisualLyricsTunnel:
         case VisualEffectTypeAudioActivityMeter:
         case VisualEffectTypeMusicFeatureScope:
+        case VisualEffectTypeVectorAssault:
             return YES;
 
         case VisualEffectTypeUserMediaBackground:

@@ -277,6 +277,14 @@
     coverDotMatrix.requiresMetal = YES;
     [effects addObject:coverDotMatrix];
 
+    VisualEffectInfo *vectorAssault = [VisualEffectInfo effectWithType:VisualEffectTypeVectorAssault
+                                                                   name:@"矢量突袭"
+                                                            description:@"LLM 主题色箭矢随节拍突击，持续音化为直线"
+                                                               category:EffectCategoryExperimental
+                                                       performanceLevel:PerformanceLevelMedium];
+    vectorAssault.requiresMetal = YES;
+    [effects addObject:vectorAssault];
+
     self.effects = [effects copy];
 }
 

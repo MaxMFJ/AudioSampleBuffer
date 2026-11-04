@@ -4852,6 +4852,537 @@ typedef struct {
 }
 @end
 
+typedef struct { vector_float2 position; vector_float4 color; } VectorAssaultVertex;
+typedef struct { vector_float2 point; float distance; } VectorAssaultPathPoint;
+typedef struct { VectorAssaultPathPoint points[44]; NSUInteger count; float length; float speed; float width; NSUInteger layer; } VectorAssaultPath;
+static const NSUInteger kVectorAssaultFrameVertexCapacity = 1024 + 5 * 48 * 540;
+static const vector_float3 kVectorAssaultPalette[7] = {
+    {41.0f/255.0f, 32.0f/255.0f, 54.0f/255.0f}, // #292036
+    {77.0f/255.0f, 54.0f/255.0f, 94.0f/255.0f}, // #4D365E
+    {129.0f/255.0f, 93.0f/255.0f, 156.0f/255.0f}, // #815D9C
+    {176.0f/255.0f, 133.0f/255.0f, 205.0f/255.0f}, // #B085CD
+    {37.0f/255.0f, 27.0f/255.0f, 48.0f/255.0f}, // #251B30
+    {223.0f/255.0f, 190.0f/255.0f, 232.0f/255.0f}, // #DFBEE8
+    {104.0f/255.0f, 73.0f/255.0f, 121.0f/255.0f}, // #684979
+};
+static inline vector_float2 VectorAssaultAdd(vector_float2 a, vector_float2 b) { return (vector_float2){a.x+b.x,a.y+b.y}; }
+static inline vector_float2 VectorAssaultSub(vector_float2 a, vector_float2 b) { return (vector_float2){a.x-b.x,a.y-b.y}; }
+static inline vector_float2 VectorAssaultScale(vector_float2 a, float s) { return (vector_float2){a.x*s,a.y*s}; }
+static inline float VectorAssaultDot(vector_float2 a, vector_float2 b) { return a.x*b.x+a.y*b.y; }
+static inline float VectorAssaultLength(vector_float2 a) { return sqrtf(a.x*a.x+a.y*a.y); }
+static inline vector_float2 VectorAssaultNormalize(vector_float2 a) { float l=VectorAssaultLength(a); return l>1e-6f?VectorAssaultScale(a,1.0f/l):(vector_float2){1,0}; }
+static inline float VectorAssaultDistance(vector_float2 a, vector_float2 b) { return VectorAssaultLength(VectorAssaultSub(a,b)); }
+
+@interface VectorAssaultRenderer ()
+{
+    id<MTLBuffer> _frameBuffers[3];
+    float _beatPhaseOffset[48];
+}
+@property (nonatomic, strong) id<MTLRenderPipelineState> assaultPipeline;
+@property (nonatomic, strong) NSMutableArray<NSData *> *assaultPaths;
+@property (nonatomic, strong) NSMutableArray<NSData *> *straightPaths;
+@property (nonatomic, assign) uint64_t generatedSeed;
+@property (nonatomic, assign) float generatedAngle;
+@property (nonatomic, assign) float generatedTurnDensity;
+@property (nonatomic, assign) float smoothedBass;
+@property (nonatomic, assign) float smoothedTransient;
+@property (nonatomic, assign) float smoothedEnergy;
+@property (nonatomic, assign) float lastPlaybackTime;
+@property (nonatomic, strong) id lastSongIdentity;
+@property (nonatomic, assign) NSUInteger bufferCursor;
+@property (nonatomic, strong) dispatch_semaphore_t frameSemaphore;
+@property (nonatomic, assign) CFTimeInterval demoLastTimestamp;
+@property (nonatomic, assign) double demoSimulationTime;
+@property (nonatomic, assign) CFTimeInterval musicLastRenderTimestamp;
+@property (nonatomic, assign) double musicDisplayTime;
+@property (nonatomic, assign) double musicLastReportedTime;
+@property (nonatomic, assign) BOOL musicClockInitialized;
+@property (nonatomic, assign) double musicMotionTime;
+@property (nonatomic, assign) double musicCameraTime;
+@property (nonatomic, assign) double musicPreviousDisplayTime;
+@property (nonatomic, assign) float musicTempoScale;
+@property (nonatomic, assign) float arrowMotionGate;
+@property (nonatomic, assign) float cameraMotionGate;
+@property (nonatomic, assign) float beatDrive;
+@property (nonatomic, assign) float sustainedGuitar;
+@property (nonatomic, assign) float sustainedPiano;
+@property (nonatomic, assign) float otherStemPeak;
+@property (nonatomic, assign) float vocalModelPeak;
+@property (nonatomic, assign) float kickEnvelope;
+@property (nonatomic, assign) CFTimeInterval lastBeatArrival;
+@property (nonatomic, assign) BOOL beatSignalWasHigh;
+@property (nonatomic, assign) NSUInteger pendingBeatCount;
+@property (nonatomic, assign) float pendingBeatIntensity;
+@property (nonatomic, assign) NSInteger pendingBeatKind;
+@property (nonatomic, strong) AIColorConfiguration *assaultColorConfig;
+@property (nonatomic, copy) NSString *assaultSongName;
+@property (nonatomic, copy) NSString *assaultSongArtist;
+@end
+
+@implementation VectorAssaultRenderer
+
+static double VectorAssaultRnd(double n) { double x = sin(n * 127.1 + 78.233) * 43758.5453; return x - floor(x); }
+
+- (instancetype)initWithMetalView:(MTKView *)metalView {
+    self = [super initWithMetalView:metalView];
+    if (self) {
+        self.assaultColorConfig = [MusicAIAnalyzer sharedAnalyzer].currentConfiguration;
+        [NSNotificationCenter.defaultCenter addObserver:self selector:@selector(assaultSongDidStart:)
+                                               name:@"AudioSpectrumPlayerDidStartSongNotification" object:nil];
+        [NSNotificationCenter.defaultCenter addObserver:self selector:@selector(assaultColorsDidChange:)
+                                               name:kAIConfigurationDidChangeNotification object:nil];
+    }
+    return self;
+}
+
+- (void)assaultSongDidStart:(NSNotification *)notification {
+    if (!NSThread.isMainThread) {
+        dispatch_async(dispatch_get_main_queue(), ^{ [self assaultSongDidStart:notification]; });
+        return;
+    }
+    self.assaultSongName = notification.userInfo[@"songName"];
+    self.assaultSongArtist = notification.userInfo[@"artist"] ?: @"";
+    AIColorConfiguration *config = [MusicAIAnalyzer sharedAnalyzer].currentConfiguration;
+    BOOL matches = [config.songName isEqualToString:self.assaultSongName] &&
+                   [config.artist isEqualToString:self.assaultSongArtist];
+    self.assaultColorConfig = matches ? config : nil;
+}
+
+- (void)assaultColorsDidChange:(NSNotification *)notification {
+    if (!NSThread.isMainThread) {
+        dispatch_async(dispatch_get_main_queue(), ^{ [self assaultColorsDidChange:notification]; });
+        return;
+    }
+    AIColorConfiguration *config = notification.userInfo[kAIConfigurationKey];
+    if (!config) return;
+    if (self.assaultSongName.length > 0 &&
+        (![config.songName isEqualToString:self.assaultSongName] ||
+         ![config.artist isEqualToString:self.assaultSongArtist])) return;
+    self.assaultColorConfig = config;
+}
+
+- (void)setRenderParameters:(NSDictionary *)parameters {
+    [self.renderParameters addEntriesFromDictionary:parameters];
+    if (!parameters[@"vectorBeatDetected"]) return;
+    BOOL beatHigh = [parameters[@"vectorBeatDetected"] boolValue];
+    BOOL risingBeat = beatHigh && !self.beatSignalWasHigh;
+    self.beatSignalWasHigh = beatHigh;
+    if (!risingBeat) return;
+    CFTimeInterval now = CACurrentMediaTime();
+    // One event per analyzed onset; the analyzer can hold a hit for adjacent FFT windows.
+    if (now - self.lastBeatArrival < 0.12) return;
+    self.lastBeatArrival = now;
+    self.pendingBeatCount++;
+    self.pendingBeatIntensity = fmaxf(0.0f, fminf(1.0f, [parameters[@"vectorBeatIntensity"] floatValue]));
+    self.pendingBeatKind = [parameters[@"vectorBeatKind"] integerValue];
+}
+
+- (void)resetMusicBeatState {
+    memset(_beatPhaseOffset, 0, sizeof(_beatPhaseOffset));
+    self.kickEnvelope = 0;
+    self.pendingBeatCount = 0;
+    self.lastBeatArrival = 0;
+    self.beatSignalWasHigh = NO;
+}
+
+- (void)setupPipeline {
+    self.frameSemaphore = dispatch_semaphore_create(3);
+    self.assaultPaths = [NSMutableArray array];
+    self.straightPaths = [NSMutableArray array];
+    NSUInteger initialVertexCapacity = kVectorAssaultFrameVertexCapacity * sizeof(VectorAssaultVertex);
+    for (NSUInteger i = 0; i < 3; i++) _frameBuffers[i] = [self.device newBufferWithLength:initialVertexCapacity options:MTLResourceStorageModeShared];
+    NSString *source = @"#include <metal_stdlib>\nusing namespace metal;\nstruct V{float2 p; float4 c;}; struct O{float4 p [[position]]; float4 c;};\nvertex O vector_assault_vertex(const device V* v [[buffer(0)]], uint i [[vertex_id]]){O o; o.p=float4(v[i].p,0,1); o.c=v[i].c; return o;}\nfragment float4 vector_assault_fragment(O in [[stage_in]]){return in.c;}\n";
+    NSError *error = nil;
+    id<MTLLibrary> library = [self.device newLibraryWithSource:source options:nil error:&error];
+    if (!library) { NSLog(@"[VectorAssault] Metal shader compile failed: %@", error); return; }
+    MTLRenderPipelineDescriptor *descriptor = [MTLRenderPipelineDescriptor new];
+    descriptor.vertexFunction = [library newFunctionWithName:@"vector_assault_vertex"];
+    descriptor.fragmentFunction = [library newFunctionWithName:@"vector_assault_fragment"];
+    descriptor.colorAttachments[0].pixelFormat = self.metalView.colorPixelFormat;
+    descriptor.depthAttachmentPixelFormat = self.metalView.depthStencilPixelFormat;
+    descriptor.colorAttachments[0].blendingEnabled = YES;
+    descriptor.colorAttachments[0].sourceRGBBlendFactor = MTLBlendFactorSourceAlpha;
+    descriptor.colorAttachments[0].destinationRGBBlendFactor = MTLBlendFactorOneMinusSourceAlpha;
+    descriptor.colorAttachments[0].sourceAlphaBlendFactor = MTLBlendFactorOne;
+    descriptor.colorAttachments[0].destinationAlphaBlendFactor = MTLBlendFactorOneMinusSourceAlpha;
+    self.assaultPipeline = [self.device newRenderPipelineStateWithDescriptor:descriptor error:&error];
+    if (!self.assaultPipeline) NSLog(@"[VectorAssault] pipeline failed: %@", error);
+}
+
+- (void)rebuildPathsForSeed:(uint64_t)seed count:(NSUInteger)count turnDensity:(float)turnDensity {
+    [self.assaultPaths removeAllObjects];
+    [self.straightPaths removeAllObjects];
+    memset(_beatPhaseOffset, 0, sizeof(_beatPhaseOffset));
+    float angle = -(float)M_PI_4;
+    vector_float2 forward = {cosf(angle), sinf(angle)};
+    vector_float2 lateral = {-forward.y, forward.x};
+    for (NSUInteger a = 0; a < count; a++) {
+        VectorAssaultPath path = {0};
+        path.count = 44;
+        path.layer = a;
+        double s = (double)a * 23.0 + 11.0;
+        float width = 390.0f, height = 390.0f;
+        vector_float2 p = {-310.0f + (float)VectorAssaultRnd(s) * width * .85f, height * .65f + (float)VectorAssaultRnd(s + 1) * height * .95f};
+        path.points[0] = (VectorAssaultPathPoint){p, 0};
+        float distance = 0;
+        int direction = (a % 2 == 0) ? 1 : -1;
+        for (NSUInteger k = 0; k < 22; k++) {
+            float f = (64.0f + (float)VectorAssaultRnd(s + k * 5 + 3) * 145.0f) * (0.65f + (float)VectorAssaultRnd(a + 201) * 0.65f);
+            p = VectorAssaultAdd(p, VectorAssaultScale(forward, f)); distance += f;
+            path.points[k * 2 + 1] = (VectorAssaultPathPoint){p, distance};
+            if (k < 21) { float side = (38.0f + (float)VectorAssaultRnd(s + k * 5 + 4) * 132.0f) * ((k % 2 == 0) ? direction : -direction); p = VectorAssaultAdd(p, VectorAssaultScale(lateral, side)); distance += fabsf(side); path.points[k * 2 + 2] = (VectorAssaultPathPoint){p, distance}; }
+        }
+        path.length = distance;
+        double r = VectorAssaultRnd(a * 9 + 7);
+        path.speed = 150.0f + (float)r * 180.0f;
+        path.width = 5.0f + (float)r * 11.0f + (a % 7 == 0 ? 7.0f : 0.0f);
+        [self.assaultPaths addObject:[NSData dataWithBytes:&path length:sizeof(path)]];
+        VectorAssaultPath straight = path;
+        straight.count = 2;
+        straight.points[1] = (VectorAssaultPathPoint){VectorAssaultAdd(straight.points[0].point,
+                                                       VectorAssaultScale(forward, path.length)), path.length};
+        [self.straightPaths addObject:[NSData dataWithBytes:&straight length:sizeof(straight)]];
+    }
+    self.generatedSeed = seed;
+    self.generatedAngle = angle;
+    self.generatedTurnDensity = turnDensity;
+}
+
+- (void)drawInMTKView:(MTKView *)view {
+    if (!self.isRendering || view.paused || !self.assaultPipeline) return;
+    if ([self.renderParameters[@"enabled"] respondsToSelector:@selector(boolValue)] && ![self.renderParameters[@"enabled"] boolValue]) return;
+    NSUInteger count = (NSUInteger)fminf(48, fmaxf(1, [self.renderParameters[@"arrowCount"] respondsToSelector:@selector(integerValue)] ? [self.renderParameters[@"arrowCount"] integerValue] : 22));
+    uint64_t seed = [self.renderParameters[@"seed"] respondsToSelector:@selector(unsignedLongLongValue)] ? [self.renderParameters[@"seed"] unsignedLongLongValue] : 7640891576956012809ULL;
+    float turnDensity = [self.renderParameters[@"turnDensity"] respondsToSelector:@selector(floatValue)] ? [self.renderParameters[@"turnDensity"] floatValue] : 1.0f;
+    float attackAngle = [self.renderParameters[@"attackAngle"] respondsToSelector:@selector(floatValue)] ? [self.renderParameters[@"attackAngle"] floatValue] * (float)M_PI / 180.0f : -(float)M_PI_4;
+    if (seed != self.generatedSeed || self.assaultPaths.count != 48 || fabsf(attackAngle - self.generatedAngle) > 0.0001f || fabsf(turnDensity - self.generatedTurnDensity) > 0.0001f) [self rebuildPathsForSeed:seed count:48 turnDensity:turnDensity];
+
+    BOOL hasFixedTime = [self.renderParameters[@"fixedTime"] respondsToSelector:@selector(doubleValue)];
+    BOOL demo = [self.renderParameters[@"demoMode"] boolValue] || hasFixedTime;
+    BOOL musicResponseEnabled = ![self.renderParameters[@"audioResponseEnabled"] respondsToSelector:@selector(boolValue)] ||
+                                [self.renderParameters[@"audioResponseEnabled"] boolValue];
+    float attackSpeed = [self.renderParameters[@"attackSpeed"] respondsToSelector:@selector(floatValue)] ? [self.renderParameters[@"attackSpeed"] floatValue] : 1.2f;
+    id songIdentity = self.renderParameters[@"songIdentity"] ?: @0;
+    if (self.lastSongIdentity && ![self.lastSongIdentity isEqual:songIdentity]) {
+        self.smoothedBass = self.smoothedTransient = self.smoothedEnergy = 0;
+        self.lastPlaybackTime = -1;
+        self.musicClockInitialized = NO;
+        [self resetMusicBeatState];
+    }
+    self.lastSongIdentity = songIdentity;
+    double simulationTime;
+    double musicFrameDelta = 0.0;
+    if (hasFixedTime) {
+        simulationTime = [self.renderParameters[@"fixedTime"] doubleValue];
+        self.demoSimulationTime = simulationTime;
+        self.demoLastTimestamp = 0;
+    } else if (demo) {
+        CFTimeInterval now = CACurrentMediaTime();
+        if (self.demoLastTimestamp > 0) self.demoSimulationTime += fmin(0.05, fmax(0.0, now - self.demoLastTimestamp)) * attackSpeed;
+        self.demoLastTimestamp = now;
+        simulationTime = self.demoSimulationTime;
+    } else {
+        self.demoLastTimestamp = 0;
+        double songTime = [self.renderParameters[@"songPlaybackTime"] respondsToSelector:@selector(doubleValue)] ? [self.renderParameters[@"songPlaybackTime"] doubleValue] : CACurrentMediaTime() - self.startTime;
+        CFTimeInterval now = CACurrentMediaTime();
+        BOOL isPlaying = ![self.renderParameters[@"songIsPlaying"] respondsToSelector:@selector(boolValue)] ||
+                         [self.renderParameters[@"songIsPlaying"] boolValue];
+        double elapsed = self.musicLastRenderTimestamp > 0 ? fmin(0.1, fmax(0.0, now - self.musicLastRenderTimestamp)) : 0.0;
+        BOOL seeked = songTime + 0.05 < self.musicLastReportedTime ||
+                      fabs(songTime - self.musicDisplayTime) > 0.3;
+        if (!self.musicClockInitialized || seeked) {
+            self.musicDisplayTime = songTime;
+            self.musicPreviousDisplayTime = songTime;
+            self.musicTempoScale = 1.0f;
+            self.musicMotionTime = songTime * attackSpeed;
+            self.musicCameraTime = self.musicMotionTime;
+            self.arrowMotionGate = self.cameraMotionGate = 0;
+            self.beatDrive = self.sustainedGuitar = self.sustainedPiano = 0;
+            self.otherStemPeak = 0;
+            self.vocalModelPeak = 0;
+            self.musicClockInitialized = YES;
+            [self resetMusicBeatState];
+        } else if (isPlaying) {
+            self.musicDisplayTime = fmax(songTime, self.musicDisplayTime + elapsed);
+        } else {
+            self.musicDisplayTime = songTime;
+        }
+        self.musicLastReportedTime = songTime;
+        self.musicLastRenderTimestamp = now;
+        float bpm = musicResponseEnabled ? [self.renderParameters[@"vectorBPM"] floatValue] : 120.0f;
+        float targetTempo = bpm >= 60.0f && bpm <= 200.0f ?
+            sqrtf(bpm / 120.0f) : 1.0f;
+        targetTempo = fmaxf(0.75f, fminf(1.30f, targetTempo));
+        double songDelta = fmax(0.0, fmin(0.1, self.musicDisplayTime - self.musicPreviousDisplayTime));
+        musicFrameDelta = songDelta;
+        self.musicTempoScale += (targetTempo - self.musicTempoScale) * (1.0f - expf(-(float)songDelta * 2.0f));
+        float energyLevel = fmaxf(0.0f, fminf(1.0f, [self.renderParameters[@"activityEnergy"] floatValue]));
+        float otherLevel = fmaxf(0.0f, fminf(1.0f, [self.renderParameters[@"otherStemControl"] floatValue]));
+        BOOL hasOtherStem = [self.renderParameters[@"otherStemControlEnabled"] boolValue];
+        float vocalLevel = fmaxf(0.0f, fminf(1.0f, [self.renderParameters[@"vocalYAMNetControl"] floatValue]));
+        BOOL hasVocalModel = [self.renderParameters[@"vocalYAMNetEnabled"] boolValue];
+        float musicActivity = fmaxf(0.0f, fminf(1.0f, (energyLevel - 0.025f) / 0.10f));
+        if (hasOtherStem) self.otherStemPeak = fmaxf(self.otherStemPeak, otherLevel);
+        if (hasVocalModel) self.vocalModelPeak = fmaxf(self.vocalModelPeak, vocalLevel);
+        // Prefer the cached Singing timeline once it has recognized a phrase.
+        // The "other" stem is only a fallback phrase cue; it is not vocals-only.
+        float cameraActivity = hasOtherStem && self.otherStemPeak > 0.24f ?
+            fmaxf(0.0f, fminf(1.0f, (otherLevel - 0.06f) / 0.19f)) : musicActivity;
+        if (hasVocalModel && self.vocalModelPeak > 0.40f) {
+            cameraActivity = fmaxf(0.0f, fminf(1.0f, (vocalLevel - 0.06f) / 0.34f));
+        }
+        float follow = 1.0f - expf(-(float)songDelta * 12.0f);
+        self.arrowMotionGate += ((isPlaying ? musicActivity : 0.0f) - self.arrowMotionGate) * follow;
+        self.cameraMotionGate += ((isPlaying ? cameraActivity : 0.0f) - self.cameraMotionGate) * follow;
+        self.beatDrive *= expf(-(float)songDelta * 5.0f);
+        if (self.pendingBeatCount > 0) self.beatDrive = fmaxf(self.beatDrive, self.pendingBeatIntensity);
+        float drum = [self.renderParameters[@"drumsStemControlEnabled"] boolValue] ?
+            fmaxf(0.0f, fminf(1.0f, [self.renderParameters[@"drumsStemControl"] floatValue])) : 0.0f;
+        float arrowDrive = musicResponseEnabled ? self.arrowMotionGate * (0.78f + 0.32f * self.beatDrive + 0.18f * drum) : 1.0f;
+        float cameraDrive = musicResponseEnabled ? self.cameraMotionGate * (0.62f + 0.54f * self.beatDrive + 0.14f * drum) : 1.0f;
+        self.musicMotionTime += songDelta * attackSpeed * self.musicTempoScale * arrowDrive;
+        self.musicCameraTime += songDelta * attackSpeed * self.musicTempoScale * cameraDrive;
+        float guitarLevel = [self.renderParameters[@"guitarStemControlEnabled"] boolValue] ?
+            [self.renderParameters[@"guitarStemControl"] floatValue] : [self.renderParameters[@"activityElectricGuitarTexture"] floatValue];
+        float pianoLevel = [self.renderParameters[@"pianoStemControlEnabled"] boolValue] ?
+            [self.renderParameters[@"pianoStemControl"] floatValue] : [self.renderParameters[@"activityHarmonic"] floatValue] * 0.65f;
+        float sustainFollow = 1.0f - expf(-(float)songDelta * 3.0f);
+        self.sustainedGuitar += (fmaxf(0.0f, fminf(1.0f, guitarLevel)) - self.sustainedGuitar) * sustainFollow;
+        self.sustainedPiano += (fmaxf(0.0f, fminf(1.0f, pianoLevel)) - self.sustainedPiano) * sustainFollow;
+        self.musicPreviousDisplayTime = self.musicDisplayTime;
+        simulationTime = self.musicMotionTime;
+    }
+    float playbackTime = (float)simulationTime;
+    float bass = demo ? (0.5f + 0.5f * sinf(playbackTime * 5.1f)) : [self.renderParameters[@"subBass"] floatValue];
+    float transient = demo ? fmaxf(0, cosf(playbackTime * 6.28f) - 0.72f) * 3.5f : [self.renderParameters[@"activityTransient"] floatValue];
+    float energy = demo ? (0.5f + 0.5f * sinf(playbackTime * 1.7f)) : [self.renderParameters[@"activityEnergy"] floatValue];
+    // The preview is a steady geometric animation; synthetic demo audio must not jump the heads along their paths.
+    float response = !demo && musicResponseEnabled;
+    if (!response) [self resetMusicBeatState];
+    else {
+        self.kickEnvelope *= expf(-(float)musicFrameDelta * 13.0f);
+        // Consume the onset once on the render thread. Keep the same cached 90-degree paths.
+        if (self.pendingBeatCount > 0) {
+            float strength = self.pendingBeatIntensity;
+            if (self.pendingBeatKind == 1 && strength >= 0.25f) self.kickEnvelope = fmaxf(self.kickEnvelope, strength);
+            for (NSUInteger a = 0; a < count; a++) {
+                if (a % 6 == 0 || a % 6 == 3) continue; // sustained-note lanes stay straight
+                VectorAssaultPath path;
+                [self.assaultPaths[a] getBytes:&path length:sizeof(path)];
+                float cycle = path.length + 950.0f;
+                float head = fmodf(playbackTime * path.speed + a * 177.0f + _beatPhaseOffset[a], cycle);
+                if (head < 0) head += cycle;
+                for (NSUInteger corner = 1; corner + 1 < path.count; corner++) {
+                    float gap = path.points[corner].distance - head;
+                    if (gap >= 0.0f && gap <= 18.0f + 18.0f * strength) {
+                        _beatPhaseOffset[a] += gap + 0.5f;
+                        break;
+                    }
+                }
+            }
+            self.pendingBeatCount = 0;
+        }
+    }
+    float smoothing = 1.0f - expf(-fmaxf(0, playbackTime - self.lastPlaybackTime) * 7.0f);
+    if (playbackTime < self.lastPlaybackTime) { self.smoothedBass = bass; self.smoothedTransient = transient; self.smoothedEnergy = energy; smoothing = 1.0f; }
+    if (playbackTime >= self.lastPlaybackTime) {
+        self.smoothedBass += (bass - self.smoothedBass) * smoothing;
+        self.smoothedTransient += (transient - self.smoothedTransient) * smoothing;
+        self.smoothedEnergy += (energy - self.smoothedEnergy) * smoothing;
+    }
+    self.lastPlaybackTime = playbackTime;
+
+    vector_float3 songPalette[7];
+    memcpy(songPalette, kVectorAssaultPalette, sizeof(songPalette));
+    vector_float3 gridTint = {150.0f/255.0f, 106.0f/255.0f, 177.0f/255.0f};
+    vector_float3 clearTint = {9.0f/255.0f, 7.0f/255.0f, 18.0f/255.0f};
+    vector_float3 guitarTint = songPalette[2], pianoTint = songPalette[3], drumTint = songPalette[5];
+    AIColorConfiguration *colorConfig = response ? self.assaultColorConfig : nil;
+    if (colorConfig.isLLMGenerated) {
+        songPalette[0] = colorConfig.coronaFilamentsColor;
+        songPalette[1] = colorConfig.volumetricBeamColor;
+        songPalette[2] = colorConfig.pulseRingColor;
+        songPalette[3] = colorConfig.topLightArrayColor;
+        songPalette[4] = colorConfig.atmosphereColor;
+        songPalette[5] = colorConfig.edgeLightColor;
+        songPalette[6] = colorConfig.rotatingBeamColor;
+        gridTint = colorConfig.edgeLightColor;
+        clearTint = colorConfig.atmosphereColor * 0.12f;
+        guitarTint = colorConfig.coronaFilamentsColor * 0.55f + colorConfig.pulseRingColor * 0.45f;
+        pianoTint = colorConfig.volumetricBeamColor * 0.55f + colorConfig.topLightArrayColor * 0.45f;
+        drumTint = colorConfig.rotatingBeamColor * 0.55f + colorConfig.edgeLightColor * 0.45f;
+    }
+
+    vector_float2 forward = {cosf(attackAngle), sinf(attackAngle)};
+    float tracking = [self.renderParameters[@"cameraTracking"] respondsToSelector:@selector(floatValue)] ? [self.renderParameters[@"cameraTracking"] floatValue] : 0.75f;
+    float pulse = response ? self.kickEnvelope : powf(fmaxf(0, cosf(playbackTime * 5.2f)), 14.0f);
+    float camProgress = (response ? (float)self.musicCameraTime : playbackTime) * 260.0f * tracking * 0.53f;
+    vector_float2 camera = VectorAssaultScale(forward, camProgress);
+    float zoom = 1.0f + tracking * 0.07f + pulse * 0.018f;
+    float angle = -pulse * 0.009f * tracking;
+    float shake = pulse * tracking * (response ? 4.0f : 2.5f);
+    vector_float2 screenShake = {sinf(playbackTime * 25.0f) * shake, cosf(playbackTime * 31.0f) * shake};
+    float c = cosf(angle), s = sinf(angle);
+    CGSize size = view.drawableSize;
+    float side = fmaxf(1, fminf(size.width, size.height));
+    // Never stall the render callback behind a busy GPU frame.
+    if (dispatch_semaphore_wait(self.frameSemaphore, DISPATCH_TIME_NOW) != 0) return;
+    NSUInteger slot = self.bufferCursor++ % 3;
+    id<MTLBuffer> buffer = _frameBuffers[slot];
+    if (!buffer) { dispatch_semaphore_signal(self.frameSemaphore); return; }
+    VectorAssaultVertex *vertices = (VectorAssaultVertex *)buffer.contents;
+    NSUInteger vertexCount = 0;
+
+    // The reference Canvas draws its faint 75-unit grid before any arrows.
+    // Emit thin quads so the grid participates in the same camera transform.
+    vector_float4 gridColor = (vector_float4){gridTint.x, gridTint.y, gridTint.z, 0.10f};
+    for (int axis = 0; axis < 2; axis++) {
+        float center = axis == 0 ? camera.x + 195.0f : camera.y + 195.0f;
+        float origin = axis == 0 ? -1000.0f : -1800.0f;
+        int first = (int)(origin + floorf((center - 500.0f - origin) / 75.0f) * 75.0f);
+        int last = (int)(center + 500.0f);
+        for (int v = first; v <= last; v += 75) {
+            vector_float2 a = axis == 0 ? (vector_float2){v,camera.y-800.0f} : (vector_float2){camera.x-800.0f,v};
+            vector_float2 b = axis == 0 ? (vector_float2){v,camera.y+1200.0f} : (vector_float2){camera.x+1200.0f,v};
+            vector_float2 d = VectorAssaultNormalize(VectorAssaultSub(b,a));
+            vector_float2 n = (vector_float2){-d.y * .5f, d.x * .5f};
+            vector_float2 q[4] = {VectorAssaultSub(a,n),VectorAssaultAdd(a,n),VectorAssaultAdd(b,n),VectorAssaultSub(b,n)};
+            for (int k=0;k<6;k++) { int oi[6]={0,1,2,0,2,3}; vector_float2 p=q[oi[k]]; vector_float2 z=VectorAssaultSub(VectorAssaultSub(p,camera),(vector_float2){195,195}); float xx=((z.x*c-z.y*s)*zoom+screenShake.x)*2.0f/390.0f, yy=-((z.x*s+z.y*c)*zoom+screenShake.y)*2.0f/390.0f; vertices[vertexCount++] = (VectorAssaultVertex){{xx,yy},gridColor}; }
+        }
+    }
+
+    NSUInteger activeCount = count;
+    // The first tile is the exact Canvas reference. Additional copies keep
+    // feeding the advancing camera after the finite reference paths leave view.
+    NSInteger centerTile = hasFixedTime ? 0 : MAX(0, (NSInteger)floorf(camProgress / 1200.0f));
+    NSInteger firstTile = hasFixedTime ? 0 : MAX(0, centerTile - 3);
+    NSInteger lastTile = hasFixedTime ? 0 : centerTile + 1;
+    for (NSInteger tile = firstTile; tile <= lastTile; tile++) {
+    vector_float2 tileCamera = VectorAssaultSub(camera, VectorAssaultScale(forward, (float)tile * 1200.0f));
+    NSUInteger pathIndex = 0;
+    for (NSData *value in self.assaultPaths) {
+        if (pathIndex++ >= activeCount) break;
+        NSUInteger lane = pathIndex - 1;
+        BOOL guitarLane = response && lane % 6 == 0;
+        BOOL pianoLane = response && lane % 6 == 3;
+        VectorAssaultPath path;
+        [(guitarLane || pianoLane ? self.straightPaths[lane] : value) getBytes:&path length:sizeof(path)];
+        float headSpeed = path.speed;
+        float trail = (330.0f + (path.speed - 150.0f) / 180.0f * 450.0f) * ([self.renderParameters[@"trailLengthMultiplier"] respondsToSelector:@selector(floatValue)] ? [self.renderParameters[@"trailLengthMultiplier"] floatValue] : 1.4f);
+        float exitDistance = 950.0f;
+        float cycleLength = path.length + exitDistance;
+        float head = fmodf(playbackTime * headSpeed + (float)path.layer * 177.0f + (response ? _beatPhaseOffset[path.layer] : 0.0f), cycleLength);
+        if (head < 0) head += cycleLength;
+        float tail = fmaxf(0, head - trail);
+        float visibleHead = fminf(head, path.length);
+        float lifeOpacity = guitarLane ? 0.22f + 0.78f * self.sustainedGuitar :
+                            (pianoLane ? 0.22f + 0.78f * self.sustainedPiano : 1.0f);
+        if (tail >= visibleHead || lifeOpacity <= 0) continue;
+        vector_float2 visible[48]; NSUInteger visibleCount = 0;
+        for (NSUInteger i = 0; i + 1 < path.count; i++) {
+            VectorAssaultPathPoint a = path.points[i], b = path.points[i + 1];
+            float lo = fmaxf(tail, a.distance), hi = fminf(visibleHead, b.distance);
+            if (hi <= lo) continue;
+            float inv = 1.0f / (b.distance - a.distance);
+            vector_float2 p0 = VectorAssaultAdd(a.point, VectorAssaultScale(VectorAssaultSub(b.point, a.point), (lo - a.distance) * inv));
+            vector_float2 p1 = VectorAssaultAdd(a.point, VectorAssaultScale(VectorAssaultSub(b.point, a.point), (hi - a.distance) * inv));
+            if (!visibleCount || VectorAssaultDistance(visible[visibleCount - 1], p0) > 0.01f) visible[visibleCount++] = p0;
+            visible[visibleCount++] = p1;
+        }
+        if (visibleCount < 2) continue;
+        float minX = INFINITY, minY = INFINITY, maxX = -INFINITY, maxY = -INFINITY;
+        for (NSUInteger i = 0; i < visibleCount; i++) {
+            minX = fminf(minX, visible[i].x); maxX = fmaxf(maxX, visible[i].x);
+            minY = fminf(minY, visible[i].y); maxY = fmaxf(maxY, visible[i].y);
+        }
+        if (maxX < tileCamera.x - 100.0f || minX > tileCamera.x + 490.0f ||
+            maxY < tileCamera.y - 100.0f || minY > tileCamera.y + 490.0f) continue;
+        VectorAssaultVertex strip[128]; NSUInteger stripCount = 0;
+        float widthScale = [self.renderParameters[@"arrowWidthMultiplier"] respondsToSelector:@selector(floatValue)] ? [self.renderParameters[@"arrowWidthMultiplier"] floatValue] : 1.0f;
+        float halfWidth = path.width * (1.0f + (response ? self.smoothedBass * 0.65f : 0)) * widthScale * 0.5f;
+        vector_float3 bodyColor = guitarLane ? guitarTint : (pianoLane ? pianoTint :
+                                  (response && lane % 6 == 1 ? drumTint : songPalette[path.layer % 7]));
+        for (NSUInteger i = 0; i < visibleCount; i++) {
+            vector_float2 tangent;
+            if (i == 0) tangent = VectorAssaultNormalize(VectorAssaultSub(visible[1], visible[0]));
+            else if (i == visibleCount - 1) tangent = VectorAssaultNormalize(VectorAssaultSub(visible[i], visible[i - 1]));
+            else {
+                vector_float2 before = VectorAssaultNormalize(VectorAssaultSub(visible[i], visible[i - 1]));
+                vector_float2 after = VectorAssaultNormalize(VectorAssaultSub(visible[i + 1], visible[i]));
+                vector_float2 sum = VectorAssaultAdd(before, after);
+                tangent = VectorAssaultLength(sum) < 0.05f ? after : VectorAssaultNormalize(sum);
+            }
+            vector_float2 normal = {-tangent.y, tangent.x};
+            float alpha = lifeOpacity;
+            float miter = 1.0f;
+            if (i > 0 && i + 1 < visibleCount) {
+                vector_float2 previous = VectorAssaultNormalize(VectorAssaultSub(visible[i], visible[i - 1]));
+                // Canvas miterLimit=3: miter length is 1/|dot(normal, prevNormal)|.
+                miter = fminf(3.0f, 1.0f / fmaxf(0.333333f, fabsf(VectorAssaultDot(normal, (vector_float2){-previous.y, previous.x}))));
+            }
+            for (int sideIndex = -1; sideIndex <= 1; sideIndex += 2) {
+                vector_float2 p = VectorAssaultAdd(visible[i], VectorAssaultScale(normal, halfWidth * miter * sideIndex));
+                vector_float2 delta = VectorAssaultSub(VectorAssaultSub(p, tileCamera), (vector_float2){195.0f,195.0f});
+                float x = ((delta.x * c - delta.y * s) * zoom + screenShake.x) * side / 390.0f;
+                float y = -((delta.x * s + delta.y * c) * zoom + screenShake.y) * side / 390.0f;
+                vector_float4 color = (vector_float4){bodyColor.x,bodyColor.y,bodyColor.z,alpha};
+                strip[stripCount++] = (VectorAssaultVertex){{x * 2.0f / side, y * 2.0f / side}, color};
+            }
+        }
+        VectorAssaultVertex triangles[384]; NSUInteger triangleCount = 0;
+        for (NSUInteger i = 0; i + 3 < stripCount; i += 2) {
+            triangles[triangleCount++] = strip[i]; triangles[triangleCount++] = strip[i+1]; triangles[triangleCount++] = strip[i+2];
+            triangles[triangleCount++] = strip[i+1]; triangles[triangleCount++] = strip[i+3]; triangles[triangleCount++] = strip[i+2];
+        }
+        memcpy(vertices + vertexCount, triangles, triangleCount * sizeof(VectorAssaultVertex));
+        vertexCount += triangleCount;
+        vector_float2 tip = visible[visibleCount - 1], tipTangent = VectorAssaultNormalize(VectorAssaultSub(visible[visibleCount - 1], visible[visibleCount - 2]));
+        vector_float2 tipNormal = {-tipTangent.y, tipTangent.x};
+        float hl = fmaxf(20.0f, path.width * 3.1f), wing = fmaxf(13.0f, path.width * 1.7f);
+        vector_float2 headPoints[4] = {VectorAssaultAdd(tip, VectorAssaultScale(tipTangent,hl*.47f)), VectorAssaultAdd(VectorAssaultSub(tip,VectorAssaultScale(tipTangent,hl*.5f)),VectorAssaultScale(tipNormal,wing)), VectorAssaultSub(tip,VectorAssaultScale(tipTangent,hl*.27f)), VectorAssaultSub(VectorAssaultSub(tip,VectorAssaultScale(tipTangent,hl*.5f)),VectorAssaultScale(tipNormal,wing))};
+        VectorAssaultVertex headVertices[6];
+        int order[6] = {0,1,2,0,2,3};
+        for (int h = 0; h < 6; h++) {
+            vector_float2 d = VectorAssaultSub(VectorAssaultSub(headPoints[order[h]], tileCamera), (vector_float2){195.0f,195.0f});
+            headVertices[h] = (VectorAssaultVertex){{((d.x*c-d.y*s)*zoom+screenShake.x)*2.0f/390.0f,-((d.x*s+d.y*c)*zoom+screenShake.y)*2.0f/390.0f},{bodyColor.x,bodyColor.y,bodyColor.z,lifeOpacity}};
+        }
+        // Keep each arrow's tip immediately after its body. This preserves the
+        // Canvas painter order when subsequent arrows are emitted.
+        memcpy(vertices + vertexCount, headVertices, sizeof(headVertices));
+        vertexCount += 6;
+        if ((path.layer % 8) == 0) {
+            float hw = fmaxf(0.4f, path.width * 0.06f);
+            vector_float3 highlight = colorConfig.isLLMGenerated ? colorConfig.pulseRingColor : (vector_float3){236.0f/255.0f,189.0f/255.0f,247.0f/255.0f};
+            vector_float4 hc = (vector_float4){highlight.x,highlight.y,highlight.z,0.45f};
+            for (NSUInteger j=0; j+1<visibleCount; j++) {
+                vector_float2 d = VectorAssaultNormalize(VectorAssaultSub(visible[j+1],visible[j]));
+                vector_float2 n = (vector_float2){-d.y*hw,d.x*hw};
+                vector_float2 q[4]={VectorAssaultSub(visible[j],n),VectorAssaultAdd(visible[j],n),VectorAssaultAdd(visible[j+1],n),VectorAssaultSub(visible[j+1],n)};
+                int oi[6]={0,1,2,0,2,3};
+                for(int z=0;z<6;z++){ vector_float2 p=VectorAssaultSub(VectorAssaultSub(q[oi[z]],tileCamera),(vector_float2){195,195}); float xx=((p.x*c-p.y*s)*zoom+screenShake.x)*2.0f/390.0f, yy=-((p.x*s+p.y*c)*zoom+screenShake.y)*2.0f/390.0f; vertices[vertexCount++]=(VectorAssaultVertex){{xx,yy},hc}; }
+            }
+        }
+    }
+    }
+    MTLRenderPassDescriptor *pass = view.currentRenderPassDescriptor;
+    id<MTLCommandBuffer> command = [self.commandQueue commandBuffer];
+    if (!pass || !command) { dispatch_semaphore_signal(self.frameSemaphore); return; }
+    pass.colorAttachments[0].clearColor = MTLClearColorMake(clearTint.x,clearTint.y,clearTint.z,1.0);
+    pass.colorAttachments[0].loadAction = MTLLoadActionClear;
+    id<MTLRenderCommandEncoder> encoder = [command renderCommandEncoderWithDescriptor:pass];
+    if (vertexCount) {
+        [encoder setRenderPipelineState:self.assaultPipeline];
+        [encoder setVertexBuffer:buffer offset:0 atIndex:0];
+        [encoder drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:vertexCount];
+    }
+    [encoder endEncoding];
+    [command presentDrawable:view.currentDrawable];
+    [command addCompletedHandler:^(__unused id<MTLCommandBuffer> cb) { dispatch_semaphore_signal(self.frameSemaphore); }];
+    [command commit];
+    if ([self.delegate respondsToSelector:@selector(metalRenderer:didFinishFrame:)]) [self.delegate metalRenderer:self didFinishFrame:playbackTime];
+}
+@end
+
 @implementation MetalRendererFactory
 
 + (instancetype)sharedFactory {
@@ -4913,6 +5444,9 @@ typedef struct {
 
         case VisualEffectTypeOpticalDarkroom:
             return [[OpticalDarkroomRenderer alloc] initWithMetalView:metalView];
+
+        case VisualEffectTypeVectorAssault:
+            return [[VectorAssaultRenderer alloc] initWithMetalView:metalView];
 
         case VisualEffectTypeGeometricMorph:
             return [[GeometricMorphRenderer alloc] initWithMetalView:metalView];

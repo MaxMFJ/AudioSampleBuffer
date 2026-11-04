@@ -381,7 +381,9 @@ static UIEdgeInsets RhythmEffectiveSafeAreaInsets(UIView *view) {
 
 - (void)setupEffectControls {
     self.controlButtons = [NSMutableArray array];
-    self.areUtilityControlsCollapsed = YES;
+    // Keep the category rail visible when the player opens. The user can still
+    // collapse the utility layer with the toggle at any time.
+    self.areUtilityControlsCollapsed = NO;
 
     CGFloat safeTop = 0;
     if (@available(iOS 11.0, *)) {
@@ -731,6 +733,13 @@ static UIEdgeInsets RhythmEffectiveSafeAreaInsets(UIView *view) {
         if (self.tableView) {
             self.tableView.alpha = self.areUtilityControlsCollapsed ? 0.0 : 1.0;
             self.tableView.userInteractionEnabled = !self.areUtilityControlsCollapsed;
+        }
+        if (self.musicSourceControl) {
+            self.musicSourceControl.alpha = self.areUtilityControlsCollapsed ? 0.0 : 1.0;
+            self.musicSourceControl.userInteractionEnabled = !self.areUtilityControlsCollapsed;
+        }
+        if (self.platformMusicStatusLabel) {
+            self.platformMusicStatusLabel.alpha = self.areUtilityControlsCollapsed ? 0.0 : 1.0;
         }
     }];
 }
@@ -1143,13 +1152,35 @@ static UIEdgeInsets RhythmEffectiveSafeAreaInsets(UIView *view) {
     tapGesture.cancelsTouchesInView = NO;
     [self.view addGestureRecognizer:tapGesture];
 
-    CGFloat tableTop = topOffset + 48;
+    self.musicSourceControl = [[UISegmentedControl alloc] initWithItems:@[@"本地", @"网易云", @"QQ 音乐", @"酷狗"]];
+    self.musicSourceControl.frame = CGRectMake(listLeft, topOffset + 46, listW, 32);
+    self.musicSourceControl.selectedSegmentIndex = 0;
+    self.musicSourceControl.apportionsSegmentWidthsByContent = NO;
+    self.musicSourceControl.backgroundColor = [UIColor colorWithWhite:0.08 alpha:0.48];
+    self.musicSourceControl.selectedSegmentTintColor = [UIColor colorWithRed:0.20 green:0.36 blue:0.59 alpha:0.94];
+    [self.musicSourceControl setTitleTextAttributes:@{NSForegroundColorAttributeName: [UIColor colorWithWhite:0.92 alpha:1.0], NSFontAttributeName: [UIFont systemFontOfSize:11 weight:UIFontWeightMedium]} forState:UIControlStateNormal];
+    [self.musicSourceControl setTitleTextAttributes:@{NSForegroundColorAttributeName: UIColor.whiteColor, NSFontAttributeName: [UIFont systemFontOfSize:11 weight:UIFontWeightSemibold]} forState:UIControlStateSelected];
+    [self.musicSourceControl addTarget:self action:@selector(musicSourceControlChanged:) forControlEvents:UIControlEventValueChanged];
+    self.musicSourceControl.alpha = self.areUtilityControlsCollapsed ? 0.0 : 1.0;
+    self.musicSourceControl.userInteractionEnabled = !self.areUtilityControlsCollapsed;
+    [self.view addSubview:self.musicSourceControl];
+    self.platformMusicRows = @[];
+
+    self.platformMusicStatusLabel = [[UILabel alloc] initWithFrame:CGRectMake(listLeft + 3, topOffset + 80, listW - 6, 32)];
+    self.platformMusicStatusLabel.font = [UIFont systemFontOfSize:10.5];
+    self.platformMusicStatusLabel.textColor = [UIColor colorWithWhite:0.82 alpha:0.78];
+    self.platformMusicStatusLabel.numberOfLines = 2;
+    self.platformMusicStatusLabel.lineBreakMode = NSLineBreakByTruncatingTail;
+    self.platformMusicStatusLabel.alpha = self.areUtilityControlsCollapsed ? 0.0 : 1.0;
+    [self.view addSubview:self.platformMusicStatusLabel];
+
+    CGFloat tableTop = topOffset + 116;
     self.tableView = [[UITableView alloc] initWithFrame:
         CGRectMake(listLeft, tableTop, listW, bottomAreaTop - tableTop - 4)
         style:UITableViewStylePlain];
     self.tableView.delegate = self;
     self.tableView.dataSource = self;
-    self.tableView.tableHeaderView = [[UIView alloc] initWithFrame:CGRectMake(0, 100, listW, screenHeight)];
+    self.tableView.tableHeaderView = [UIView new];
     self.tableView.tableFooterView = [UIView new];
     self.tableView.backgroundColor = [UIColor clearColor];
     self.tableView.rowHeight = 56;
@@ -1178,6 +1209,24 @@ static UIEdgeInsets RhythmEffectiveSafeAreaInsets(UIView *view) {
     [playBar addSubview:playBarMaterial];
     [self.view addSubview:playBar];
     self.playControlBarView = playBar;
+
+    // Playback EQ access, kept separate from visual-effect controls.
+    self.audioEffectsButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    if (@available(iOS 13.0, *)) {
+        UIImageSymbolConfiguration *cfg = [UIImageSymbolConfiguration configurationWithPointSize:16 weight:UIImageSymbolWeightSemibold];
+        [self.audioEffectsButton setImage:[UIImage systemImageNamed:@"slider.horizontal.3" withConfiguration:cfg] forState:UIControlStateNormal];
+    }
+    [self.audioEffectsButton setTitle:@" EQ" forState:UIControlStateNormal];
+    self.audioEffectsButton.titleLabel.font = [UIFont systemFontOfSize:13 weight:UIFontWeightSemibold];
+    self.audioEffectsButton.tintColor = UIColor.whiteColor;
+    self.audioEffectsButton.backgroundColor = [UIColor colorWithWhite:1.0 alpha:0.10];
+    self.audioEffectsButton.layer.cornerRadius = 18;
+    self.audioEffectsButton.accessibilityLabel = @"播放音效均衡器";
+    CGFloat playbackClusterStartX = (screenWidth - (44 + 52 + 44 + 40)) / 2.0;
+    CGFloat audioEffectsX = MAX(8.0, MIN(16.0, playbackClusterStartX - 62.0));
+    self.audioEffectsButton.frame = CGRectMake(audioEffectsX, (playAreaHeight - 38) / 2.0, 54, 38);
+    [self.audioEffectsButton addTarget:self action:@selector(audioEffectsButtonTapped:) forControlEvents:UIControlEventTouchUpInside];
+    [playBar addSubview:self.audioEffectsButton];
 
     // 三个播放按钮居中
     CGFloat prevW = 44, playW = 52, nextW = 44;
@@ -2073,6 +2122,7 @@ static UIEdgeInsets RhythmEffectiveSafeAreaInsets(UIView *view) {
         [self.performanceControlPanel setCurrentSettings:currentSettings];
     }
 
+    self.performanceControlPanel.automaticVideoEnabled = self.automaticVideoEnabled;
     [self.performanceControlPanel showAnimated:YES];
     [self.view bringSubviewToFront:self.performanceControlPanel];
 }
