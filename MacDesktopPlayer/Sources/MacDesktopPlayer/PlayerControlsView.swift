@@ -173,6 +173,22 @@ final class ControlsView: NSView {
                         guard generation == self.artworkLoadGeneration else { return }
                         self.onArtworkChange(image)
                     }
+                } else {
+                    // Directly opened files are not in the saved library, but
+                    // their embedded or sidecar artwork still belongs on the wallpaper.
+                    self.artworkLoadGeneration += 1
+                    let generation = self.artworkLoadGeneration
+                    self.onArtworkChange(nil)
+                    let track = LocalTrack(id: url.path, path: url.path,
+                                           title: self.audio.currentTitle, artist: self.audio.currentArtist)
+                    Task { [weak self] in
+                        guard let self else { return }
+                        let image = await self.library.artwork(for: track)
+                        guard generation == self.artworkLoadGeneration,
+                              self.audio.currentURL == url,
+                              self.audio.currentArtwork == nil else { return }
+                        self.onArtworkChange(image)
+                    }
                 }
                 if self.yamnetToggle.state == .on { self.analyzeCurrentTrack() }
             }
@@ -328,7 +344,9 @@ final class ControlsView: NSView {
         effectsRow.translatesAutoresizingMaskIntoConstraints = false
         let effects: [(DesktopBackgroundEffect, String)] = [
             (.tyndall, "sunbeams.fill"),
-            (.coverDots, "circle.grid.3x3.fill"), (.cellularHive, "hexagon.fill")
+            (.coverDots, "circle.grid.3x3.fill"), (.cellularHive, "hexagon.fill"),
+            (.highEnergyGrid, "point.3.connected.trianglepath.dotted"),
+            (.vectorAssault, "arrow.up.right")
         ]
         effectButtons = effects.map { effect, symbol in
             let button = NSButton(title: effect.title, target: self, action: #selector(changeBackgroundEffect(_:)))
@@ -343,7 +361,7 @@ final class ControlsView: NSView {
             button.layer?.cornerRadius = 10
             button.translatesAutoresizingMaskIntoConstraints = false
             button.heightAnchor.constraint(equalToConstant: 42).isActive = true
-            button.widthAnchor.constraint(equalToConstant: 150).isActive = true
+            button.widthAnchor.constraint(equalToConstant: 110).isActive = true
             effectsRow.addArrangedSubview(button)
             return button
         }

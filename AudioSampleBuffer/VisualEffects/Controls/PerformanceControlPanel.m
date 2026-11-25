@@ -11,6 +11,7 @@
 
 @property (nonatomic, strong) UIVisualEffectView *backgroundView;
 @property (nonatomic, strong) UIScrollView *scrollView;
+@property (nonatomic, strong) UISwitch *automaticVideoSwitch;
 @property (nonatomic, strong) UIView *contentView;
 
 // 帧率控制
@@ -123,6 +124,34 @@
     [self.contentView addSubview:titleLabel];
     yOffset += 50;
     
+    UILabel *videoLabel = [[UILabel alloc] initWithFrame:CGRectMake(20, yOffset, self.contentView.bounds.size.width - 100, 32)];
+    videoLabel.text = @"自动匹配视频";
+    videoLabel.textColor = UIColor.whiteColor;
+    videoLabel.font = [UIFont systemFontOfSize:16 weight:UIFontWeightMedium];
+    [self.contentView addSubview:videoLabel];
+    self.automaticVideoSwitch = [[UISwitch alloc] initWithFrame:CGRectMake(self.contentView.bounds.size.width - 72, yOffset, 51, 31)];
+    self.automaticVideoSwitch.accessibilityLabel = @"自动匹配视频";
+    self.automaticVideoSwitch.accessibilityIdentifier = @"automaticVideoMatchingSwitch";
+    [self.automaticVideoSwitch addTarget:self action:@selector(automaticVideoSwitchChanged:) forControlEvents:UIControlEventValueChanged];
+    [self.contentView addSubview:self.automaticVideoSwitch];
+    UILabel *videoNote = [[UILabel alloc] initWithFrame:CGRectMake(20, yOffset + 38, self.contentView.bounds.size.width - 40, 48)];
+    videoNote.text = @"关闭后只播放音乐，跳过视频分析和匹配。开启后从下一首歌曲生效。";
+    videoNote.textColor = [UIColor colorWithWhite:0.75 alpha:1];
+    videoNote.font = [UIFont systemFontOfSize:12];
+    videoNote.numberOfLines = 0;
+    [self.contentView addSubview:videoNote];
+    UIButton *evidenceButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    evidenceButton.frame = CGRectMake(20, yOffset + 91, self.contentView.bounds.size.width - 40, 32);
+    [evidenceButton setTitle:@"查看当前视频时间轴依据" forState:UIControlStateNormal];
+    [evidenceButton addTarget:self action:@selector(showVideoTimelineEvidence) forControlEvents:UIControlEventTouchUpInside];
+    [self.contentView addSubview:evidenceButton];
+    UIButton *chooseVideoButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    chooseVideoButton.frame = CGRectMake(20, yOffset + 127, self.contentView.bounds.size.width - 40, 32);
+    [chooseVideoButton setTitle:@"从 B 站列表选择视频" forState:UIControlStateNormal];
+    [chooseVideoButton addTarget:self action:@selector(chooseBilibiliVideo) forControlEvents:UIControlEventTouchUpInside];
+    [self.contentView addSubview:chooseVideoButton];
+    yOffset += 176;
+
     // 性能模式
     yOffset = [self addModeControlAtY:yOffset];
     yOffset += 30;
@@ -149,6 +178,30 @@
     // 更新内容高度
     self.contentView.frame = CGRectMake(0, 0, self.scrollView.bounds.size.width, yOffset + 80);
     self.scrollView.contentSize = self.contentView.bounds.size;
+}
+
+- (void)setAutomaticVideoEnabled:(BOOL)automaticVideoEnabled {
+    _automaticVideoEnabled = automaticVideoEnabled;
+    self.automaticVideoSwitch.on = automaticVideoEnabled;
+}
+
+- (void)showVideoTimelineEvidence {
+    if ([self.delegate respondsToSelector:@selector(performanceControlShowVideoTimelineEvidence)]) {
+        [self.delegate performanceControlShowVideoTimelineEvidence];
+    }
+}
+
+- (void)chooseBilibiliVideo {
+    if ([self.delegate respondsToSelector:@selector(performanceControlChooseBilibiliVideo)]) {
+        [self.delegate performanceControlChooseBilibiliVideo];
+    }
+}
+
+- (void)automaticVideoSwitchChanged:(UISwitch *)sender {
+    self.automaticVideoEnabled = sender.isOn;
+    if ([self.delegate respondsToSelector:@selector(performanceControlDidChangeAutomaticVideoEnabled:)]) {
+        [self.delegate performanceControlDidChangeAutomaticVideoEnabled:sender.isOn];
+    }
 }
 
 - (CGFloat)addModeControlAtY:(CGFloat)y {

@@ -18,6 +18,21 @@ extern NSString *const kAudioPlayerDidStartPlaybackNotification;
 /// userInfo: filePath, analysis, error. The analysis is the cached YAMNet timeline.
 extern NSString *const kAudioPlayerDidFinishYAMNetAnalysisNotification;
 
+typedef NS_ENUM(NSInteger, AudioSpectrumEQPreset) {
+    AudioSpectrumEQPresetFlat = 0,
+    AudioSpectrumEQPresetBass,
+    AudioSpectrumEQPresetVocal,
+    AudioSpectrumEQPresetBright,
+    AudioSpectrumEQPresetCustom = 4,
+    AudioSpectrumEQPresetBlues,
+    AudioSpectrumEQPresetRock,
+    AudioSpectrumEQPresetJazz,
+    AudioSpectrumEQPresetPop,
+    AudioSpectrumEQPresetClassical,
+    AudioSpectrumEQPresetElectronic,
+    AudioSpectrumEQPresetAcoustic,
+};
+
 @protocol AudioSpectrumPlayerDelegate <NSObject>
 
 - (void)playerDidGenerateSpectrum:(NSArray *)spectrums;
@@ -62,6 +77,17 @@ extern NSString *const kAudioPlayerDidFinishYAMNetAnalysisNotification;
 /// 🎵 速率调整（范围 0.5 到 2.0）
 /// 1.0 = 原速
 @property (nonatomic, assign) float playbackRate;
+
+/// Playback equalizer preset. Persists across launches; Flat is the default.
+@property (nonatomic, assign) AudioSpectrumEQPreset equalizerPreset;
+@property (nonatomic, copy, readonly) NSArray<NSNumber *> *equalizerBandGains;
+/// Versioned, JSON-compatible 10-band EQ profile. Each band contains id, type, frequencyHz,
+/// gainDB, bandwidthOctaves, and enabled; profile also contains preampDB and metadata.
+@property (nonatomic, copy, readonly) NSDictionary<NSString *, id> *equalizerConfiguration;
+- (void)setEqualizerGain:(float)gain atBand:(NSUInteger)bandIndex;
+- (void)setEqualizerPreampGain:(float)gain;
+- (BOOL)applyEqualizerConfiguration:(NSDictionary<NSString *, id> *)configuration error:(NSError * _Nullable * _Nullable)error;
+- (void)saveEqualizerSettings;
 
 /// 🔊 是否允许与其他应用同时播放（默认NO）
 @property (nonatomic, assign) BOOL allowMixWithOthers;

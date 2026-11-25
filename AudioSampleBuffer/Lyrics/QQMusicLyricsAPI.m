@@ -68,7 +68,7 @@
     
     // QQ音乐搜索API
     NSString *searchURL = [NSString stringWithFormat:
-        @"https://c.y.qq.com/soso/fcgi-bin/client_search_cp?p=1&n=1&w=%@&format=json",
+        @"https://c.y.qq.com/soso/fcgi-bin/client_search_cp?p=1&n=20&w=%@&format=json",
         encodedKeyword];
     
     NSURL *url = [NSURL URLWithString:searchURL];
@@ -97,12 +97,22 @@
                 return;
             }
             
-            // 获取第一首歌曲的 songmid
-            NSDictionary *firstSong = songs.firstObject;
+            // 长歌手串会把同组的另一首歌排到第一位。只接受歌名完全一致的结果。
+            NSDictionary *firstSong = [self bestMatchInSongs:songs songName:songName artistName:artistName];
+            if (!firstSong) {
+                NSLog(@"❌ [QQ音乐] 没有与《%@》同名的结果，首条是 %@", songName, songs.firstObject[@"songname"] ?: @"");
+                NSError *notFoundError = [NSError errorWithDomain:@"QQMusicLyricsAPI"
+                                                             code:-404
+                                                         userInfo:@{NSLocalizedDescriptionKey: @"未找到同名歌曲"}];
+                if (completion) completion(nil, notFoundError);
+                return;
+            }
             NSString *songMid = firstSong[@"songmid"];
             NSString *foundSongName = firstSong[@"songname"];
-            NSString *foundArtistName = firstSong[@"singer"][0][@"name"];
-            
+            NSString *foundArtistName = [self joinedSingers:firstSong];
+            if (firstSong != songs.firstObject) {
+                NSLog(@"[QQ音乐] 已跳过标题不符的首条结果: %@", songs.firstObject[@"songname"] ?: @"");
+            }
             NSLog(@"✅ [QQ音乐] 搜索到: %@ - %@ (songmid: %@)", foundArtistName, foundSongName, songMid);
             
             // 用找到的 songmid 获取歌词
@@ -110,6 +120,8 @@
                 if (lyrics) {
                     lyrics.songName = foundSongName;
                     lyrics.artistName = foundArtistName;
+                    lyrics.sourceSongMid = songMid;
+                    lyrics.sourceDuration = [firstSong[@"interval"] doubleValue];
                 }
                 if (completion) completion(lyrics, error);
             }];
@@ -201,7 +213,50 @@
         }
     }
     
+    if (result[@"songmid"] == nil) {
+        NSString *base = [[audioFilePath lastPathComponent] stringByDeletingPathExtension];
+        NSRegularExpression *expression = [NSRegularExpression regularExpressionWithPattern:@"^qqMusic-([0-9A-Za-z]{8,32})$" options:0 error:nil];
+        NSTextCheckingResult *match = [expression firstMatchInString:base options:0 range:NSMakeRange(0, base.length)];
+        if (match.numberOfRanges >= 2) {
+            result[@"songmid"] = [base substringWithRange:[match rangeAtIndex:1]];
+            NSLog(@"  📌 从文件名找到 songmid: %@", result[@"songmid"]);
+        }
+    }
+
     return result.count > 0 ? result : nil;
+}
+
++ (NSString *)foldedToken:(NSString *)value {
+    NSString *folded = [(value ?: @"") lowercaseString];
+    folded = [folded stringByFoldingWithOptions:NSDiacriticInsensitiveSearch locale:[NSLocale localeWithLocaleIdentifier:@"en_US_POSIX"]];
+    return [[folded componentsSeparatedByCharactersInSet:[NSCharacterSet alphanumericCharacterSet].invertedSet] componentsJoinedByString:@""];
+}
+
++ (NSString *)joinedSingers:(NSDictionary *)song {
+    NSMutableArray<NSString *> *names = [NSMutableArray array];
+    for (id singer in song[@"singer"]) {
+        if ([singer isKindOfClass:NSDictionary.class] && [singer[@"name"] isKindOfClass:NSString.class]) [names addObject:singer[@"name"]];
+    }
+    return [names componentsJoinedByString:@";"];
+}
+
++ (NSDictionary *)bestMatchInSongs:(NSArray *)songs songName:(NSString *)songName artistName:(NSString *)artistName {
+    NSString *wanted = [self foldedToken:songName];
+    if (wanted.length == 0) return nil;
+    NSCharacterSet *splits = [NSCharacterSet characterSetWithCharactersInString:@"/、,，&;"];
+    NSDictionary *best = nil;
+    NSInteger bestScore = -1;
+    for (NSDictionary *song in songs) {
+        if (![song isKindOfClass:NSDictionary.class] || ![[self foldedToken:song[@"songname"]] isEqualToString:wanted]) continue;
+        NSInteger score = 0;
+        NSString *artists = [self foldedToken:[self joinedSingers:song]];
+        for (NSString *token in [artistName componentsSeparatedByCharactersInSet:splits]) {
+            NSString *key = [self foldedToken:token];
+            if (key.length >= 2 && [artists containsString:key]) score += 1;
+        }
+        if (score > bestScore) { bestScore = score; best = song; }
+    }
+    return best;
 }
 
 #pragma mark - Private Helper Methods

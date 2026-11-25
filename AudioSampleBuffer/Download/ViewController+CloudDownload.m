@@ -360,7 +360,7 @@
             }
             
             // 即使找不到索引，也尝试直接播放
-            [player playWithFileName:filePath];
+            [self prepareAndPlayAudioPath:filePath title:[fileName stringByDeletingPathExtension] artist:@""];
             NSLog(@"▶️ [播放下载] 未找到索引，尝试直接播放");
         }
     });

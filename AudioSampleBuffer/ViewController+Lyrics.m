@@ -146,7 +146,7 @@
     MusicItem *currentMusicItem = self.displayedMusicItems[self.currentIndex];
     NSLog(@"🎼 进入歌词打轴: %@", currentMusicItem.fileName);
 
-    [self.player stop];
+    [self stopPlayback];
     self.shouldPreventAutoResume = YES;
 
     LyricsEditorViewController *editor = [[LyricsEditorViewController alloc] initWithAudioFilePath:[currentMusicItem playableFilePath]];

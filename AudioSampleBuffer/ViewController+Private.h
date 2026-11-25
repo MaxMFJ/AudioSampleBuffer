@@ -1,5 +1,6 @@
 #import "ViewController.h"
 #import "ViewController+MotionPhoto.h"
+#import "SignatureMVClipPlayer.h"
 
 #import <PhotosUI/PhotosUI.h>
 #import <QuartzCore/CADisplayLink.h>
@@ -61,6 +62,11 @@ typedef NS_ENUM(NSInteger, BackgroundMediaKind) {
 @property (nonatomic, strong) UIImageView *artworkAtmosphereView;
 @property (nonatomic, strong) UILabel *nowPlayingTitleLabel;
 @property (nonatomic, strong) UILabel *nowPlayingArtistLabel;
+@property (nonatomic, strong) SignatureMVClipPlayer *signatureMVClip;
+@property (nonatomic, assign) BOOL automaticVideoEnabled;
+@property (nonatomic, copy) NSString *mvAudioPath;
+@property (nonatomic, copy) NSString *mvAudioTitle;
+@property (nonatomic, copy) NSString *mvAudioArtist;
 
 @property (nonatomic, strong) UITableView *tableView;
 @property (nonatomic, strong) UITableView *backgroundMediaTableView;
@@ -150,13 +156,30 @@ typedef NS_ENUM(NSInteger, BackgroundMediaKind) {
 
 @property (nonatomic, strong) NSMutableArray *audioArray;
 @property (nonatomic, strong) AudioSpectrumPlayer *player;
+@property (nonatomic, strong) UIButton *audioEffectsButton;
+@property (nonatomic, strong, nullable) UIView *audioEffectsPanel;
+@property (nonatomic, strong, nullable) NSMutableArray<UISlider *> *audioEffectsBandSliders;
+@property (nonatomic, strong, nullable) NSMutableArray<UILabel *> *audioEffectsGainLabels;
+@property (nonatomic, strong, nullable) NSMutableArray<UIButton *> *audioEffectsBandFrequencyButtons;
+@property (nonatomic, strong, nullable) UISlider *audioEffectsPreampSlider;
+@property (nonatomic, strong, nullable) UILabel *audioEffectsPreampLabel;
 @property (nonatomic, strong) SpectrumView *spectrumView;
 
 @property (nonatomic, strong) MusicLibraryManager *musicLibrary;
 @property (nonatomic, strong) NSArray<MusicItem *> *displayedMusicItems;
+@property (nonatomic, assign) NSInteger visibleMusicRowCount;
+@property (nonatomic, strong) UISegmentedControl *musicSourceControl;
+@property (nonatomic, strong) UILabel *platformMusicStatusLabel;
+@property (nonatomic, copy) NSArray<NSDictionary *> *platformMusicRows;
+@property (nonatomic, assign) BOOL platformMusicRowsAreTracks;
+@property (nonatomic, assign) BOOL platformMusicHasMoreRows;
+@property (nonatomic, strong) id platformMusicBridge;
+@property (nonatomic, copy, nullable) NSDictionary *currentPlatformTrackInfo;
+@property (nonatomic, copy, nullable) NSString *currentlyPlayingPlatformTrackID;
 @property (nonatomic, assign) MusicCategory currentCategory;
 @property (nonatomic, strong) NSMutableArray<UIButton *> *categoryButtons;
 @property (nonatomic, strong) UISearchBar *searchBar;
+@property (nonatomic, assign) NSInteger platformSearchGeneration;
 @property (nonatomic, strong) UIButton *sortButton;
 @property (nonatomic, strong) UIButton *reloadButton;
 @property (nonatomic, strong) UIButton *importButton;
@@ -203,7 +226,11 @@ typedef NS_ENUM(NSInteger, BackgroundMediaKind) {
 
 @property (nonatomic, strong) LyricsView *lyricsView;
 @property (nonatomic, strong) UIView *lyricsContainer;
-@property (nonatomic, strong) NSArray<NSNumber *> *latestSpectrumData;
+@property (nonatomic, strong, nullable) NSArray<NSNumber *> *latestSpectrumData;
+@property (nonatomic, copy) NSArray<NSDictionary<NSString *, id> *> *mvMomentCandidates;
+@property (nonatomic, strong, nullable) UILabel *mvMomentStatusLabel;
+@property (nonatomic, strong, nullable) NSProgress *mvMomentAnalysisProgress;
+@property (nonatomic, assign) NSUInteger mvMomentAnalysisGeneration;
 @property (nonatomic, strong, nullable) AudioFeatures *latestAudioFeatures;
 @property (nonatomic, assign) BOOL dedicatedGuitarVisualActive;
 @property (nonatomic, assign) NSInteger dedicatedGuitarLastScoreLogSecond;
@@ -386,8 +413,20 @@ typedef NS_ENUM(NSInteger, BackgroundMediaKind) {
 - (void)nextButtonTapped:(UIButton *)sender;
 - (void)playPauseButtonTapped:(UIButton *)sender;
 - (void)loopButtonTapped:(UIButton *)sender;
+- (void)audioEffectsButtonTapped:(UIButton *)sender;
+- (void)audioEffectsPresetButtonTapped:(UIButton *)sender;
+- (void)audioEffectsBandChanged:(UISlider *)sender;
+- (void)audioEffectsBandDetailTapped:(UIButton *)sender;
+- (void)updateEqualizerBandAtIndex:(NSUInteger)bandIndex changes:(NSDictionary<NSString *, id> *)changes;
+- (void)audioEffectsPreampChanged:(UISlider *)sender;
+- (void)audioEffectsBandEditingEnded:(UISlider *)sender;
+- (void)dismissAudioEffectsPanel;
 - (void)handleAudioSessionInterruption:(NSNotification *)notification;
 - (void)handleAudioSessionRouteChange:(NSNotification *)notification;
+- (void)performanceControlDidChangeAutomaticVideoEnabled:(BOOL)enabled;
+- (void)bilibiliMVUserDidSelectVideo:(NSNotification *)notification;
+- (void)prepareAndPlayAudioPath:(NSString *)path title:(NSString *)title artist:(NSString *)artist;
+- (void)resetMVMomentAnalysisForCurrentTrack;
 
 @end
 

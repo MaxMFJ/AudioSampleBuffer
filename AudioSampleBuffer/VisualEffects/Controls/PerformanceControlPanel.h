@@ -14,6 +14,7 @@ NS_ASSUME_NONNULL_BEGIN
 @interface PerformanceControlPanel : UIView
 
 @property (nonatomic, weak) id<PerformanceControlDelegate> delegate;
+@property (nonatomic, assign) BOOL automaticVideoEnabled;
 @property (nonatomic, strong) NSMutableDictionary *currentSettings;  // 公开属性
 
 - (void)showAnimated:(BOOL)animated;
@@ -25,6 +26,10 @@ NS_ASSUME_NONNULL_BEGIN
 @protocol PerformanceControlDelegate <NSObject>
 
 - (void)performanceControlDidUpdateSettings:(NSDictionary *)settings;
+@optional
+- (void)performanceControlDidChangeAutomaticVideoEnabled:(BOOL)enabled;
+- (void)performanceControlShowVideoTimelineEvidence;
+- (void)performanceControlChooseBilibiliVideo;
 
 @end
 

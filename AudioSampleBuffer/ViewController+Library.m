@@ -1,5 +1,4 @@
 #import "ViewController+Private.h"
-
 #import "AppleMusicArtworkService.h"
 #import "AudioFileFormats.h"
 #import "AudioPlayCell.h"
@@ -14,6 +13,7 @@
 #import <math.h>
 #import <string.h>
 
+static const NSInteger kMusicListPageSize = 20;
 static NSString * const kBackgroundMediaDirectoryName = @"BackgroundMedia";
 static NSString * const kBackgroundMediaManifestFileName = @"background_media_items.dat";
 
@@ -109,6 +109,7 @@ static UIEdgeInsets RhythmEffectiveSafeAreaInsets(UIView *view) {
 }
 
 - (void)refreshMusicList {
+    if (self.musicSourceControl.selectedSegmentIndex > 0) return;
     NSArray<MusicItem *> *musicList = [self.musicLibrary musicForCategory:self.currentCategory];
 
     if (self.searchBar.text.length > 0) {
@@ -118,9 +119,41 @@ static UIEdgeInsets RhythmEffectiveSafeAreaInsets(UIView *view) {
     self.displayedMusicItems = [self.musicLibrary sortMusic:musicList
                                                      byType:self.currentSortType
                                                   ascending:self.sortAscending];
+    self.visibleMusicRowCount = MIN(kMusicListPageSize, (NSInteger)self.displayedMusicItems.count);
 
     [self.tableView reloadData];
     NSLog(@"🔄 音乐列表已刷新: %ld 首", (long)self.displayedMusicItems.count);
+}
+
+- (void)musicSourceControlChanged:(UISegmentedControl *)sender {
+    NSInteger source = sender.selectedSegmentIndex;
+    for (UIButton *button in self.categoryButtons) {
+        button.userInteractionEnabled = (source == 0);
+        button.alpha = source == 0 ? 1.0 : 0.38;
+    }
+    self.platformMusicRows = @[];
+    self.platformMusicRowsAreTracks = NO;
+    self.platformMusicHasMoreRows = NO;
+    self.platformMusicStatusLabel.text = @"";
+    if (source == 0) {
+        self.searchBar.placeholder = @"搜索歌曲、艺术家...";
+        [self refreshMusicList];
+    } else {
+        NSArray<NSString *> *platforms = @[@"", @"netease", @"qqMusic", @"kugou"];
+        NSArray<NSString *> *names = @[@"", @"网易云", @"QQ 音乐", @"酷狗"];
+        NSString *platform = platforms[MIN(source, (NSInteger)platforms.count - 1)];
+        self.searchBar.placeholder = [NSString stringWithFormat:@"搜索%@歌曲", names[MIN(source, (NSInteger)names.count - 1)]];
+        NSString *keyword = [self.searchBar.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+        if (keyword.length > 0) {
+            [self submitPlatformSongSearch:keyword];
+        } else {
+            self.platformMusicStatusLabel.text = @"正在读取平台歌单…";
+            [[NSNotificationCenter defaultCenter] postNotificationName:@"PlatformMusicLoadSource"
+                                                                object:nil
+                                                              userInfo:@{@"platform": platform}];
+            [self.tableView reloadData];
+        }
+    }
 }
 
 #pragma mark - UITableView
@@ -129,7 +162,8 @@ static UIEdgeInsets RhythmEffectiveSafeAreaInsets(UIView *view) {
     if (tableView == self.backgroundMediaTableView) {
         return self.backgroundMediaItems.count;
     }
-    return self.displayedMusicItems.count;
+    if (self.musicSourceControl.selectedSegmentIndex > 0) return self.platformMusicRows.count;
+    return MIN(self.visibleMusicRowCount, (NSInteger)self.displayedMusicItems.count);
 }
 
 - (CGFloat)tableView:(UITableView *)tableView heightForRowAtIndexPath:(NSIndexPath *)indexPath {
@@ -162,11 +196,35 @@ static UIEdgeInsets RhythmEffectiveSafeAreaInsets(UIView *view) {
         return cell;
     }
 
+    if (self.musicSourceControl.selectedSegmentIndex > 0) {
+        UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"PlatformMusicMainRow"];
+        if (!cell) cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleSubtitle reuseIdentifier:@"PlatformMusicMainRow"];
+        if (indexPath.row < 0 || indexPath.row >= (NSInteger)self.platformMusicRows.count) {
+            return cell;
+        }
+        NSDictionary *row = self.platformMusicRows[indexPath.row];
+        cell.textLabel.text = row[@"title"] ?: @"未知曲目";
+        cell.detailTextLabel.text = row[@"subtitle"] ?: @"";
+        BOOL isCurrentTrack = [row[@"trackID"] isEqual:self.currentlyPlayingPlatformTrackID];
+        cell.textLabel.textColor = isCurrentTrack ? [UIColor colorWithRed:0.45 green:0.78 blue:1.0 alpha:1.0] : [UIColor colorWithWhite:0.96 alpha:1.0];
+        cell.detailTextLabel.textColor = [UIColor colorWithWhite:0.72 alpha:0.86];
+        cell.backgroundColor = [UIColor clearColor];
+        cell.contentView.backgroundColor = [UIColor clearColor];
+        cell.accessoryType = [row[@"rowType"] isEqualToString:@"playlist"] ? UITableViewCellAccessoryDisclosureIndicator : (isCurrentTrack ? UITableViewCellAccessoryCheckmark : UITableViewCellAccessoryNone);
+        UIView *selected = [[UIView alloc] init];
+        selected.backgroundColor = [UIColor colorWithRed:0.2 green:0.42 blue:0.7 alpha:0.28];
+        cell.selectedBackgroundView = selected;
+        return cell;
+    }
+
     AudioPlayCell *cell = [tableView dequeueReusableCellWithIdentifier:@"cellID"];
     if (!cell) {
         cell = [[AudioPlayCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:@"cellID"];
     }
 
+    if (indexPath.row < 0 || indexPath.row >= (NSInteger)self.displayedMusicItems.count) {
+        return cell;
+    }
     MusicItem *musicItem = self.displayedMusicItems[indexPath.row];
     [cell configureWithMusicItem:musicItem];
     cell.playBtn.hidden = YES;
@@ -175,7 +233,7 @@ static UIEdgeInsets RhythmEffectiveSafeAreaInsets(UIView *view) {
     __weak AudioPlayCell *weakCell = cell;
     cell.playBlock = ^(BOOL isPlaying) {
         if (isPlaying) {
-            [weakSelf.player stop];
+            [weakSelf stopPlayback];
         } else {
             NSString *playPath = nil;
 
@@ -192,7 +250,8 @@ static UIEdgeInsets RhythmEffectiveSafeAreaInsets(UIView *view) {
                 playPath = [AudioFileFormats prepareAudioFileForPlayback:musicItem.fileName];
             }
 
-            [weakSelf.player playWithFileName:playPath];
+            [[NSNotificationCenter defaultCenter] postNotificationName:@"PlatformMusicClearQueue" object:nil];
+            [weakSelf prepareAndPlayAudioPath:playPath title:musicItem.displayName ?: musicItem.fileName artist:musicItem.artist ?: @""];
         }
     };
 
@@ -215,7 +274,10 @@ static UIEdgeInsets RhythmEffectiveSafeAreaInsets(UIView *view) {
 #pragma mark - UITableView Editing
 
 - (UISwipeActionsConfiguration *)tableView:(UITableView *)tableView leadingSwipeActionsConfigurationForRowAtIndexPath:(NSIndexPath *)indexPath API_AVAILABLE(ios(11.0)) {
-    if (tableView == self.backgroundMediaTableView) {
+    if (tableView == self.backgroundMediaTableView || self.musicSourceControl.selectedSegmentIndex > 0) {
+        return nil;
+    }
+    if (indexPath.row < 0 || indexPath.row >= (NSInteger)self.displayedMusicItems.count) {
         return nil;
     }
 
@@ -268,6 +330,12 @@ static UIEdgeInsets RhythmEffectiveSafeAreaInsets(UIView *view) {
     if (tableView == self.backgroundMediaTableView) {
         return YES;
     }
+    if (self.musicSourceControl.selectedSegmentIndex > 0) {
+        return NO;
+    }
+    if (indexPath.row < 0 || indexPath.row >= (NSInteger)self.displayedMusicItems.count) {
+        return NO;
+    }
 
     MusicItem *musicItem = self.displayedMusicItems[indexPath.row];
     BOOL isBundleFile = ![musicItem.filePath hasPrefix:@"/var/mobile"] &&
@@ -303,6 +371,8 @@ static UIEdgeInsets RhythmEffectiveSafeAreaInsets(UIView *view) {
     }
 
     if (editingStyle == UITableViewCellEditingStyleDelete) {
+        if (self.musicSourceControl.selectedSegmentIndex > 0) return;
+        if (indexPath.row < 0 || indexPath.row >= (NSInteger)self.displayedMusicItems.count) return;
         MusicItem *musicItem = self.displayedMusicItems[indexPath.row];
 
         NSString *message = [NSString stringWithFormat:@"确定要删除 \"%@\" 吗？\n\n此操作不可撤销！", musicItem.displayName];
@@ -413,6 +483,29 @@ static UIEdgeInsets RhythmEffectiveSafeAreaInsets(UIView *view) {
         return;
     }
 
+    if (self.musicSourceControl.selectedSegmentIndex > 0) {
+        if (indexPath.row < 0 || indexPath.row >= (NSInteger)self.platformMusicRows.count) {
+            [tableView deselectRowAtIndexPath:indexPath animated:YES];
+            return;
+        }
+        NSDictionary *row = self.platformMusicRows[indexPath.row];
+        if ([row[@"rowType"] isEqualToString:@"playlist"]) {
+            [self.tableView setContentOffset:CGPointZero animated:NO];
+            self.platformMusicStatusLabel.text = @"正在读取歌单曲目…";
+            [[NSNotificationCenter defaultCenter] postNotificationName:@"PlatformMusicLoadPlaylist"
+                                                                object:nil
+                                                              userInfo:@{@"platform": row[@"platform"] ?: @"",
+                                                                         @"playlistID": row[@"playlistID"] ?: @"",
+                                                                         @"title": row[@"title"] ?: @"歌单"}];
+        } else if ([row[@"rowType"] isEqualToString:@"track"]) {
+            [[NSNotificationCenter defaultCenter] postNotificationName:@"PlatformMusicPlayTrackAtIndex"
+                                                                object:nil
+                                                              userInfo:@{@"index": @(indexPath.row)}];
+        }
+        [tableView deselectRowAtIndexPath:indexPath animated:YES];
+        return;
+    }
+
     [self.searchBar resignFirstResponder];
 
     self.currentIndex = indexPath.row;
@@ -463,7 +556,8 @@ static UIEdgeInsets RhythmEffectiveSafeAreaInsets(UIView *view) {
         }
     }
 
-    [self.player playWithFileName:playPath songName:songName artist:artist];
+    [[NSNotificationCenter defaultCenter] postNotificationName:@"PlatformMusicClearQueue" object:nil];
+    [self prepareAndPlayAudioPath:playPath title:songName artist:artist];
 }
 
 - (void)convertNCMFile:(MusicItem *)musicItem atIndexPath:(NSIndexPath *)indexPath {
@@ -535,7 +629,7 @@ static UIEdgeInsets RhythmEffectiveSafeAreaInsets(UIView *view) {
                     NSLog(@"🎵 开始播放解密后的文件: %@", result);
                     NSString *songName = musicItem.displayName ?: [musicItem.fileName stringByDeletingPathExtension];
                     NSString *artist = musicItem.artist ?: @"";
-                    [self.player playWithFileName:result songName:songName artist:artist];
+                    [self prepareAndPlayAudioPath:result title:songName artist:artist];
 
                     [self showAlert:@"✅ 转换成功" message:[NSString stringWithFormat:@"已成功转换并开始播放: %@", musicItem.displayName ?: musicItem.fileName]];
                 } else {
@@ -568,6 +662,18 @@ static UIEdgeInsets RhythmEffectiveSafeAreaInsets(UIView *view) {
     }
 
     if (self.isBackgroundMediaEffectActive) {
+        return;
+    }
+
+    if (self.isPlatformQueueActive) {
+        NSDictionary *trackInfo = self.currentPlatformTrackInfo;
+        NSString *songName = [trackInfo[@"title"] isKindOfClass:NSString.class] ? trackInfo[@"title"] : nil;
+        NSString *artist = [trackInfo[@"artist"] isKindOfClass:NSString.class] ? trackInfo[@"artist"] : @"";
+        NSString *artworkPath = [trackInfo[@"artworkFilePath"] isKindOfClass:NSString.class] ? trackInfo[@"artworkFilePath"] : nil;
+        UIImage *image = artworkPath.length > 0 ? [UIImage imageWithContentsOfFile:artworkPath] : nil;
+        if (!image) image = self.coverImageView.image ?: self.artworkAtmosphereView.image;
+        [self displayAlbumArtwork:image songName:songName];
+        self.nowPlayingArtistLabel.text = artist;
         return;
     }
 
@@ -649,6 +755,9 @@ static UIEdgeInsets RhythmEffectiveSafeAreaInsets(UIView *view) {
 }
 
 - (void)fetchAppleMusicArtworkForCurrentItemIfNeeded {
+    if (self.isPlatformQueueActive) {
+        return;
+    }
     if (self.currentIndex >= self.displayedMusicItems.count) {
         return;
     }
@@ -829,6 +938,11 @@ static UIEdgeInsets RhythmEffectiveSafeAreaInsets(UIView *view) {
 
 - (void)categoryButtonTapped:(UIButton *)sender {
     [self.searchBar resignFirstResponder];
+
+    if (self.musicSourceControl.selectedSegmentIndex != 0) {
+        self.musicSourceControl.selectedSegmentIndex = 0;
+        [self musicSourceControlChanged:self.musicSourceControl];
+    }
 
     MusicCategory selectedCategory = (MusicCategory)sender.tag;
     self.currentCategory = selectedCategory;
@@ -1092,18 +1206,53 @@ static UIEdgeInsets RhythmEffectiveSafeAreaInsets(UIView *view) {
 #pragma mark - Search
 
 - (void)searchBar:(UISearchBar *)searchBar textDidChange:(NSString *)searchText {
+    if (self.musicSourceControl.selectedSegmentIndex > 0) {
+        [self schedulePlatformSongSearch];
+        return;
+    }
+    self.searchBar.placeholder = @"搜索歌曲、艺术家...";
     [self refreshMusicList];
 }
 
 - (void)searchBarSearchButtonClicked:(UISearchBar *)searchBar {
     [searchBar resignFirstResponder];
+    if (self.musicSourceControl.selectedSegmentIndex > 0) {
+        [self submitPlatformSongSearch:searchBar.text ?: @""];
+        return;
+    }
     [self refreshMusicList];
 }
 
 - (void)searchBarCancelButtonClicked:(UISearchBar *)searchBar {
     searchBar.text = @"";
     [searchBar resignFirstResponder];
+    if (self.musicSourceControl.selectedSegmentIndex > 0) {
+        [self submitPlatformSongSearch:@""];
+        return;
+    }
     [self refreshMusicList];
+}
+
+- (void)schedulePlatformSongSearch {
+    self.platformSearchGeneration += 1;
+    NSInteger generation = self.platformSearchGeneration;
+    NSString *text = self.searchBar.text ?: @"";
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.35 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        if (generation != self.platformSearchGeneration) return;
+        [self submitPlatformSongSearch:text];
+    });
+}
+
+- (void)submitPlatformSongSearch:(NSString *)text {
+    if (self.musicSourceControl.selectedSegmentIndex <= 0) return;
+    self.platformSearchGeneration += 1;
+    NSInteger source = self.musicSourceControl.selectedSegmentIndex;
+    NSArray<NSString *> *platforms = @[@"", @"netease", @"qqMusic", @"kugou"];
+    NSString *platform = platforms[MIN(source, (NSInteger)platforms.count - 1)];
+    NSString *keyword = [text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]] ?: @"";
+    [[NSNotificationCenter defaultCenter] postNotificationName:@"PlatformMusicSearch"
+                                                        object:nil
+                                                      userInfo:@{@"platform": platform, @"keyword": keyword}];
 }
 
 - (void)dismissKeyboard {
@@ -1113,6 +1262,30 @@ static UIEdgeInsets RhythmEffectiveSafeAreaInsets(UIView *view) {
 - (void)scrollViewWillBeginDragging:(UIScrollView *)scrollView {
     if (scrollView == self.tableView) {
         [self.searchBar resignFirstResponder];
+    }
+}
+
+- (void)scrollViewDidScroll:(UIScrollView *)scrollView {
+    if (scrollView != self.tableView) return;
+    CGFloat remaining = scrollView.contentSize.height - scrollView.contentOffset.y - scrollView.bounds.size.height;
+    if (remaining > 180) return;
+
+    if (self.musicSourceControl.selectedSegmentIndex > 0) {
+        if (self.platformMusicRowsAreTracks && self.platformMusicHasMoreRows) {
+            [[NSNotificationCenter defaultCenter] postNotificationName:@"PlatformMusicLoadMore" object:nil];
+        }
+        return;
+    }
+    if (self.visibleMusicRowCount >= (NSInteger)self.displayedMusicItems.count) return;
+
+    NSInteger previousCount = self.visibleMusicRowCount;
+    self.visibleMusicRowCount = MIN(previousCount + kMusicListPageSize, (NSInteger)self.displayedMusicItems.count);
+    NSMutableArray<NSIndexPath *> *indexPaths = [NSMutableArray arrayWithCapacity:self.visibleMusicRowCount - previousCount];
+    for (NSInteger row = previousCount; row < self.visibleMusicRowCount; row++) {
+        [indexPaths addObject:[NSIndexPath indexPathForRow:row inSection:0]];
+    }
+    if (indexPaths.count > 0) {
+        [self.tableView insertRowsAtIndexPaths:indexPaths withRowAnimation:UITableViewRowAnimationNone];
     }
 }
 

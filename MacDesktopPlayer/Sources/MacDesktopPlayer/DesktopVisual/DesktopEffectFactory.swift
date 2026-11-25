@@ -24,7 +24,91 @@ enum DesktopEffectFactory {
             return CoverDotsBackgroundRenderer(device: device, pixelFormat: pixelFormat, library: library)
         case .cellularHive:
             return CellularHiveDesktopEffectRenderer(device: device, pixelFormat: pixelFormat, library: library)
+        case .highEnergyGrid:
+            return HighEnergyGridDesktopEffectRenderer(device: device, pixelFormat: pixelFormat, library: library)
+        case .vectorAssault:
+            return VectorAssaultDesktopEffectRenderer(device: device, pixelFormat: pixelFormat, library: library)
         }
+    }
+}
+
+private struct DesktopHighEnergyGridUniforms {
+    var motion = SIMD4<Float>(repeating: 0) // animation time, aspect ratio, glow, playing
+    var color = SIMD4<Float>(0.45, 0.72, 1.0, 1)
+}
+
+@MainActor
+private final class HighEnergyGridDesktopEffectRenderer: DesktopEffectRenderer {
+    let effect = DesktopBackgroundEffect.highEnergyGrid
+    private let pipeline: MTLRenderPipelineState
+    private var bassPeak: Float = 0.03
+    private var guitarPeak: Float = 0.018
+    private var highEnergy: Float = 0
+    private var videoPulse: Float = 0
+    private var videoWasActive = false
+    private var animationTime: Float = 0
+    private var lastPlaybackTime: Float = -1
+    private var songIdentity: Int = 0
+
+    init(device: MTLDevice, pixelFormat: MTLPixelFormat, library: MTLLibrary) {
+        let descriptor = MTLRenderPipelineDescriptor()
+        descriptor.label = "DesktopEffect.highEnergyGrid"
+        descriptor.vertexFunction = library.makeFunction(name: "highEnergyGridDesktopVertex")
+        descriptor.fragmentFunction = library.makeFunction(name: "highEnergyGridDesktopFragment")
+        descriptor.colorAttachments[0].pixelFormat = pixelFormat
+        guard let pipeline = try? device.makeRenderPipelineState(descriptor: descriptor) else {
+            fatalError("无法创建高能网格 Metal 渲染管线")
+        }
+        self.pipeline = pipeline
+    }
+
+    func setArtwork(_ image: NSImage?, device: MTLDevice) {}
+
+    func draw(encoder: MTLRenderCommandEncoder, view: MTKView, audio: VisualAudio) {
+        let playing = audio.playing > 0.5
+        let newSong = audio.songIdentity != songIdentity ||
+            (lastPlaybackTime >= 0 && audio.playbackTime + 0.05 < lastPlaybackTime)
+        if newSong {
+            songIdentity = audio.songIdentity
+            highEnergy = 0
+            videoPulse = 0
+            videoWasActive = false
+        }
+        let dt = playing && !newSong && lastPlaybackTime >= 0 ?
+            min(max(audio.playbackTime - lastPlaybackTime, 0), 0.1) : 0
+        lastPlaybackTime = audio.playbackTime
+        if playing {
+            animationTime += dt
+            let bass = min(max(audio.vectorSubBass, 0), 1)
+            bassPeak = max(bassPeak * exp(-dt * 0.26), max(bass, 0.03))
+            let normalizedBass = min(1, pow(max(0, bass) / max(0.038, bassPeak * 0.66), 0.78))
+            let bassGate = Self.smoothstep(0.86, 0.98, normalizedBass) * Self.smoothstep(0.12, 0.28, bass)
+            guitarPeak = max(guitarPeak * exp(-dt * 0.48), max(audio.guitar, 0.018))
+            let normalizedGuitar = min(1, pow(max(0, audio.guitar) / max(0.020, guitarPeak * 0.74), 0.92))
+            let guitarGate = Self.smoothstep(0.76, 0.94, normalizedGuitar) * Self.smoothstep(0.14, 0.34, audio.guitar)
+            let climaxGate = Self.smoothstep(0.58, 0.82, audio.activityClimax)
+            let target = max(bassGate, max(guitarGate, climaxGate))
+            highEnergy += (target - highEnergy) * (1 - exp(-8 * dt))
+
+            let videoActive = audio.visualVideoActive > 0.5
+            if videoActive && !videoWasActive { videoPulse = 1 }
+            videoWasActive = videoActive
+            videoPulse *= exp(-2.2 * dt)
+        }
+
+        var values = DesktopHighEnergyGridUniforms()
+        values.motion = SIMD4<Float>(animationTime, max(Float(view.drawableSize.width / max(view.drawableSize.height, 1)), 0.1),
+                                     max(highEnergy, videoPulse), playing ? 1 : 0)
+        let tint = DesktopMoodService.shared.colors.pulseRing
+        values.color = SIMD4<Float>(tint.x, tint.y, tint.z, 1)
+        encoder.setRenderPipelineState(pipeline)
+        encoder.setFragmentBytes(&values, length: MemoryLayout<DesktopHighEnergyGridUniforms>.stride, index: 0)
+        encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
+    }
+
+    private static func smoothstep(_ edge0: Float, _ edge1: Float, _ value: Float) -> Float {
+        let t = min(max((value - edge0) / (edge1 - edge0), 0), 1)
+        return t * t * (3 - 2 * t)
     }
 }
 

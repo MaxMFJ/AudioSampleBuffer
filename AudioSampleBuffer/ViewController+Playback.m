@@ -582,6 +582,7 @@ static void ASBRunImpactAnimation(CAShapeLayer *layer,
     NSMutableDictionary<NSString *, NSNumber *> *control = [(phoneDemucsControl ?: (self.guitarDemucsOnDeviceExperimentEnabled ?
         ASBGuitarVisualControl(playbackTime, analysis) : (demucsControl ?: ASBGuitarVisualControl(playbackTime, analysis))) ?: @{}) mutableCopy];
     [control addEntriesFromDictionary:ASBYAMNetVocalControl(analysis, playbackTime)];
+    control[@"visualVideoActive"] = @(self.automaticVideoEnabled && [self.signatureMVClip isShowingVideo]);
     // Renderer dictionaries merge; clear stems that the current song has not supplied.
     for (NSString *stem in @[@"piano", @"drums", @"other"]) {
         NSString *enabledKey = [stem stringByAppendingString:@"StemControlEnabled"];
@@ -2152,6 +2153,7 @@ static void ASBRunImpactAnimation(CAShapeLayer *layer,
 
 - (void)pausePlayback {
     NSLog(@"⏸️ 暂停播放");
+    [self.visualEffectManager setRenderParameters:@{@"songPlaybackTime": @(self.player.currentTime), @"songIsPlaying": @NO, @"vectorBeatDetected": @NO}];
     if (self.automaticVideoEnabled) {
         [self.signatureMVClip updateWithTitle:self.nowPlayingTitleLabel.text time:self.player.currentTime playing:NO];
     }

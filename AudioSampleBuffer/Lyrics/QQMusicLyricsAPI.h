@@ -20,6 +20,8 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic, copy, nullable) NSString *wordByWordLyrics;  // 🆕 逐字歌词 (增强LRC格式，每个字有独立时间戳)
 @property (nonatomic, copy, nullable) NSString *songName;          // 歌曲名
 @property (nonatomic, copy, nullable) NSString *artistName;        // 艺术家
+@property (nonatomic, copy, nullable) NSString *sourceSongMid;
+@property (nonatomic, assign) NSTimeInterval sourceDuration;
 @property (nonatomic, assign) BOOL hasWordByWord;                  // 🆕 是否包含逐字歌词
 
 @end

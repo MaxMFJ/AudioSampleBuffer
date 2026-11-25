@@ -40,6 +40,7 @@ struct DesktopMoodColors {
 final class DesktopMoodService {
     static let shared = DesktopMoodService()
     private(set) var colors = DesktopMoodColors()
+    private(set) var isLLMGenerated = false
     private var generation = 0
     private let defaults = UserDefaults.standard
 
@@ -57,6 +58,7 @@ final class DesktopMoodService {
         generation += 1
         let requestGeneration = generation
         colors = DesktopMoodColors()
+        isLLMGenerated = false
         guard !apiKey.isEmpty else {
             NSLog("[DesktopMood] 未配置 API Key，使用默认配色")
             return
@@ -64,6 +66,7 @@ final class DesktopMoodService {
         let cacheKey = "DesktopMood.colors.v2." + SHA256.hash(data: Data("\(model)|\(title)|\(artist ?? "")".utf8)).map { String(format: "%02x", $0) }.joined()
         if let cached = defaults.dictionary(forKey: cacheKey) {
             colors = DesktopMoodColors(json: cached)
+            isLLMGenerated = true
             NSLog("[DesktopMood] 命中配色缓存，laserFanBlue RGB=(%.2f, %.2f, %.2f)",
                   colors.laserFanBlue.x, colors.laserFanBlue.y, colors.laserFanBlue.z)
             return
@@ -104,6 +107,7 @@ final class DesktopMoodService {
                 guard requestGeneration == generation else { return }
                 defaults.set(colorJSON, forKey: cacheKey)
                 colors = DesktopMoodColors(json: colorJSON)
+                isLLMGenerated = true
                 NSLog("[DesktopMood] 已载入 LLM 配色，laserFanBlue RGB=(%.2f, %.2f, %.2f)",
                       colors.laserFanBlue.x, colors.laserFanBlue.y, colors.laserFanBlue.z)
             } catch {

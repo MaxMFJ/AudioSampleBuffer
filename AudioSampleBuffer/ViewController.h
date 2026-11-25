@@ -9,6 +9,8 @@
 
 @interface ViewController : UIViewController
 
+@property (nonatomic, assign) BOOL isPlatformQueueActive;
+
 /// 停止当前播放
 - (void)stopPlayback;
 

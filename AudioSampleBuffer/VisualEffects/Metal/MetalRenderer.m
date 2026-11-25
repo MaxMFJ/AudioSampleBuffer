@@ -4870,6 +4870,10 @@ static inline vector_float2 VectorAssaultSub(vector_float2 a, vector_float2 b) {
 static inline vector_float2 VectorAssaultScale(vector_float2 a, float s) { return (vector_float2){a.x*s,a.y*s}; }
 static inline float VectorAssaultDot(vector_float2 a, vector_float2 b) { return a.x*b.x+a.y*b.y; }
 static inline float VectorAssaultLength(vector_float2 a) { return sqrtf(a.x*a.x+a.y*a.y); }
+static inline float VectorAssaultSmoothstep(float edge0, float edge1, float x) {
+    float t = fmaxf(0.0f, fminf(1.0f, (x - edge0) / (edge1 - edge0)));
+    return t * t * (3.0f - 2.0f * t);
+}
 static inline vector_float2 VectorAssaultNormalize(vector_float2 a) { float l=VectorAssaultLength(a); return l>1e-6f?VectorAssaultScale(a,1.0f/l):(vector_float2){1,0}; }
 static inline float VectorAssaultDistance(vector_float2 a, vector_float2 b) { return VectorAssaultLength(VectorAssaultSub(a,b)); }
 
@@ -4914,6 +4918,11 @@ static inline float VectorAssaultDistance(vector_float2 a, vector_float2 b) { re
 @property (nonatomic, assign) NSUInteger pendingBeatCount;
 @property (nonatomic, assign) float pendingBeatIntensity;
 @property (nonatomic, assign) NSInteger pendingBeatKind;
+@property (nonatomic, assign) float gridEnergyPulse;
+@property (nonatomic, assign) float gridBassPeak;
+@property (nonatomic, assign) float gridGuitarPeak;
+@property (nonatomic, assign) float videoTriggerPulse;
+@property (nonatomic, assign) BOOL visualVideoWasActive;
 @property (nonatomic, strong) AIColorConfiguration *assaultColorConfig;
 @property (nonatomic, copy) NSString *assaultSongName;
 @property (nonatomic, copy) NSString *assaultSongArtist;
@@ -5072,6 +5081,8 @@ static double VectorAssaultRnd(double n) { double x = sin(n * 127.1 + 78.233) * 
     self.lastSongIdentity = songIdentity;
     double simulationTime;
     double musicFrameDelta = 0.0;
+    BOOL songIsPlaying = ![self.renderParameters[@"songIsPlaying"] respondsToSelector:@selector(boolValue)] ||
+                         [self.renderParameters[@"songIsPlaying"] boolValue];
     if (hasFixedTime) {
         simulationTime = [self.renderParameters[@"fixedTime"] doubleValue];
         self.demoSimulationTime = simulationTime;
@@ -5085,8 +5096,6 @@ static double VectorAssaultRnd(double n) { double x = sin(n * 127.1 + 78.233) * 
         self.demoLastTimestamp = 0;
         double songTime = [self.renderParameters[@"songPlaybackTime"] respondsToSelector:@selector(doubleValue)] ? [self.renderParameters[@"songPlaybackTime"] doubleValue] : CACurrentMediaTime() - self.startTime;
         CFTimeInterval now = CACurrentMediaTime();
-        BOOL isPlaying = ![self.renderParameters[@"songIsPlaying"] respondsToSelector:@selector(boolValue)] ||
-                         [self.renderParameters[@"songIsPlaying"] boolValue];
         double elapsed = self.musicLastRenderTimestamp > 0 ? fmin(0.1, fmax(0.0, now - self.musicLastRenderTimestamp)) : 0.0;
         BOOL seeked = songTime + 0.05 < self.musicLastReportedTime ||
                       fabs(songTime - self.musicDisplayTime) > 0.3;
@@ -5102,10 +5111,15 @@ static double VectorAssaultRnd(double n) { double x = sin(n * 127.1 + 78.233) * 
             self.vocalModelPeak = 0;
             self.musicClockInitialized = YES;
             [self resetMusicBeatState];
-        } else if (isPlaying) {
+        } else if (songIsPlaying) {
             self.musicDisplayTime = fmax(songTime, self.musicDisplayTime + elapsed);
         } else {
             self.musicDisplayTime = songTime;
+            self.musicPreviousDisplayTime = songTime;
+            self.musicLastRenderTimestamp = now;
+            self.kickEnvelope = 0.0f;
+            self.beatDrive = 0.0f;
+            self.pendingBeatCount = 0;
         }
         self.musicLastReportedTime = songTime;
         self.musicLastRenderTimestamp = now;
@@ -5113,7 +5127,7 @@ static double VectorAssaultRnd(double n) { double x = sin(n * 127.1 + 78.233) * 
         float targetTempo = bpm >= 60.0f && bpm <= 200.0f ?
             sqrtf(bpm / 120.0f) : 1.0f;
         targetTempo = fmaxf(0.75f, fminf(1.30f, targetTempo));
-        double songDelta = fmax(0.0, fmin(0.1, self.musicDisplayTime - self.musicPreviousDisplayTime));
+        double songDelta = songIsPlaying ? fmax(0.0, fmin(0.1, self.musicDisplayTime - self.musicPreviousDisplayTime)) : 0.0;
         musicFrameDelta = songDelta;
         self.musicTempoScale += (targetTempo - self.musicTempoScale) * (1.0f - expf(-(float)songDelta * 2.0f));
         float energyLevel = fmaxf(0.0f, fminf(1.0f, [self.renderParameters[@"activityEnergy"] floatValue]));
@@ -5132,8 +5146,8 @@ static double VectorAssaultRnd(double n) { double x = sin(n * 127.1 + 78.233) * 
             cameraActivity = fmaxf(0.0f, fminf(1.0f, (vocalLevel - 0.06f) / 0.34f));
         }
         float follow = 1.0f - expf(-(float)songDelta * 12.0f);
-        self.arrowMotionGate += ((isPlaying ? musicActivity : 0.0f) - self.arrowMotionGate) * follow;
-        self.cameraMotionGate += ((isPlaying ? cameraActivity : 0.0f) - self.cameraMotionGate) * follow;
+        self.arrowMotionGate += ((songIsPlaying ? musicActivity : 0.0f) - self.arrowMotionGate) * follow;
+        self.cameraMotionGate += ((songIsPlaying ? cameraActivity : 0.0f) - self.cameraMotionGate) * follow;
         self.beatDrive *= expf(-(float)songDelta * 5.0f);
         if (self.pendingBeatCount > 0) self.beatDrive = fmaxf(self.beatDrive, self.pendingBeatIntensity);
         float drum = [self.renderParameters[@"drumsStemControlEnabled"] boolValue] ?
@@ -5192,6 +5206,27 @@ static double VectorAssaultRnd(double n) { double x = sin(n * 127.1 + 78.233) * 
     }
     self.lastPlaybackTime = playbackTime;
 
+    BOOL visualVideoActive = response && [self.renderParameters[@"visualVideoActive"] boolValue];
+    if (visualVideoActive && !self.visualVideoWasActive) self.videoTriggerPulse = 1.0f;
+    self.visualVideoWasActive = visualVideoActive;
+    float guitarEnergy = [self.renderParameters[@"guitarStemControlEnabled"] boolValue] ?
+        [self.renderParameters[@"guitarStemControl"] floatValue] : [self.renderParameters[@"activityElectricGuitarTexture"] floatValue];
+    // Match Mac's peak-color model: normalize the live sub-bass against a
+    // slowly decaying track peak, then use the same 0.66 ratio and 0.78 curve.
+    float peakDt = (float)fmax(0.0, musicFrameDelta);
+    self.gridBassPeak = fmaxf(self.gridBassPeak * expf(-peakDt * 0.26f), fmaxf(bass, 0.030f));
+    float normalizedBass = fminf(1.0f, powf(fmaxf(0.0f, bass) / fmaxf(0.038f, self.gridBassPeak * 0.66f), 0.78f));
+    self.gridGuitarPeak = fmaxf(self.gridGuitarPeak * expf(-peakDt * 0.48f), fmaxf(guitarEnergy, 0.018f));
+    float normalizedGuitar = fminf(1.0f, powf(fmaxf(0.0f, guitarEnergy) / fmaxf(0.020f, self.gridGuitarPeak * 0.74f), 0.92f));
+    float bassHighGate = VectorAssaultSmoothstep(0.86f, 0.98f, normalizedBass) * VectorAssaultSmoothstep(0.12f, 0.28f, bass);
+    float guitarHighGate = VectorAssaultSmoothstep(0.76f, 0.94f, normalizedGuitar) * VectorAssaultSmoothstep(0.14f, 0.34f, guitarEnergy);
+    float climaxHighGate = VectorAssaultSmoothstep(0.58f, 0.82f, [self.renderParameters[@"activityClimax"] floatValue]);
+    float highInput = fmaxf(bassHighGate, fmaxf(guitarHighGate, climaxHighGate));
+    float pulseFollow = 1.0f - expf(-fmaxf(0.0f, musicFrameDelta) * 8.0f);
+    self.gridEnergyPulse += (fmaxf(0.0f, fminf(1.0f, highInput)) - self.gridEnergyPulse) * pulseFollow;
+    self.videoTriggerPulse *= expf(-fmaxf(0.0f, musicFrameDelta) * 2.2f);
+    if (!response) { self.videoTriggerPulse = 0.0f; self.visualVideoWasActive = NO; }
+
     vector_float3 songPalette[7];
     memcpy(songPalette, kVectorAssaultPalette, sizeof(songPalette));
     vector_float3 gridTint = {150.0f/255.0f, 106.0f/255.0f, 177.0f/255.0f};
@@ -5215,13 +5250,14 @@ static double VectorAssaultRnd(double n) { double x = sin(n * 127.1 + 78.233) * 
 
     vector_float2 forward = {cosf(attackAngle), sinf(attackAngle)};
     float tracking = [self.renderParameters[@"cameraTracking"] respondsToSelector:@selector(floatValue)] ? [self.renderParameters[@"cameraTracking"] floatValue] : 0.75f;
-    float pulse = response ? self.kickEnvelope : powf(fmaxf(0, cosf(playbackTime * 5.2f)), 14.0f);
+    float pulse = response ? (songIsPlaying ? self.kickEnvelope : 0.0f) : powf(fmaxf(0, cosf(playbackTime * 5.2f)), 14.0f);
     float camProgress = (response ? (float)self.musicCameraTime : playbackTime) * 260.0f * tracking * 0.53f;
     vector_float2 camera = VectorAssaultScale(forward, camProgress);
     float zoom = 1.0f + tracking * 0.07f + pulse * 0.018f;
     float angle = -pulse * 0.009f * tracking;
     float shake = pulse * tracking * (response ? 4.0f : 2.5f);
-    vector_float2 screenShake = {sinf(playbackTime * 25.0f) * shake, cosf(playbackTime * 31.0f) * shake};
+    vector_float2 screenShake = response && !songIsPlaying ? (vector_float2){0,0} :
+        (vector_float2){sinf(playbackTime * 25.0f) * shake, cosf(playbackTime * 31.0f) * shake};
     float c = cosf(angle), s = sinf(angle);
     CGSize size = view.drawableSize;
     float side = fmaxf(1, fminf(size.width, size.height));
@@ -5235,7 +5271,8 @@ static double VectorAssaultRnd(double n) { double x = sin(n * 127.1 + 78.233) * 
 
     // The reference Canvas draws its faint 75-unit grid before any arrows.
     // Emit thin quads so the grid participates in the same camera transform.
-    vector_float4 gridColor = (vector_float4){gridTint.x, gridTint.y, gridTint.z, 0.10f};
+    float gridGlow = response ? fmaxf(self.gridEnergyPulse, self.videoTriggerPulse) : 0.0f;
+    vector_float4 gridColor = (vector_float4){gridTint.x, gridTint.y, gridTint.z, 0.10f + 0.48f * gridGlow};
     for (int axis = 0; axis < 2; axis++) {
         float center = axis == 0 ? camera.x + 195.0f : camera.y + 195.0f;
         float origin = axis == 0 ? -1000.0f : -1800.0f;
@@ -5248,6 +5285,44 @@ static double VectorAssaultRnd(double n) { double x = sin(n * 127.1 + 78.233) * 
             vector_float2 n = (vector_float2){-d.y * .5f, d.x * .5f};
             vector_float2 q[4] = {VectorAssaultSub(a,n),VectorAssaultAdd(a,n),VectorAssaultAdd(b,n),VectorAssaultSub(b,n)};
             for (int k=0;k<6;k++) { int oi[6]={0,1,2,0,2,3}; vector_float2 p=q[oi[k]]; vector_float2 z=VectorAssaultSub(VectorAssaultSub(p,camera),(vector_float2){195,195}); float xx=((z.x*c-z.y*s)*zoom+screenShake.x)*2.0f/390.0f, yy=-((z.x*s+z.y*c)*zoom+screenShake.y)*2.0f/390.0f; vertices[vertexCount++] = (VectorAssaultVertex){{xx,yy},gridColor}; }
+            if (response && gridGlow > 0.08f) {
+                float phase = fmodf(playbackTime * (120.0f + 140.0f * gridGlow) + (float)v * 0.73f, 1800.0f);
+                if (phase < 0) phase += 1800.0f;
+                for (int dot = 0; dot < 3; dot++) {
+                    float along = -720.0f + fmodf(phase + dot * 600.0f, 1800.0f);
+                    vector_float2 centerPoint = axis == 0 ? (vector_float2){(float)v, camera.y + along} : (vector_float2){camera.x + along, (float)v};
+                    float radius = 1.25f + 1.25f * gridGlow;
+                    float streakLength = 9.0f + 11.0f * gridGlow;
+                    vector_float4 headColor = {songPalette[2].x,songPalette[2].y,songPalette[2].z,0.12f+0.56f*gridGlow};
+                    vector_float4 tailColor = {songPalette[2].x,songPalette[2].y,songPalette[2].z,0.0f};
+                    // A tapered laser scan with a soft-looking round head and a fading tail.
+                    vector_float2 tail = axis == 0 ? (vector_float2){centerPoint.x,centerPoint.y-streakLength} : (vector_float2){centerPoint.x-streakLength,centerPoint.y};
+                    vector_float2 side = axis == 0 ? (vector_float2){radius*0.45f,0} : (vector_float2){0,radius*0.45f};
+                    vector_float2 trailPoints[4] = {tail, VectorAssaultAdd(centerPoint,side), centerPoint, VectorAssaultSub(centerPoint,side)};
+                    int trailIndices[6] = {0,1,2,0,2,3};
+                    for (int k = 0; k < 6; k++) {
+                        vector_float2 p = trailPoints[trailIndices[k]];
+                        vector_float4 color = trailIndices[k] == 0 ? tailColor : headColor;
+                        vector_float2 z = VectorAssaultSub(VectorAssaultSub(p,camera),(vector_float2){195,195});
+                        float xx=((z.x*c-z.y*s)*zoom+screenShake.x)*2.0f/390.0f;
+                        float yy=-((z.x*s+z.y*c)*zoom+screenShake.y)*2.0f/390.0f;
+                        vertices[vertexCount++] = (VectorAssaultVertex){{xx,yy},color};
+                    }
+                    for (int segment = 0; segment < 8; segment++) {
+                        float a0 = (float)segment * (float)M_PI / 4.0f;
+                        float a1 = (float)(segment + 1) * (float)M_PI / 4.0f;
+                        vector_float2 points[3] = {centerPoint,
+                            {centerPoint.x + cosf(a0)*radius, centerPoint.y + sinf(a0)*radius},
+                            {centerPoint.x + cosf(a1)*radius, centerPoint.y + sinf(a1)*radius}};
+                        for (int k = 0; k < 3; k++) {
+                            vector_float2 z = VectorAssaultSub(VectorAssaultSub(points[k],camera),(vector_float2){195,195});
+                            float xx=((z.x*c-z.y*s)*zoom+screenShake.x)*2.0f/390.0f;
+                            float yy=-((z.x*s+z.y*c)*zoom+screenShake.y)*2.0f/390.0f;
+                            vertices[vertexCount++] = (VectorAssaultVertex){{xx,yy},headColor};
+                        }
+                    }
+                }
+            }
         }
     }
 

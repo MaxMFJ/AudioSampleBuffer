@@ -64,6 +64,36 @@ final class LocalAudioPlayer {
     private var stemCurves: [[Float]] = []
     private var vocalCurve: [Float] = []
     private var visualGuitarPeak: Float = 0
+    private var visualBPM: Float = 120
+    private var visualEnergy: Float = 0
+    private var visualBassEnergy: Float = 0
+    private var visualHighEnergy: Float = 0
+    private var visualSubBass: Float = 0
+    private var visualSubOnly: Float = 0
+    private var visualTransient: Float = 0
+    private var visualBassHistory: [Float] = []
+    private var visualTransientHistory: [Float] = []
+    private var visualBeatTimes: [Float] = []
+    private var visualLastBassHit: Float = -10
+    private var visualLastTransientHit: Float = -10
+    private var visualBeatSequence: UInt64 = 0
+    private enum VectorSegment { case unknown, intro, verse, chorus, bridge, outro }
+    private var vectorSegment: VectorSegment = .unknown
+    private var vectorSegmentStart: Float = 0
+    private var vectorEnergyEnvelope: [Float] = []
+    private var vectorLongEnergy: Float = 0
+    private var vectorShortEnergy: Float = 0
+    private var vectorPeakEnergy: Float = 0
+    private var vectorAverageEnergy: Float = 0
+    private var vectorChorusThreshold: Float = 0
+    private var vectorChorusCount = 0
+    private var vectorIntroDetected = false
+    private var vectorOutroStableFrames = 0
+    private var visualLastSampleTime: Float = -1
+    private var visualBeatUntil: Float = -1
+    private var visualBeatStrength: Float = 0
+    private var visualBeatKind: Float = 1
+    private var visualBeatIntervals: [Float] = []
 #if !SWIFT_PACKAGE
     private var trackGeneration = 0
     private var demucsEnabled = UserDefaults.standard.bool(forKey: "desktopHTDemucsEnabled")
@@ -121,6 +151,7 @@ final class LocalAudioPlayer {
             dspFeatureTexture = SIMD4<Float>(repeating: 0)
             vocalCurve = []
             visualGuitarPeak = 0
+            resetVectorRhythm()
             let audioFile = try AVAudioFile(forReading: url)
             file = audioFile
             currentURL = url
@@ -149,6 +180,9 @@ final class LocalAudioPlayer {
                     self?.levels = (values.low, values.mid, values.high)
                     self?.dspFeatureSignals = values.signals
                     self?.dspFeatureTexture = values.texture
+                    self?.updateVectorRhythm(energy: values.energy, bassEnergy: values.bassEnergy,
+                                             highEnergy: values.highEnergy, subBass: values.subBass,
+                                             subOnly: values.subOnly, transient: values.transient)
                 }
             }
             if !engine.isRunning { try engine.start() }
@@ -423,12 +457,22 @@ final class LocalAudioPlayer {
                            piano: hasPianoStem
                             ? ((coverDotSensitivity || curve(1) >= 0.08) ? curve(1) : 0)
                             : (isolatedInstruments ? 0 : min(max(levels.1 * 0.55, 0), 1)),
-                           drums: hasDrumStem ? curve(2) : levels.0, playbackTime: playbackTime,
+                           drums: hasDrumStem ? curve(2) : 0, playbackTime: playbackTime,
                            electricGuitarConfidence: electricGuitarConfidence, vocal: vocal,
                            guitarPeak: visualGuitarPeak, playing: isPlaying ? 1 : 0,
-                           other: coverDotSensitivity ? curve(3) : 0,
+                           other: curve(3),
                            dspFeatureSignals: dspFeatureSignals,
-                           dspFeatureTexture: dspFeatureTexture)
+                           dspFeatureTexture: dspFeatureTexture,
+                           visualVideoActive: signatureMV.isShowingVideo ? 1 : 0,
+                           bpm: visualBPM,
+                           songIdentity: currentURL?.absoluteString.hashValue ?? 0,
+                           beatDetected: isPlaying && playbackTime <= visualBeatUntil ? 1 : 0,
+                           beatSequence: visualBeatSequence,
+                           beatIntensity: visualBeatStrength,
+                           beatKind: visualBeatKind,
+                           activityEnergy: visualEnergy,
+                           vectorSubBass: min(1, visualSubBass * 4.6),
+                           activityClimax: vectorSegment == .chorus ? min(1, 0.58 + visualEnergy * 0.42) : 0)
     }
 
     private func interpolated(_ curve: [Float], at time: Float, interval: Float) -> Float {
@@ -441,13 +485,170 @@ final class LocalAudioPlayer {
 
     func setVocalCurve(_ values: [Float]) { vocalCurve = values }
 
-    private func analyze(_ buffer: AVAudioPCMBuffer) -> (low: Float, mid: Float, high: Float, signals: SIMD4<Float>, texture: SIMD4<Float>) {
+    private func resetVectorRhythm() {
+        visualBPM = 120
+        visualEnergy = 0
+        visualBassEnergy = 0
+        visualHighEnergy = 0
+        visualSubBass = 0
+        visualSubOnly = 0
+        visualTransient = 0
+        visualBassHistory.removeAll()
+        visualTransientHistory.removeAll()
+        visualBeatTimes.removeAll()
+        visualLastBassHit = -10
+        visualLastTransientHit = -10
+        visualLastSampleTime = -1
+        visualBeatUntil = -1
+        visualBeatStrength = 0
+        vectorSegment = .unknown
+        vectorSegmentStart = 0
+        vectorEnergyEnvelope.removeAll()
+        vectorLongEnergy = 0
+        vectorShortEnergy = 0
+        vectorPeakEnergy = 0
+        vectorAverageEnergy = 0
+        vectorChorusThreshold = 0
+        vectorChorusCount = 0
+        vectorIntroDetected = false
+        vectorOutroStableFrames = 0
+    }
+
+    private static func adaptiveHit(_ value: Float, history: inout [Float], floor: Float,
+                             sigma: Float, interval: Float, lastHit: inout Float, time: Float) -> Bool {
+        history.append(value)
+        if history.count > 32 { history.removeFirst() }
+        guard history.count >= 8 else { return false }
+        let mean = history.reduce(0, +) / Float(history.count)
+        let variance = history.reduce(Float(0)) { $0 + ($1 - mean) * ($1 - mean) } / Float(history.count)
+        guard time - lastHit > interval, value > max(floor, mean + sigma * sqrt(variance)) else { return false }
+        lastHit = time
+        return true
+    }
+
+    private func updateVectorRhythm(energy: Float, bassEnergy: Float, highEnergy: Float,
+                                    subBass: Float, subOnly: Float, transient: Float) {
+        let time = Float(currentPlaybackTime)
+        if time + 0.05 < visualLastSampleTime { resetVectorRhythm() }
+        visualLastSampleTime = time
+        guard isPlaying else { return }
+        visualEnergy = min(1, 0.3 * energy + 0.7 * visualEnergy)
+        visualBassEnergy = min(1, 0.3 * bassEnergy + 0.7 * visualBassEnergy)
+        visualHighEnergy = min(1, 0.3 * highEnergy + 0.7 * visualHighEnergy)
+        visualSubBass = 0.28 * subBass + 0.72 * visualSubBass
+        visualSubOnly = 0.28 * subOnly + 0.72 * visualSubOnly
+        visualTransient = 0.24 * transient + 0.76 * visualTransient
+        updateVectorSegment(at: time)
+        let low = min(1, max(visualSubBass * 4.6, visualSubOnly * 6.2))
+        let transientLevel = min(1, visualTransient * 7.2)
+        let bassHit = Self.adaptiveHit(min(1, visualSubBass * 4.6), history: &visualBassHistory,
+                                  floor: 0.10, sigma: 1.85, interval: 0.23,
+                                  lastHit: &visualLastBassHit, time: time)
+        let transientHit = Self.adaptiveHit(transientLevel, history: &visualTransientHistory,
+                                       floor: 0.08, sigma: 1.65, interval: 0.08,
+                                       lastHit: &visualLastTransientHit, time: time)
+        guard bassHit || (transientHit && visualSubBass * 4.6 > 0.10) else { return }
+        visualBeatSequence &+= 1
+        visualBeatUntil = time + 0.08
+        visualBeatStrength = min(1, max(low, transientLevel))
+        visualBeatKind = bassHit ? 1 : 2
+        if bassHit {
+            visualBeatTimes.append(time)
+            if visualBeatTimes.count > 128 { visualBeatTimes.removeFirst() }
+            guard visualBeatTimes.count >= 4 else { return }
+            let intervals = zip(visualBeatTimes.dropFirst(), visualBeatTimes).map { pair in pair.0 - pair.1 }.filter { $0 > 0.2 && $0 < 2 }
+            if !intervals.isEmpty {
+                let average = intervals.reduce(0, +) / Float(intervals.count)
+                visualBPM = 0.1 * min(200, max(60, 60 / average)) + 0.9 * visualBPM
+            }
+        }
+    }
+
+    // The same energy statistics and chorus hysteresis used by iOS's
+    // AudioFeatureExtractor. The grid only sees a climax signal in chorus.
+    private func updateVectorSegment(at time: Float) {
+        let energy = visualEnergy
+        vectorLongEnergy = 0.008 * energy + 0.992 * vectorLongEnergy
+        vectorShortEnergy = 0.1 * energy + 0.9 * vectorShortEnergy
+        vectorEnergyEnvelope.append(energy)
+        if vectorEnergyEnvelope.count > 300 { vectorEnergyEnvelope.removeFirst() }
+        vectorAverageEnergy = vectorEnergyEnvelope.reduce(0, +) / Float(vectorEnergyEnvelope.count)
+        if energy > vectorPeakEnergy {
+            vectorPeakEnergy = energy
+            vectorChorusThreshold = energy * 0.75
+        }
+        let elapsed = time - vectorSegmentStart
+        var next = vectorSegment
+        if elapsed >= 6 || vectorSegment == .unknown {
+            if !vectorIntroDetected {
+                if time < 8 || (time < 20 && (vectorAverageEnergy <= 0.01 || energy / vectorAverageEnergy < 1.15)) {
+                    next = .intro
+                } else {
+                    vectorIntroDetected = true
+                }
+            }
+            if vectorIntroDetected {
+                if time > 120 && vectorEnergyEnvelope.count >= 60 {
+                    let recent = vectorEnergyEnvelope.suffix(60)
+                    let first = recent.prefix(30).reduce(0, +) / 30
+                    let second = recent.suffix(30).reduce(0, +) / 30
+                    vectorOutroStableFrames = second - first < -0.01 &&
+                        vectorShortEnergy < vectorAverageEnergy * 0.7 ? vectorOutroStableFrames + 1 : 0
+                    if vectorOutroStableFrames > 90 { next = .outro }
+                }
+                if next != .outro {
+                    let energyRatio = vectorAverageEnergy > 0.005 ? energy / vectorAverageEnergy : 1
+                    let shortLong = vectorLongEnergy > 0.005 ? vectorShortEnergy / vectorLongEnergy : 1
+                    let flux = min(1, visualTransient * 7.2)
+                    var score: Float = 0
+                    if vectorPeakEnergy < 0.2 {
+                        if energyRatio > 1.15 { score += 0.4 }
+                        if shortLong > 1.1 { score += 0.3 }
+                        if flux > 0.1 { score += 0.3 }
+                    } else if vectorPeakEnergy < 0.35 {
+                        if energyRatio > 1.2 { score += 0.35 }
+                        if shortLong > 1.15 { score += 0.25 }
+                        if flux > 0.15 { score += 0.2 }
+                        if visualBassEnergy > vectorAverageEnergy { score += 0.2 }
+                    } else {
+                        if energy > vectorChorusThreshold { score += 0.3 }
+                        if energyRatio > 1.25 { score += 0.25 }
+                        if shortLong > 1.2 { score += 0.2 }
+                        if visualHighEnergy > 0.25 { score += 0.15 }
+                        if visualBassEnergy > 0.3 { score += 0.1 }
+                    }
+                    let inChorus = vectorSegment == .chorus
+                    let shouldChorus = score >= (inChorus ? 0.35 : 0.55) &&
+                        (inChorus || vectorChorusCount < 5)
+                    if inChorus && elapsed < 8 {
+                        next = .chorus
+                    } else if shouldChorus {
+                        if !inChorus {
+                            vectorChorusCount += 1
+                            if vectorChorusCount == 1 { vectorChorusThreshold = energy * 0.85 }
+                        }
+                        next = .chorus
+                    } else if inChorus {
+                        next = .bridge
+                    } else if vectorSegment == .bridge && elapsed >= 4 || vectorSegment == .intro || vectorSegment == .unknown {
+                        next = .verse
+                    }
+                }
+            }
+        }
+        if next != vectorSegment {
+            vectorSegment = next
+            vectorSegmentStart = time
+        }
+    }
+
+    private func analyze(_ buffer: AVAudioPCMBuffer) -> (low: Float, mid: Float, high: Float, signals: SIMD4<Float>, texture: SIMD4<Float>, energy: Float, bassEnergy: Float, highEnergy: Float, subBass: Float, subOnly: Float, transient: Float) {
         guard let channels = buffer.floatChannelData, buffer.frameLength > 0 else {
-            return (0, 0, 0, SIMD4<Float>(repeating: 0), SIMD4<Float>(repeating: 0))
+            return (0, 0, 0, SIMD4<Float>(repeating: 0), SIMD4<Float>(repeating: 0), 0, 0, 0, 0, 0, 0)
         }
         analyzerLock.lock()
         defer { analyzerLock.unlock() }
-        guard let dsp else { return (0, 0, 0, SIMD4<Float>(repeating: 0), SIMD4<Float>(repeating: 0)) }
+        guard let dsp else { return (0, 0, 0, SIMD4<Float>(repeating: 0), SIMD4<Float>(repeating: 0), 0, 0, 0, 0, 0, 0) }
         var bands = [Float](repeating: 0, count: 80)
         var categories = AnalyzerCategoryFeatures()
         bands.withUnsafeMutableBufferPointer { output in
@@ -465,8 +666,9 @@ final class LocalAudioPlayer {
                 &categories
             )
         }
-        // Match iOS Tyndall's exact FFT windows (0–9, 20–49, 50–79).
-        // Mac DSP uses amplitudeLevel 5; scale by 5 to match iOS's 25.
+        // The existing desktop effects use the enlarged band levels below.
+        // Vector Assault's activity model uses the unscaled 80-band average,
+        // matching the iOS live analyzer's amplitude level of 5.
         let low = bands[0..<10].reduce(0, +) / 10
         let mid = bands[20..<50].reduce(0, +) / 30
         let high = bands[50..<80].reduce(0, +) / 30
@@ -478,9 +680,14 @@ final class LocalAudioPlayer {
         let harmonic = clamp01(categories.harmonic * 5 + categories.harmonicPeakRatio * 0.06)
         let flatness = clamp01(categories.spectralFlatness)
         let electric = clamp01(noise * 0.52 + flatness * 0.78)
+        let bassBand = bands[0..<17].reduce(0, +) / 17
+        let highBand = bands[49..<80].reduce(0, +) / 31
         return (low * 5, mid * 5, high * 5,
                 SIMD4<Float>(transient, electric, flatness, harmonic),
-                SIMD4<Float>(categories.harmonicPeakRatio, categories.subBass, categories.bass, categories.lowEnergy))
+                SIMD4<Float>(categories.harmonicPeakRatio, categories.subBass, categories.bass, categories.lowEnergy),
+                bands.reduce(0, +) / Float(bands.count) * 3,
+                bassBand * 4, highBand * 5,
+                categories.lowEnergy, categories.subBass, categories.transient)
     }
 }
 

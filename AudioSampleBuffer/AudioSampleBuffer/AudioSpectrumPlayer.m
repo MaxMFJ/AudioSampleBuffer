@@ -15,6 +15,16 @@ NSString *const kAudioPlayerDidUpdateTimeNotification = @"AudioPlayerDidUpdateTi
 NSString *const kAudioPlayerDidStartPlaybackNotification = @"AudioPlayerDidStartPlaybackNotification";
 NSString *const kAudioPlayerDidFinishYAMNetAnalysisNotification = @"AudioPlayerDidFinishYAMNetAnalysisNotification";
 
+static AVAudioUnitEQFilterType ASBEQFilterType(NSString *name) {
+    if ([name isEqualToString:@"lowPass"]) return AVAudioUnitEQFilterTypeLowPass;
+    if ([name isEqualToString:@"highPass"]) return AVAudioUnitEQFilterTypeHighPass;
+    if ([name isEqualToString:@"bandPass"]) return AVAudioUnitEQFilterTypeBandPass;
+    if ([name isEqualToString:@"bandStop"]) return AVAudioUnitEQFilterTypeBandStop;
+    if ([name isEqualToString:@"lowShelf"]) return AVAudioUnitEQFilterTypeLowShelf;
+    if ([name isEqualToString:@"highShelf"]) return AVAudioUnitEQFilterTypeHighShelf;
+    return AVAudioUnitEQFilterTypeParametric;
+}
+
 @interface AudioSpectrumPlayer ()
 {
     AVAudioFramePosition lastStartFramePosition;
@@ -27,6 +37,14 @@ NSString *const kAudioPlayerDidFinishYAMNetAnalysisNotification = @"AudioPlayerD
 @property (nonatomic, strong) AVAudioEngine *engine;
 @property (nonatomic, strong) AVAudioPlayerNode *player;
 @property (nonatomic, strong) AVAudioUnitTimePitch *timePitchNode;  // 🎵 音高/速率调整节点
+@property (nonatomic, strong) AVAudioUnitEQ *equalizerNode;
+@property (nonatomic, strong) NSMutableArray<NSNumber *> *mutableEqualizerBandGains;
+@property (nonatomic, copy) NSArray<NSDictionary<NSString *, id> *> *equalizerBandConfigurations;
+@property (nonatomic, assign) float equalizerPreampDB;
+@property (nonatomic, assign) BOOL equalizerAutoHeadroom;
+@property (nonatomic, copy) NSString *equalizerProfileID;
+@property (nonatomic, copy) NSString *equalizerSource;
+@property (nonatomic, copy) NSDictionary<NSString *, id> *equalizerMetadata;
 @property (nonatomic, strong) RealtimeAnalyzer *liveAnalyzer;
 @property (nonatomic, strong) RealtimeAnalyzer *extendedAnalyzer;
 @property (nonatomic, assign) int bufferSize;
@@ -109,6 +127,52 @@ NSString *const kAudioPlayerDidFinishYAMNetAnalysisNotification = @"AudioPlayerD
     // 🎵 初始化音高/速率参数
     _pitchShift = 0.0f;      // 默认原调
     _playbackRate = 1.0f;    // 默认原速
+    NSInteger savedEQPreset = [NSUserDefaults.standardUserDefaults integerForKey:@"AudioSpectrumEQPreset"];
+    _equalizerPreset = (savedEQPreset >= AudioSpectrumEQPresetFlat && savedEQPreset <= AudioSpectrumEQPresetAcoustic)
+        ? (AudioSpectrumEQPreset)savedEQPreset : AudioSpectrumEQPresetFlat;
+    if (savedEQPreset == AudioSpectrumEQPresetCustom) {
+        _equalizerPreset = AudioSpectrumEQPresetCustom;
+    }
+    NSArray<NSNumber *> *savedBandGains = [NSUserDefaults.standardUserDefaults arrayForKey:@"AudioSpectrumEQBandGains"];
+    _mutableEqualizerBandGains = [NSMutableArray arrayWithCapacity:10];
+    NSArray<NSNumber *> *legacyGainSlots = @[@1, @3, @5, @7, @9];
+    for (NSUInteger index = 0; index < 10; index++) {
+        NSNumber *legacyGain = nil;
+        if (savedBandGains.count == 5) {
+            for (NSUInteger oldIndex = 0; oldIndex < legacyGainSlots.count; oldIndex++) {
+                if (legacyGainSlots[oldIndex].unsignedIntegerValue == index) legacyGain = savedBandGains[oldIndex];
+            }
+        } else if (index < savedBandGains.count) {
+            legacyGain = savedBandGains[index];
+        }
+        float gain = legacyGain ? legacyGain.floatValue : 0.0f;
+        [_mutableEqualizerBandGains addObject:@(fmaxf(-12.0f, fminf(12.0f, gain)))];
+    }
+    NSArray *defaultFrequencies = @[@31, @62, @125, @250, @500, @1000, @2000, @4000, @8000, @16000];
+    NSMutableArray *defaultBands = [NSMutableArray arrayWithCapacity:10];
+    NSArray *bandIDs = @[@"31Hz", @"62Hz", @"125Hz", @"250Hz", @"500Hz", @"1kHz", @"2kHz", @"4kHz", @"8kHz", @"16kHz"];
+    for (NSUInteger index = 0; index < 10; index++) {
+        [defaultBands addObject:@{@"id": bandIDs[index], @"type": @"parametric",
+                                  @"frequencyHz": defaultFrequencies[index],
+                                  @"gainDB": _mutableEqualizerBandGains[index],
+                                  @"bandwidthOctaves": @1.0, @"enabled": @YES}];
+    }
+    _equalizerBandConfigurations = defaultBands;
+    _equalizerPreampDB = 0.0f;
+    _equalizerAutoHeadroom = YES;
+    _equalizerProfileID = @"flat";
+    _equalizerSource = @"preset";
+    _equalizerMetadata = @{};
+    NSDictionary *savedConfiguration = [NSUserDefaults.standardUserDefaults dictionaryForKey:@"AudioSpectrumEQConfiguration"];
+    if (savedConfiguration) {
+        NSError *configurationError = nil;
+        if (![self applyEqualizerConfiguration:savedConfiguration error:&configurationError]) {
+            NSLog(@"[EQ] 忽略无效的已保存均衡器配置: %@", configurationError.localizedDescription);
+            [self setEqualizerPreset:_equalizerPreset];
+        }
+    } else {
+        [self setEqualizerPreset:_equalizerPreset];
+    }
     
     // 🔊 默认不允许与其他应用混音
     _allowMixWithOthers = NO;
@@ -122,13 +186,15 @@ NSString *const kAudioPlayerDidFinishYAMNetAnalysisNotification = @"AudioPlayerD
     
     [self.engine attachNode:self.player];
     [self.engine attachNode:self.timePitchNode];
+    [self.engine attachNode:self.equalizerNode];
     
     AVAudioMixerNode *mixerNode = self.engine.mainMixerNode;
     
     // ⚠️ 关键修复：不要在连接前获取格式，连接时使用 nil 让系统自动协商格式
-    // 🎵 音频链路：player → timePitch → mixer
+    // 🎵 音频链路：player → timePitch → EQ → mixer
     [self.engine connect:self.player to:self.timePitchNode format:nil];
-    [self.engine connect:self.timePitchNode to:mixerNode format:nil];
+    [self.engine connect:self.timePitchNode to:self.equalizerNode format:nil];
+    [self.engine connect:self.equalizerNode to:mixerNode format:nil];
     
     NSError *error = nil;
     if (![self.engine startAndReturnError:&error]) {
@@ -157,7 +223,7 @@ NSString *const kAudioPlayerDidFinishYAMNetAnalysisNotification = @"AudioPlayerD
         }
     }];
 
-    NSLog(@"✅ AudioSpectrumPlayer 音频链路已建立: player → timePitch → mixer");
+    NSLog(@"✅ AudioSpectrumPlayer 音频链路已建立: player → timePitch → EQ → mixer");
     NSLog(@"   格式: %.0f Hz, %u 声道", format.sampleRate, (unsigned int)format.channelCount);
 }
 - (NSTimeInterval)audioDurationFromURL:(NSString *)url {
@@ -838,6 +904,223 @@ NSString *const kAudioPlayerDidFinishYAMNetAnalysisNotification = @"AudioPlayerD
         _timePitchNode.rate = 1.0f;   // 默认原速
     }
     return _timePitchNode;
+}
+
+- (AVAudioUnitEQ *)equalizerNode {
+    if (!_equalizerNode) {
+        _equalizerNode = [[AVAudioUnitEQ alloc] initWithNumberOfBands:10];
+        [self.equalizerBandConfigurations enumerateObjectsUsingBlock:^(NSDictionary<NSString *, id> *configuration, NSUInteger index, BOOL *stop) {
+            AVAudioUnitEQFilterParameters *band = self->_equalizerNode.bands[index];
+            band.filterType = ASBEQFilterType(configuration[@"type"]);
+            band.frequency = [configuration[@"frequencyHz"] floatValue];
+            band.bandwidth = [configuration[@"bandwidthOctaves"] floatValue];
+            band.gain = [configuration[@"gainDB"] floatValue];
+            band.bypass = ![configuration[@"enabled"] boolValue];
+        }];
+        [self applyEqualizerPreset:_equalizerPreset];
+    }
+    return _equalizerNode;
+}
+
+- (NSArray<NSNumber *> *)equalizerBandGains {
+    return [self.mutableEqualizerBandGains copy] ?: @[@0, @0, @0, @0, @0, @0, @0, @0, @0, @0];
+}
+
+- (NSDictionary<NSString *, id> *)equalizerConfiguration {
+    return @{@"schemaVersion": @2,
+             @"profileID": self.equalizerProfileID ?: @"custom",
+             @"source": self.equalizerSource ?: @"user",
+             @"preset": @(_equalizerPreset),
+             @"preampDB": @(self.equalizerPreampDB),
+             @"autoHeadroom": @(self.equalizerAutoHeadroom),
+             @"metadata": self.equalizerMetadata ?: @{},
+             @"bands": self.equalizerBandConfigurations ?: @[]};
+}
+
+- (BOOL)applyEqualizerConfiguration:(NSDictionary<NSString *,id> *)configuration error:(NSError **)error {
+    NSString *domain = @"AudioSpectrumEQConfiguration";
+    if (![configuration isKindOfClass:NSDictionary.class]) {
+        if (error) *error = [NSError errorWithDomain:domain code:1 userInfo:@{NSLocalizedDescriptionKey: @"配置必须是 JSON 对象。"}];
+        return NO;
+    }
+    NSInteger schemaVersion = [configuration[@"schemaVersion"] integerValue];
+    if (schemaVersion != 1 && schemaVersion != 2) {
+        if (error) *error = [NSError errorWithDomain:domain code:1 userInfo:@{NSLocalizedDescriptionKey: @"配置版本不受支持（当前支持版本 1 和 2）。"}];
+        return NO;
+    }
+    NSArray *bands = configuration[@"bands"];
+    if (![bands isKindOfClass:NSArray.class] || (schemaVersion == 1 ? bands.count != 5 : bands.count != 10)) {
+        if (error) *error = [NSError errorWithDomain:domain code:2 userInfo:@{NSLocalizedDescriptionKey: schemaVersion == 1 ? @"旧配置必须包含 5 个频段。" : @"当前版本需要包含 10 个频段。"}];
+        return NO;
+    }
+    if (schemaVersion == 1) {
+        NSMutableArray *migratedBands = [NSMutableArray arrayWithArray:self.equalizerBandConfigurations];
+        NSArray *targetSlots = @[@1, @3, @5, @7, @9];
+        for (NSUInteger index = 0; index < bands.count; index++) {
+            id legacyBand = bands[index];
+            if (![legacyBand isKindOfClass:NSDictionary.class]) continue;
+            NSMutableDictionary *migrated = [legacyBand mutableCopy];
+            migrated[@"id"] = [NSString stringWithFormat:@"migrated-%lu", (unsigned long)index];
+            migratedBands[((NSNumber *)targetSlots[index]).unsignedIntegerValue] = migrated;
+        }
+        bands = migratedBands;
+    }
+    NSSet *supportedTypes = [NSSet setWithArray:@[@"parametric", @"lowPass", @"highPass", @"bandPass", @"bandStop", @"lowShelf", @"highShelf"]];
+    NSMutableArray *validatedBands = [NSMutableArray arrayWithCapacity:bands.count];
+    NSMutableArray *validatedGains = [NSMutableArray arrayWithCapacity:bands.count];
+    for (NSUInteger index = 0; index < bands.count; index++) {
+        id rawBand = bands[index];
+        if (![rawBand isKindOfClass:NSDictionary.class]) {
+            if (error) *error = [NSError errorWithDomain:domain code:3 userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"第 %lu 个频段不是对象。", (unsigned long)(index + 1)]}];
+            return NO;
+        }
+        NSDictionary *band = rawBand;
+        NSString *type = [band[@"type"] isKindOfClass:NSString.class] ? band[@"type"] : nil;
+        NSNumber *frequency = [band[@"frequencyHz"] isKindOfClass:NSNumber.class] ? band[@"frequencyHz"] : nil;
+        NSNumber *gain = [band[@"gainDB"] isKindOfClass:NSNumber.class] ? band[@"gainDB"] : nil;
+        NSNumber *bandwidth = [band[@"bandwidthOctaves"] isKindOfClass:NSNumber.class] ? band[@"bandwidthOctaves"] : nil;
+        NSNumber *enabled = [band[@"enabled"] isKindOfClass:NSNumber.class] ? band[@"enabled"] : nil;
+        if (![supportedTypes containsObject:type ?: @""] || !frequency || !gain || !bandwidth || !enabled ||
+            !isfinite(frequency.floatValue) || !isfinite(gain.floatValue) || !isfinite(bandwidth.floatValue) ||
+            frequency.floatValue < 20.0f || frequency.floatValue > 20000.0f ||
+            gain.floatValue < -24.0f || gain.floatValue > 12.0f ||
+            bandwidth.floatValue < 0.05f || bandwidth.floatValue > 5.0f) {
+            if (error) *error = [NSError errorWithDomain:domain code:3 userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"第 %lu 个频段包含缺失或越界参数。", (unsigned long)(index + 1)]}];
+            return NO;
+        }
+        NSString *bandID = [band[@"id"] isKindOfClass:NSString.class] ? band[@"id"] : [NSString stringWithFormat:@"band%lu", (unsigned long)index];
+        NSDictionary *cleanBand = @{@"id": bandID, @"type": type, @"frequencyHz": @(frequency.floatValue),
+                                     @"gainDB": @(gain.floatValue), @"bandwidthOctaves": @(bandwidth.floatValue),
+                                     @"enabled": @([enabled boolValue])};
+        [validatedBands addObject:cleanBand];
+        [validatedGains addObject:@([enabled boolValue] ? gain.floatValue : 0.0f)];
+    }
+    NSNumber *preamp = [configuration[@"preampDB"] isKindOfClass:NSNumber.class] ? configuration[@"preampDB"] : @0;
+    if (!isfinite(preamp.floatValue) || preamp.floatValue < -24.0f || preamp.floatValue > 12.0f) {
+        if (error) *error = [NSError errorWithDomain:domain code:4 userInfo:@{NSLocalizedDescriptionKey: @"preampDB 范围为 -24 到 +12 dB。"}];
+        return NO;
+    }
+    NSDictionary *metadata = [configuration[@"metadata"] isKindOfClass:NSDictionary.class] ? configuration[@"metadata"] : @{};
+    if (![NSJSONSerialization isValidJSONObject:metadata] ||
+        ![NSPropertyListSerialization propertyList:metadata isValidForFormat:NSPropertyListBinaryFormat_v1_0]) {
+        if (error) *error = [NSError errorWithDomain:domain code:5 userInfo:@{NSLocalizedDescriptionKey: @"metadata 必须是可保存的 JSON 属性列表对象。"}];
+        return NO;
+    }
+    self.equalizerBandConfigurations = validatedBands;
+    [self.mutableEqualizerBandGains setArray:validatedGains];
+    self.equalizerPreampDB = preamp.floatValue;
+    self.equalizerAutoHeadroom = [configuration[@"autoHeadroom"] respondsToSelector:@selector(boolValue)]
+        ? [configuration[@"autoHeadroom"] boolValue] : YES;
+    self.equalizerProfileID = [configuration[@"profileID"] isKindOfClass:NSString.class] ? configuration[@"profileID"] : @"custom";
+    self.equalizerSource = [configuration[@"source"] isKindOfClass:NSString.class] ? configuration[@"source"] : @"ai";
+    self.equalizerMetadata = metadata;
+    _equalizerPreset = AudioSpectrumEQPresetCustom;
+    [self applyEqualizerPreset:AudioSpectrumEQPresetCustom];
+    [self saveEqualizerSettings];
+    return YES;
+}
+
+- (void)setEqualizerPreset:(AudioSpectrumEQPreset)equalizerPreset {
+    if (equalizerPreset < AudioSpectrumEQPresetFlat || equalizerPreset > AudioSpectrumEQPresetAcoustic) {
+        equalizerPreset = AudioSpectrumEQPresetFlat;
+    }
+    _equalizerPreset = equalizerPreset;
+    if (equalizerPreset != AudioSpectrumEQPresetCustom) {
+        NSArray *frequencies = @[@31, @62, @125, @250, @500, @1000, @2000, @4000, @8000, @16000];
+        NSArray *bandIDs = @[@"31Hz", @"62Hz", @"125Hz", @"250Hz", @"500Hz", @"1kHz", @"2kHz", @"4kHz", @"8kHz", @"16kHz"];
+        NSDictionary<NSNumber *, NSArray<NSNumber *> *> *profiles = @{
+            @(AudioSpectrumEQPresetFlat): @[@0,@0,@0,@0,@0,@0,@0,@0,@0,@0],
+            @(AudioSpectrumEQPresetBass): @[@2,@3,@3,@2,@1,@0,@0,@0,@-1,@-1],
+            @(AudioSpectrumEQPresetVocal): @[@-1,@-1,@-1,@0,@1,@3,@3,@2,@0,@-1],
+            @(AudioSpectrumEQPresetBright): @[@-1,@-1,@-1,@-1,@0,@0,@1,@2,@3,@3],
+            @(AudioSpectrumEQPresetBlues): @[@1,@2,@2,@1,@0,@-1,@0,@1,@2,@1],
+            @(AudioSpectrumEQPresetRock): @[@3,@4,@3,@1,@-1,@-1,@1,@3,@4,@3],
+            @(AudioSpectrumEQPresetJazz): @[@1,@2,@1,@0,@-1,@1,@2,@2,@1,@1],
+            @(AudioSpectrumEQPresetPop): @[@1,@2,@1,@0,@-1,@0,@1,@2,@2,@1],
+            @(AudioSpectrumEQPresetClassical): @[@2,@2,@1,@0,@-1,@-1,@0,@1,@2,@2],
+            @(AudioSpectrumEQPresetElectronic): @[@3,@4,@3,@1,@-1,@1,@0,@2,@3,@3],
+            @(AudioSpectrumEQPresetAcoustic): @[@1,@1,@0,@-1,@0,@1,@2,@2,@1,@1],
+        };
+        [self.mutableEqualizerBandGains setArray:profiles[@(equalizerPreset)]];
+        NSMutableArray *updatedBands = [NSMutableArray arrayWithCapacity:10];
+        for (NSUInteger index = 0; index < 10; index++) {
+            [updatedBands addObject:@{@"id": bandIDs[index], @"type": @"parametric",
+                                      @"frequencyHz": frequencies[index], @"gainDB": self.mutableEqualizerBandGains[index],
+                                      @"bandwidthOctaves": @1.0, @"enabled": @YES}];
+        }
+        self.equalizerBandConfigurations = updatedBands;
+        self.equalizerPreampDB = 0.0f;
+        self.equalizerAutoHeadroom = YES;
+        NSDictionary *profileIDs = @{@(AudioSpectrumEQPresetFlat): @"flat", @(AudioSpectrumEQPresetBass): @"bass",
+            @(AudioSpectrumEQPresetVocal): @"vocal", @(AudioSpectrumEQPresetBright): @"bright",
+            @(AudioSpectrumEQPresetBlues): @"blues", @(AudioSpectrumEQPresetRock): @"rock",
+            @(AudioSpectrumEQPresetJazz): @"jazz", @(AudioSpectrumEQPresetPop): @"pop",
+            @(AudioSpectrumEQPresetClassical): @"classical", @(AudioSpectrumEQPresetElectronic): @"electronic",
+            @(AudioSpectrumEQPresetAcoustic): @"acoustic"};
+        self.equalizerProfileID = profileIDs[@(equalizerPreset)] ?: @"flat";
+        self.equalizerSource = @"preset";
+        self.equalizerMetadata = @{};
+        [NSUserDefaults.standardUserDefaults setObject:self.mutableEqualizerBandGains forKey:@"AudioSpectrumEQBandGains"];
+    } else {
+        self.equalizerProfileID = @"custom";
+        self.equalizerSource = @"user";
+    }
+    [self applyEqualizerPreset:equalizerPreset];
+    [NSUserDefaults.standardUserDefaults setInteger:equalizerPreset forKey:@"AudioSpectrumEQPreset"];
+    [NSUserDefaults.standardUserDefaults setObject:self.equalizerConfiguration forKey:@"AudioSpectrumEQConfiguration"];
+}
+
+- (void)setEqualizerGain:(float)gain atBand:(NSUInteger)bandIndex {
+    if (bandIndex >= self.mutableEqualizerBandGains.count) return;
+    float clampedGain = fmaxf(-24.0f, fminf(12.0f, gain));
+    self.mutableEqualizerBandGains[bandIndex] = @(clampedGain);
+    NSMutableArray *updatedBands = [NSMutableArray arrayWithArray:self.equalizerBandConfigurations];
+    NSMutableDictionary *updatedBand = [updatedBands[bandIndex] mutableCopy];
+    updatedBand[@"gainDB"] = @(clampedGain);
+    updatedBand[@"enabled"] = @YES;
+    updatedBands[bandIndex] = updatedBand;
+    self.equalizerBandConfigurations = updatedBands;
+    _equalizerPreset = AudioSpectrumEQPresetCustom;
+    self.equalizerProfileID = @"custom";
+    self.equalizerSource = @"user";
+    self.equalizerMetadata = @{};
+    [self applyEqualizerPreset:AudioSpectrumEQPresetCustom];
+}
+
+- (void)setEqualizerPreampGain:(float)gain {
+    if (!isfinite(gain)) return;
+    self.equalizerPreampDB = fmaxf(-24.0f, fminf(12.0f, gain));
+    _equalizerPreset = AudioSpectrumEQPresetCustom;
+    self.equalizerProfileID = @"custom";
+    self.equalizerSource = @"user";
+    self.equalizerMetadata = @{};
+    [self applyEqualizerPreset:AudioSpectrumEQPresetCustom];
+}
+
+- (void)saveEqualizerSettings {
+    [NSUserDefaults.standardUserDefaults setInteger:_equalizerPreset forKey:@"AudioSpectrumEQPreset"];
+    [NSUserDefaults.standardUserDefaults setObject:self.mutableEqualizerBandGains forKey:@"AudioSpectrumEQBandGains"];
+    [NSUserDefaults.standardUserDefaults setObject:self.equalizerConfiguration forKey:@"AudioSpectrumEQConfiguration"];
+}
+
+- (void)applyEqualizerPreset:(AudioSpectrumEQPreset)preset {
+    if (!_equalizerNode) return;
+    (void)preset;
+    // Use an AI/user supplied preamp when present; otherwise keep headroom for boosts.
+    float maxBoost = 0.0f;
+    for (NSNumber *gain in self.mutableEqualizerBandGains) maxBoost = MAX(maxBoost, gain.floatValue);
+    float automaticHeadroomDB = maxBoost > 0.0f ? -(maxBoost + 1.0f) : 0.0f;
+    _equalizerNode.globalGain = self.equalizerAutoHeadroom && maxBoost > 0.0f
+        ? MIN(self.equalizerPreampDB, automaticHeadroomDB) : self.equalizerPreampDB;
+    for (NSUInteger index = 0; index < MIN(self.equalizerBandConfigurations.count, _equalizerNode.bands.count); index++) {
+        NSDictionary *configuration = self.equalizerBandConfigurations[index];
+        AVAudioUnitEQFilterParameters *band = _equalizerNode.bands[index];
+        band.filterType = ASBEQFilterType(configuration[@"type"]);
+        band.frequency = [configuration[@"frequencyHz"] floatValue];
+        band.bandwidth = [configuration[@"bandwidthOctaves"] floatValue];
+        band.gain = [configuration[@"gainDB"] floatValue];
+        band.bypass = ![configuration[@"enabled"] boolValue];
+    }
 }
 
 #pragma mark - 🎵 音高/速率控制

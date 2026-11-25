@@ -33,6 +33,16 @@ struct VisualAudio {
     // Aligned feature groups from the shared HPSS/FFT analyzer.
     var dspFeatureSignals: SIMD4<Float>
     var dspFeatureTexture: SIMD4<Float>
+    var visualVideoActive: Float
+    var bpm: Float
+    var songIdentity: Int
+    var beatDetected: Float
+    var beatSequence: UInt64
+    var beatIntensity: Float
+    var beatKind: Float
+    var activityEnergy: Float
+    var vectorSubBass: Float
+    var activityClimax: Float
 }
 
 struct DesktopDotParticle {
@@ -47,12 +57,16 @@ enum DesktopBackgroundEffect: Int {
     case tyndall = 1
     case coverDots = 2
     case cellularHive = 3
+    case highEnergyGrid = 4
+    case vectorAssault = 5
 
     var title: String {
         switch self {
         case .tyndall: "丁达尔光束"
         case .coverDots: "封面点阵"
         case .cellularHive: "深空蜂巢"
+        case .highEnergyGrid: "高能网格"
+        case .vectorAssault: "矢量突袭"
         }
     }
     static var saved: DesktopBackgroundEffect {

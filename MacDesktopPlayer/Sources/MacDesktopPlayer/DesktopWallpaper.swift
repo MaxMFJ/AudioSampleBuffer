@@ -131,7 +131,7 @@ final class DesktopRenderer: NSObject, MTKViewDelegate {
             fatalError("无法初始化桌面 Metal 渲染器")
         }
 #if SWIFT_PACKAGE
-        let shaderNames = ["GuitarSurge", "Tyndall", "CoverDotMatrix", "CellularHive"]
+        let shaderNames = ["GuitarSurge", "Tyndall", "CoverDotMatrix", "CellularHive", "HighEnergyGrid", "VectorAssault"]
         let shaderSources = shaderNames.compactMap { name -> String? in
             guard let url = bundledResource(name, "metal") else { return nil }
             return try? String(contentsOf: url, encoding: .utf8)
@@ -169,6 +169,15 @@ final class DesktopRenderer: NSObject, MTKViewDelegate {
     func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {}
 
     func draw(in view: MTKView) {
+        if effectRenderer.effect == .vectorAssault {
+            let mood = DesktopMoodService.shared
+            let tint = mood.colors.atmosphere
+            view.clearColor = mood.isLLMGenerated
+                ? MTLClearColor(red: Double(tint.x) * 0.12, green: Double(tint.y) * 0.12, blue: Double(tint.z) * 0.12, alpha: 1)
+                : MTLClearColor(red: 9.0 / 255, green: 7.0 / 255, blue: 18.0 / 255, alpha: 1)
+        } else {
+            view.clearColor = MTLClearColor(red: 0.006, green: 0.009, blue: 0.025, alpha: 1)
+        }
         guard let drawable = view.currentDrawable, let pass = view.currentRenderPassDescriptor,
               let command = queue.makeCommandBuffer(), let encoder = command.makeRenderCommandEncoder(descriptor: pass) else { return }
         let values = audio.visualAudio(time: Float(ProcessInfo.processInfo.systemUptime - startedAt),
@@ -176,7 +185,8 @@ final class DesktopRenderer: NSObject, MTKViewDelegate {
                                        isolatedInstruments: effectRenderer.effect == .tyndall,
                                        coverDotSensitivity: effectRenderer.effect == .coverDots)
         let squareCover = effectRenderer.effect == .coverDots
-        let showCoverStage = squareCover || effectRenderer.effect == .tyndall || centerRecordVisible
+        let showCoverStage = squareCover || effectRenderer.effect == .tyndall ||
+            effectRenderer.effect == .vectorAssault || centerRecordVisible
         if let desktopView = view as? DesktopMetalView {
             let frame = audio.lyricsController.frame(at: Double(values.playbackTime),
                 surface: showCoverStage ? .coverStage : .overlay, viewport: view.bounds.size)
@@ -193,11 +203,11 @@ final class DesktopRenderer: NSObject, MTKViewDelegate {
         }
         effectRenderer.draw(encoder: encoder, view: view, audio: values)
         guitarSurgeRenderer.draw(encoder: encoder, audio: values,
-                                 enabled: audio.guitarSurgeEnabled && effectRenderer.effect != .tyndall,
-                                 drumOverlayEnabled: true)
+                                 enabled: audio.guitarSurgeEnabled && effectRenderer.effect != .tyndall && effectRenderer.effect != .vectorAssault,
+                                 drumOverlayEnabled: false)
         if showCoverStage {
             coverRecordRenderer.draw(encoder: encoder, view: view, audio: values, squareCover: squareCover,
-                                     circularBacking: effectRenderer.effect == .tyndall)
+                                     circularBacking: effectRenderer.effect == .tyndall || effectRenderer.effect == .vectorAssault)
         }
         encoder.endEncoding()
         command.present(drawable)

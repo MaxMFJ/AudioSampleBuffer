@@ -72,6 +72,9 @@ NS_ASSUME_NONNULL_BEGIN
 /// 重置进度条
 - (void)reset;
 
+/// 在进度条上标出歌曲时间段。每项包含 start、end（秒）和 label。
+- (void)setMomentMarkers:(NSArray<NSDictionary<NSString *, id> *> *)markers;
+
 @end
 
 NS_ASSUME_NONNULL_END

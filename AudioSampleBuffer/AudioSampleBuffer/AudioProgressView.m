@@ -45,6 +45,10 @@
 /// 波纹动画层
 @property (nonatomic, strong) CAShapeLayer *waveLayer;
 
+/// 进度条上的选段色块
+@property (nonatomic, strong) UIView *momentHost;
+@property (nonatomic, copy) NSArray<NSDictionary<NSString *, id> *> *momentMarkers;
+
 @end
 
 @implementation AudioProgressView
@@ -201,6 +205,7 @@
     
     // 更新进度条和滑块位置
     [self updateProgressUI];
+    [self layoutMomentMarkers];
 }
 
 - (void)updateProgressUI {
@@ -246,6 +251,7 @@
     self.duration = duration;
     self.durationLabel.text = [self formatTime:duration];
     [self updateProgressUI];
+    [self layoutMomentMarkers];
 }
 
 - (void)reset {
@@ -256,6 +262,69 @@
     self.currentTimeLabel.text = @"0:00";
     self.durationLabel.text = @"0:00";
     [self updateProgressUI];
+    [self layoutMomentMarkers];
+}
+
+- (void)setMomentMarkers:(NSArray<NSDictionary<NSString *,id> *> *)markers {
+    _momentMarkers = [markers copy] ?: @[];
+    [self layoutMomentMarkers];
+}
+
+- (UIColor *)colorForMomentLabel:(NSString *)label {
+    if ([label isEqualToString:@"chorus"]) return [UIColor colorWithRed:0.20 green:0.85 blue:1.00 alpha:0.95];
+    if ([label isEqualToString:@"drop"]) return [UIColor colorWithRed:1.00 green:0.55 blue:0.15 alpha:0.95];
+    if ([label isEqualToString:@"climax"]) return [UIColor colorWithRed:1.00 green:0.28 blue:0.55 alpha:0.95];
+    if ([label isEqualToString:@"energy_peak"]) return [UIColor colorWithRed:1.00 green:0.86 blue:0.20 alpha:0.95];
+    if ([label isEqualToString:@"instrument_focus"]) return [UIColor colorWithRed:0.35 green:0.95 blue:0.55 alpha:0.95];
+    if ([label isEqualToString:@"social_hotspot"]) return [UIColor colorWithRed:1.00 green:0.35 blue:0.30 alpha:0.95];
+    return [UIColor colorWithRed:0.72 green:0.45 blue:1.00 alpha:0.95];
+}
+
+- (void)layoutMomentMarkers {
+    if (!self.momentHost) {
+        self.momentHost = [[UIView alloc] init];
+        self.momentHost.userInteractionEnabled = NO;
+        self.momentHost.backgroundColor = UIColor.clearColor;
+        [self.trackView addSubview:self.momentHost];
+    }
+    self.momentHost.frame = self.trackView.bounds;
+    [self.trackView bringSubviewToFront:self.momentHost];
+    [self.momentHost.subviews makeObjectsPerformSelector:@selector(removeFromSuperview)];
+    for (UIView *view in [self.subviews copy]) {
+        if (view.tag == 8801) [view removeFromSuperview];
+    }
+    if (self.duration <= 0 || self.momentMarkers.count == 0) return;
+
+    CGFloat width = self.trackView.bounds.size.width;
+    CGFloat height = self.trackView.bounds.size.height;
+    CGFloat lastLabelMax = CGRectGetMaxX(self.currentTimeLabel.frame) + 4;
+    CGFloat rightLimit = CGRectGetMinX(self.durationLabel.frame) - 4;
+    for (NSDictionary *marker in self.momentMarkers) {
+        double start = [marker[@"start"] doubleValue];
+        double end = [marker[@"end"] doubleValue];
+        if (!(end > start) || start >= self.duration) continue;
+        CGFloat x = width * MAX(start, 0) / self.duration;
+        CGFloat endX = width * MIN(end, self.duration) / self.duration;
+        CGFloat markWidth = MAX(endX - x, 3);
+        UIColor *color = [self colorForMomentLabel:marker[@"label"]];
+        UIView *bar = [[UIView alloc] initWithFrame:CGRectMake(x, 0, markWidth, height)];
+        bar.backgroundColor = color;
+        bar.userInteractionEnabled = NO;
+        [self.momentHost addSubview:bar];
+
+        CGFloat labelWidth = 34;
+        CGFloat labelX = CGRectGetMinX(self.trackView.frame) + x + markWidth / 2 - labelWidth / 2;
+        if (labelX < lastLabelMax || labelX + labelWidth > rightLimit) continue;
+        UILabel *label = [[UILabel alloc] initWithFrame:CGRectMake(labelX, self.currentTimeLabel.frame.origin.y, labelWidth, self.currentTimeLabel.frame.size.height)];
+        label.tag = 8801;
+        label.text = [self formatTime:start];
+        label.font = [UIFont monospacedDigitSystemFontOfSize:10 weight:UIFontWeightSemibold];
+        label.textColor = color;
+        label.textAlignment = NSTextAlignmentCenter;
+        label.userInteractionEnabled = NO;
+        [self addSubview:label];
+        lastLabelMax = CGRectGetMaxX(label.frame) + 2;
+    }
 }
 
 #pragma mark - Setter

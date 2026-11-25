@@ -10,6 +10,7 @@
 #import <Metal/Metal.h>
 #import <MetalKit/MetalKit.h>
 #import <QuartzCore/QuartzCore.h>
+#import <stdint.h>
 #import "../Core/VisualEffectType.h"
 
 NS_ASSUME_NONNULL_BEGIN
@@ -154,6 +155,22 @@ NS_ASSUME_NONNULL_BEGIN
 @end
 
 @interface OpticalDarkroomRenderer : BaseMetalRenderer
+@end
+
+typedef struct {
+    BOOL enabled;
+    NSInteger arrowCount;
+    float attackSpeed;
+    float trailLengthMultiplier;
+    float arrowWidthMultiplier;
+    float turnDensity;
+    float cameraTracking;
+    float beatSensitivity;
+    float attackAngle;
+    uint64_t seed;
+} VectorAssaultConfig;
+
+@interface VectorAssaultRenderer : BaseMetalRenderer
 @end
 
 /**

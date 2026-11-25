@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<style>html,body,canvas{margin:0;width:100%;height:100%;display:block;overflow:hidden;background:#090712}</style>
+</head>
+<body>
+<canvas id="vector-assault"></canvas>
+<script src="vector_assault_reference.js"></script>
+<script>
+(() => {
+  'use strict';
+  const canvas = document.getElementById('vector-assault');
+  const ctx = canvas.getContext('2d', {alpha:false});
+  const config = {density:22,speed:1.2,trailLength:1.4,cameraTracking:0.75};
+  let running = false, simulationTime = 0, lastTime = 0, frameID = 0, fixedTime = null;
+  const referenceWidth = 390, referenceHeight = 390;
+  function resize() {
+    const ratio = Math.min(1.5, window.devicePixelRatio || 1);
+    canvas.width = Math.max(1, Math.round(canvas.clientWidth * ratio));
+    canvas.height = Math.max(1, Math.round(canvas.clientHeight * ratio));
+    ctx.setTransform(ratio,0,0,ratio,0,0);
+  }
+  function frame(now) {
+    frameID = 0;
+    if (!running) return;
+    if (fixedTime === null) {
+      if (!lastTime) lastTime = now;
+      simulationTime += Math.min(0.05, Math.max(0, (now-lastTime)/1000)) * config.speed;
+      lastTime = now;
+    }
+    const currentTime = fixedTime === null ? simulationTime : fixedTime;
+    const frame = VectorAssaultReference.snapshot(currentTime,
+      {...config,width:referenceWidth,height:referenceHeight,includePaths:false});
+    const width = canvas.clientWidth, height = canvas.clientHeight;
+    const scale = Math.max(width/referenceWidth,height/referenceHeight);
+    ctx.setTransform(canvas.width/Math.max(1,width),0,0,canvas.height/Math.max(1,height),0,0);
+    ctx.fillStyle = '#090712'; ctx.fillRect(0,0,width,height);
+    ctx.save();
+    ctx.translate((width-referenceWidth*scale)/2,(height-referenceHeight*scale)/2);
+    ctx.scale(scale,scale);
+    const camera = frame.cameraMatrix;
+    ctx.translate(...camera.translate);
+    ctx.rotate(camera.rotate);
+    ctx.scale(camera.scale,camera.scale);
+    ctx.translate(...camera.sceneTranslate);
+    ctx.strokeStyle = 'rgba(150,106,177,0.10)'; ctx.lineWidth = 1;
+    const camProgress = currentTime * 260 * config.cameraTracking * 0.53;
+    const camX = Math.SQRT1_2 * camProgress, camY = -Math.SQRT1_2 * camProgress;
+    const gridX = -1000 + Math.floor((camX + 195 - 500 + 1000)/75)*75;
+    const gridY = -1800 + Math.floor((camY + 195 - 500 + 1800)/75)*75;
+    for (let x=gridX;x<=camX+195+500;x+=75) {
+      ctx.beginPath();ctx.moveTo(x,camY-800);ctx.lineTo(x,camY+1200);ctx.stroke();
+    }
+    for (let y=gridY;y<=camY+195+500;y+=75) {
+      ctx.beginPath();ctx.moveTo(camX-800,y);ctx.lineTo(camX+1200,y);ctx.stroke();
+    }
+    const centerTile = fixedTime === null ? Math.max(0,Math.floor(camProgress/1200)) : 0;
+    const firstTile = fixedTime === null ? Math.max(0,centerTile-3) : 0;
+    const lastTile = fixedTime === null ? centerTile+1 : 0;
+    for (let tile=firstTile;tile<=lastTile;tile++) {
+    ctx.save();
+    const offsetX=Math.SQRT1_2*tile*1200, offsetY=-Math.SQRT1_2*tile*1200;
+    ctx.translate(offsetX,offsetY);
+    for (const arrow of frame.arrows) {
+      if (!arrow.points.some(point => point[0]+offsetX>=camX-100 && point[0]+offsetX<=camX+490 &&
+                                    point[1]+offsetY>=camY-100 && point[1]+offsetY<=camY+490)) continue;
+      ctx.strokeStyle=arrow.color;ctx.lineWidth=arrow.width;
+      ctx.lineJoin='miter';ctx.miterLimit=3;ctx.lineCap='butt';
+      ctx.beginPath();arrow.points.forEach((point,index) => index ? ctx.lineTo(...point) : ctx.moveTo(...point));
+      ctx.stroke();
+      ctx.fillStyle=arrow.color;
+      ctx.beginPath();arrow.tip.forEach((point,index) => index ? ctx.lineTo(...point) : ctx.moveTo(...point));
+      ctx.closePath();ctx.fill();
+      if (arrow.highlight) {
+        ctx.strokeStyle='rgba(236,189,247,0.45)';ctx.lineWidth=Math.max(0.8,arrow.width*0.12);
+        ctx.beginPath();arrow.points.forEach((point,index) => index ? ctx.lineTo(...point) : ctx.moveTo(...point));
+        ctx.stroke();
+      }
+    }
+    ctx.restore();
+    }
+    ctx.restore();
+    frameID=requestAnimationFrame(frame);
+  }
+  window.vectorAssault = {
+    setParameters(changes = {}) {
+      if (changes.arrowCount !== undefined) config.density = changes.arrowCount;
+      if (changes.attackSpeed !== undefined) config.speed = changes.attackSpeed;
+      if (changes.trailLengthMultiplier !== undefined) config.trailLength = changes.trailLengthMultiplier;
+      if (changes.cameraTracking !== undefined) config.cameraTracking = changes.cameraTracking;
+      if (changes.fixedTime === null) {
+        if (fixedTime !== null) simulationTime = fixedTime;
+        fixedTime = null;
+      } else if (changes.fixedTime !== undefined) {
+        fixedTime = Number(changes.fixedTime);
+        simulationTime = fixedTime;
+      }
+      if (fixedTime === null) lastTime = 0;
+    },
+    setFixedTime(time) { if (fixedTime !== null) simulationTime = fixedTime; fixedTime = time == null ? null : Number(time); lastTime = 0; },
+    setRunning(value) { running=!!value; if (running && !frameID) { lastTime=0; frameID=requestAnimationFrame(frame); } },
+    onBeat() {}
+  };
+  window.addEventListener('resize',resize);
+  resize();
+})();
+</script>
+</body>
+</html>

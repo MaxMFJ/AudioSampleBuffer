@@ -6,6 +6,7 @@
 //
 
 #import "AppDelegate.h"
+#import "SceneDelegate.h"
 #import <AVFoundation/AVFoundation.h>
 @interface AppDelegate ()
 
@@ -41,6 +42,16 @@
     return YES;
 }
 
+- (UISceneConfiguration *)application:(UIApplication *)application
+        configurationForConnectingSceneSession:(UISceneSession *)connectingSceneSession
+                                         options:(UISceneConnectionOptions *)options {
+    UISceneConfiguration *configuration = [[UISceneConfiguration alloc] initWithName:@"Default Configuration"
+                                                                           sessionRole:connectingSceneSession.role];
+    configuration.delegateClass = SceneDelegate.class;
+    configuration.storyboard = [UIStoryboard storyboardWithName:@"Main" bundle:nil];
+    return configuration;
+}
+
 
 
 - (void)applicationDidEnterBackground:(UIApplication *)application {
@@ -69,6 +80,12 @@
 - (BOOL)application:(UIApplication *)app
             openURL:(NSURL *)url
             options:(NSDictionary<UIApplicationOpenURLOptionsKey,id> *)options {
+
+    [self handleIncomingURL:url];
+    return YES;
+}
+
+- (void)handleIncomingURL:(NSURL *)url {
 
     NSLog(@"收到跳转：%@", url.absoluteString);
 
@@ -106,7 +123,17 @@
         [alert addAction:okAction];
         
         // 获取当前窗口的根视图控制器
-        UIViewController *rootViewController = self.window.rootViewController;
+        UIWindow *activeWindow = self.window;
+        if (!activeWindow) {
+            for (UIScene *scene in UIApplication.sharedApplication.connectedScenes) {
+                if (![scene isKindOfClass:UIWindowScene.class] || scene.activationState == UISceneActivationStateUnattached) continue;
+                for (UIWindow *window in ((UIWindowScene *)scene).windows) {
+                    if (window.isKeyWindow) { activeWindow = window; break; }
+                }
+                if (activeWindow) break;
+            }
+        }
+        UIViewController *rootViewController = activeWindow.rootViewController;
         if (rootViewController) {
             // 如果根视图控制器是导航控制器，获取最顶层的视图控制器
             if ([rootViewController isKindOfClass:[UINavigationController class]]) {
@@ -131,7 +158,6 @@
         }
     });
     
-    return YES;
 }
 
 @end

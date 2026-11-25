@@ -7,6 +7,28 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		A5CA000130C4000000000001 /* VectorAssaultCanvas.html in Resources */ = {isa = PBXBuildFile; fileRef = A5CA000130C4000000000002 /* VectorAssaultCanvas.html */; };
+		A5CA000130C4000000000003 /* vector_assault_reference.js in Resources */ = {isa = PBXBuildFile; fileRef = A5CA000130C4000000000004 /* vector_assault_reference.js */; };
+		DDCC02000000000000000007 /* BiliPlaybackSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDCC01000000000000000007 /* BiliPlaybackSupport.swift */; };
+		DDCC02000000000000000006 /* MVLyricsProvider.m in Sources */ = {isa = PBXBuildFile; fileRef = DDCC01000000000000000006 /* MVLyricsProvider.m */; };
+		DDCC02000000000000000004 /* MVLyricsTimelineSelector.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDCC01000000000000000004 /* MVLyricsTimelineSelector.swift */; };
+		DDCC02000000000000000003 /* MVTimelineCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDCC01000000000000000003 /* MVTimelineCoordinator.swift */; };
+		DDCC02000000000000000002 /* MVSourceTimelineSelector.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDCC01000000000000000002 /* MVSourceTimelineSelector.swift */; };
+		DDCC02000000000000000001 /* MVAudioAlignment.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDCC01000000000000000001 /* MVAudioAlignment.swift */; };
+		BACC00010000000000000001 /* PlatformAccount.swift in Sources */ = {isa = PBXBuildFile; fileRef = BACC00110000000000000001 /* PlatformAccount.swift */; };
+		BACC00010000000000000002 /* PlatformCredentialStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = BACC00120000000000000002 /* PlatformCredentialStore.swift */; };
+		BACC00010000000000000003 /* ProviderCookiePolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = BACC00130000000000000003 /* ProviderCookiePolicy.swift */; };
+		BACC00010000000000000004 /* PlatformLoginViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = BACC00140000000000000004 /* PlatformLoginViewController.swift */; };
+		BACC00010000000000000005 /* PlatformAccountManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = BACC00150000000000000005 /* PlatformAccountManager.swift */; };
+		BACC00010000000000000006 /* PlatformMusicModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = BACC00160000000000000006 /* PlatformMusicModels.swift */; };
+		BACC00010000000000000007 /* PlatformMusicService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BACC00170000000000000007 /* PlatformMusicService.swift */; };
+		BACC00010000000000000008 /* NetEasePlatformClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = BACC00180000000000000008 /* NetEasePlatformClient.swift */; };
+		BACC00010000000000000009 /* QQMusicPlatformClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = BACC00190000000000000009 /* QQMusicPlatformClient.swift */; };
+		BACC00010000000000000010 /* KugouPlatformClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = BACC00200000000000000010 /* KugouPlatformClient.swift */; };
+		BACC00010000000000000011 /* PlatformMusicAccountViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = BACC00210000000000000011 /* PlatformMusicAccountViewController.swift */; };
+		BACC00010000000000000012 /* BilibiliVideoClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = BACC00220000000000000012 /* BilibiliVideoClient.swift */; };
+		BACC00010000000000000020 /* SignatureMVClipPlayer.m in Sources */ = {isa = PBXBuildFile; fileRef = BACC00210000000000000020 /* SignatureMVClipPlayer.m */; };
+		BACC00010000000000000021 /* FirestarterSignature.mp4 in Resources */ = {isa = PBXBuildFile; fileRef = BACC00210000000000000021 /* FirestarterSignature.mp4 */; };
 		A1AG000130C3000000000001 /* LiRongHao-MingZi-GuitarControl.csv in Resources */ = {isa = PBXBuildFile; fileRef = A1AG000130C3000000000002 /* LiRongHao-MingZi-GuitarControl.csv */; };
 		A1AG000130C3000000000003 /* LiRongHao-MingZi-GuitarControl-Full.csv in Resources */ = {isa = PBXBuildFile; fileRef = A1AG000130C3000000000004 /* LiRongHao-MingZi-GuitarControl-Full.csv */; };
 		C31109012EAD600000D59E12 /* GlassResonanceShader.metal in Sources */ = {isa = PBXBuildFile; fileRef = C31109022EAD600000D59E12 /* GlassResonanceShader.metal */; };
@@ -151,6 +173,7 @@
 		4CSPC00012F25000000000001 /* SpectrumViewShader.metal in Sources */ = {isa = PBXBuildFile; fileRef = 4CSPC00012F25000000000002 /* SpectrumViewShader.metal */; };
 		4c4e68e181504d63bdcceeb4 /* QQMusicAPIService.m in Sources */ = {isa = PBXBuildFile; fileRef = 8f06cadb652e4fd8b81f19fb /* QQMusicAPIService.m */; };
 		64C5446228C838D100C23393 /* AppDelegate.m in Sources */ = {isa = PBXBuildFile; fileRef = 64C5446128C838D100C23393 /* AppDelegate.m */; };
+		F0A000000000000000000001 /* SceneDelegate.m in Sources */ = {isa = PBXBuildFile; fileRef = F0A000000000000000000002 /* SceneDelegate.m */; };
 		64C5446828C838D100C23393 /* ViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = 64C5446728C838D100C23393 /* ViewController.m */; };
 		64C5446B28C838D100C23393 /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 64C5446928C838D100C23393 /* Main.storyboard */; };
 		64C5446D28C838D400C23393 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 64C5446C28C838D400C23393 /* Assets.xcassets */; };
@@ -160,6 +183,7 @@
 		64C5448228C83A0700C23393 /* TTi.m in Sources */ = {isa = PBXBuildFile; fileRef = 64C5448128C83A0700C23393 /* TTi.m */; };
 		64C5448B28C83A7700C23393 /* AudioSpectrumRecorder.m in Sources */ = {isa = PBXBuildFile; fileRef = 64C5448728C83A7700C23393 /* AudioSpectrumRecorder.m */; };
 		64C5448C28C83A7700C23393 /* RealtimeAnalyzer.m in Sources */ = {isa = PBXBuildFile; fileRef = 64C5448A28C83A7700C23393 /* RealtimeAnalyzer.m */; };
+		MV0000010000000000000001 /* MVMomentAnalyzer.m in Sources */ = {isa = PBXBuildFile; fileRef = MV0000010000000000000003 /* MVMomentAnalyzer.m */; };
 		64C5448D28C83A7700C23393 /* SpectrumView.m in Sources */ = {isa = PBXBuildFile; fileRef = 64C5448528C83A7700C23393 /* SpectrumView.m */; };
 		64C5448E28C83A7700C23393 /* AudioSpectrumPlayer.m in Sources */ = {isa = PBXBuildFile; fileRef = 64C5448628C83A7700C23393 /* AudioSpectrumPlayer.m */; };
 		A1A7000130C3000000000001 /* YAMNetAudioAnalyzer.m in Sources */ = {isa = PBXBuildFile; fileRef = A1A7000130C3000000000003 /* YAMNetAudioAnalyzer.m */; };
@@ -188,6 +212,15 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		A5CA000130C4000000000002 /* VectorAssaultCanvas.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; path = Canvas/VectorAssaultCanvas.html; sourceTree = "<group>"; };
+		A5CA000130C4000000000004 /* vector_assault_reference.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = Canvas/vector_assault_reference.js; sourceTree = "<group>"; };
+		DDCC01000000000000000007 /* BiliPlaybackSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BiliPlaybackSupport.swift; sourceTree = "<group>"; };
+		DDCC01000000000000000006 /* MVLyricsProvider.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = MVLyricsProvider.m; sourceTree = "<group>"; };
+		DDCC01000000000000000005 /* MVLyricsProvider.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = MVLyricsProvider.h; sourceTree = "<group>"; };
+		DDCC01000000000000000004 /* MVLyricsTimelineSelector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MVLyricsTimelineSelector.swift; sourceTree = "<group>"; };
+		DDCC01000000000000000003 /* MVTimelineCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MVTimelineCoordinator.swift; sourceTree = "<group>"; };
+		DDCC01000000000000000002 /* MVSourceTimelineSelector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MVSourceTimelineSelector.swift; sourceTree = "<group>"; };
+		DDCC01000000000000000001 /* MVAudioAlignment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MVAudioAlignment.swift; sourceTree = "<group>"; };
 		A1AG000130C3000000000002 /* LiRongHao-MingZi-GuitarControl.csv */ = {isa = PBXFileReference; lastKnownFileType = text; path = Resources/LiRongHao-MingZi-GuitarControl.csv; sourceTree = "<group>"; };
 		A1AG000130C3000000000004 /* LiRongHao-MingZi-GuitarControl-Full.csv */ = {isa = PBXFileReference; lastKnownFileType = text; path = Resources/LiRongHao-MingZi-GuitarControl-Full.csv; sourceTree = "<group>"; };
 		C31109022EAD600000D59E12 /* GlassResonanceShader.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = GlassResonanceShader.metal; sourceTree = "<group>"; };
@@ -290,6 +323,7 @@
 		4C5C27AC2E9CC24D00D9AEA9 /* PerformanceControlPanel.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = PerformanceControlPanel.h; sourceTree = "<group>"; };
 		4C5C27AD2E9CC24D00D9AEA9 /* PerformanceControlPanel.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = PerformanceControlPanel.m; sourceTree = "<group>"; };
 		4C5E4BC32EA10E13009B5708 /* MusicLibraryManager.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = MusicLibraryManager.h; sourceTree = "<group>"; };
+		BACC00310000000000000001 /* AudioSampleBuffer-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "AudioSampleBuffer-Bridging-Header.h"; sourceTree = "<group>"; };
 		4C5E4BC42EA10E13009B5708 /* MusicLibraryManager.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = MusicLibraryManager.m; sourceTree = "<group>"; };
 		A1AM000130C3000000000002 /* AppleMusicArtworkService.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AppleMusicArtworkService.h; sourceTree = "<group>"; };
 		A1AM000130C3000000000003 /* AppleMusicArtworkService.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AppleMusicArtworkService.m; sourceTree = "<group>"; };
@@ -436,7 +470,9 @@
 		4CSPC00012F25000000000002 /* SpectrumViewShader.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = SpectrumViewShader.metal; sourceTree = "<group>"; };
 		64C5445D28C838D100C23393 /* AudioSampleBuffer.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AudioSampleBuffer.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		64C5446028C838D100C23393 /* AppDelegate.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AppDelegate.h; sourceTree = "<group>"; };
+		F0A000000000000000000003 /* SceneDelegate.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = SceneDelegate.h; sourceTree = "<group>"; };
 		64C5446128C838D100C23393 /* AppDelegate.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AppDelegate.m; sourceTree = "<group>"; };
+		F0A000000000000000000002 /* SceneDelegate.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = SceneDelegate.m; sourceTree = "<group>"; };
 		64C5446628C838D100C23393 /* ViewController.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ViewController.h; sourceTree = "<group>"; };
 		64C5446728C838D100C23393 /* ViewController.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ViewController.m; sourceTree = "<group>"; };
 		64C5446A28C838D100C23393 /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/Main.storyboard; sourceTree = "<group>"; };
@@ -456,6 +492,8 @@
 		64C5448828C83A7700C23393 /* AudioSpectrumRecorder.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AudioSpectrumRecorder.h; sourceTree = "<group>"; };
 		64C5448928C83A7700C23393 /* AudioSpectrumPlayer.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AudioSpectrumPlayer.h; sourceTree = "<group>"; };
 		64C5448A28C83A7700C23393 /* RealtimeAnalyzer.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = RealtimeAnalyzer.m; sourceTree = "<group>"; };
+		MV0000010000000000000002 /* MVMomentAnalyzer.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = MVMomentAnalyzer.h; sourceTree = "<group>"; };
+		MV0000010000000000000003 /* MVMomentAnalyzer.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = MVMomentAnalyzer.m; sourceTree = "<group>"; };
 		64C544CC28C83B1200C23393 /* AudioSampleBuffer.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = AudioSampleBuffer.entitlements; sourceTree = "<group>"; };
 		64C544CE28C83B1200C23393 /* AudioToolbox.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AudioToolbox.framework; path = System/Library/Frameworks/AudioToolbox.framework; sourceTree = SDKROOT; };
 		A1A7000130C3000000000002 /* YAMNetAudioAnalyzer.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = YAMNetAudioAnalyzer.h; sourceTree = "<group>"; };
@@ -467,6 +505,9 @@
 		A1AD000130C3000000000005 /* HTDemucs6s_Guitar_iOS16.mlpackage */ = {isa = PBXFileReference; lastKnownFileType = wrapper.mlpackage; path = ../../Models/HTDemucs6s_Guitar_iOS16.mlpackage; sourceTree = "<group>"; };
 		8A5F000130A2000000000001 /* ViewController+Private.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "ViewController+Private.h"; sourceTree = "<group>"; };
 		8A5F000130A2000000000002 /* ViewController+Playback.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = "ViewController+Playback.m"; sourceTree = "<group>"; };
+		BACC00210000000000000020 /* SignatureMVClipPlayer.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = SignatureMVClipPlayer.m; sourceTree = "<group>"; };
+		BACC00210000000000000022 /* SignatureMVClipPlayer.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = SignatureMVClipPlayer.h; sourceTree = "<group>"; };
+		BACC00210000000000000021 /* FirestarterSignature.mp4 */ = {isa = PBXFileReference; lastKnownFileType = file; path = FirestarterSignature.mp4; sourceTree = "<group>"; };
 		8A5F000130A2000000000003 /* ViewController+Lyrics.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = "ViewController+Lyrics.m"; sourceTree = "<group>"; };
 		8A5F000130A2000000000004 /* ViewController+Library.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = "ViewController+Library.m"; sourceTree = "<group>"; };
 		8A5F000130A2000000000005 /* ViewController+Visuals.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = "ViewController+Visuals.m"; sourceTree = "<group>"; };
@@ -478,6 +519,18 @@
 		90A1000130C1000000000007 /* MotionPhotoEditorTypes.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = MotionPhotoEditorTypes.h; sourceTree = "<group>"; };
 		90A1000130C1000000000008 /* MotionPhotoEditorTypes.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = MotionPhotoEditorTypes.m; sourceTree = "<group>"; };
 		90A1000130C1000000000009 /* MotionPhotoCanvasView.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = MotionPhotoCanvasView.h; sourceTree = "<group>"; };
+		BACC00110000000000000001 /* PlatformAccount.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlatformAccount.swift; sourceTree = "<group>"; };
+		BACC00120000000000000002 /* PlatformCredentialStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlatformCredentialStore.swift; sourceTree = "<group>"; };
+		BACC00130000000000000003 /* ProviderCookiePolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderCookiePolicy.swift; sourceTree = "<group>"; };
+		BACC00140000000000000004 /* PlatformLoginViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlatformLoginViewController.swift; sourceTree = "<group>"; };
+		BACC00150000000000000005 /* PlatformAccountManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlatformAccountManager.swift; sourceTree = "<group>"; };
+		BACC00160000000000000006 /* PlatformMusicModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlatformMusicModels.swift; sourceTree = "<group>"; };
+		BACC00170000000000000007 /* PlatformMusicService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlatformMusicService.swift; sourceTree = "<group>"; };
+		BACC00180000000000000008 /* NetEasePlatformClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetEasePlatformClient.swift; sourceTree = "<group>"; };
+		BACC00190000000000000009 /* QQMusicPlatformClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QQMusicPlatformClient.swift; sourceTree = "<group>"; };
+		BACC00200000000000000010 /* KugouPlatformClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KugouPlatformClient.swift; sourceTree = "<group>"; };
+		BACC00210000000000000011 /* PlatformMusicAccountViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlatformMusicAccountViewController.swift; sourceTree = "<group>"; };
+		BACC00220000000000000012 /* BilibiliVideoClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BilibiliVideoClient.swift; sourceTree = "<group>"; };
 		90A1000130C100000000000A /* MotionPhotoCanvasView.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = MotionPhotoCanvasView.m; sourceTree = "<group>"; };
 		90A1000130C100000000000B /* MotionPhotoFlowRenderer.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = MotionPhotoFlowRenderer.h; sourceTree = "<group>"; };
 		90A1000130C100000000000C /* MotionPhotoFlowRenderer.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = MotionPhotoFlowRenderer.m; sourceTree = "<group>"; };
@@ -665,6 +718,8 @@
 		4C66E7152E8A9255003200DA /* VisualEffects */ = {
 			isa = PBXGroup;
 			children = (
+				A5CA000130C4000000000002 /* VectorAssaultCanvas.html */,
+				A5CA000130C4000000000004 /* vector_assault_reference.js */,
 				4CF1000012F3000000000001 /* Core */,
 				4CF1000012F3000000000002 /* Metal */,
 				4CF1000012F3000000000003 /* Controls */,
@@ -759,6 +814,8 @@
 		4CCFF6012F3B1DAC004FFF9A /* AI */ = {
 			isa = PBXGroup;
 			children = (
+				DDCC01000000000000000006 /* MVLyricsProvider.m */,
+				DDCC01000000000000000005 /* MVLyricsProvider.h */,
 				4CCFF5FD2F3B1DAC004FFF9A /* AIColorConfiguration.h */,
 				4CCFF5FE2F3B1DAC004FFF9A /* AIColorConfiguration.m */,
 				4C9E510230BB100000ACCA11 /* InstrumentTruthConfig.json */,
@@ -893,6 +950,7 @@
 		64C5445F28C838D100C23393 /* AudioSampleBuffer */ = {
 			isa = PBXGroup;
 			children = (
+				BACC01000000000000000001 /* PlatformAccounts */,
 				A1AG000130C3000000000002 /* LiRongHao-MingZi-GuitarControl.csv */,
 				A1AG000130C3000000000004 /* LiRongHao-MingZi-GuitarControl-Full.csv */,
 				4CCFF6012F3B1DAC004FFF9A /* AI */,
@@ -902,9 +960,13 @@
 				64C544D028C83B5A00C23393 /* AudioSampleBuffer */,
 				64C5446028C838D100C23393 /* AppDelegate.h */,
 				64C5446128C838D100C23393 /* AppDelegate.m */,
+		64C5446128C838D100C23393 /* AppDelegate.m */,
+				F0A000000000000000000002 /* SceneDelegate.m */,
+				F0A000000000000000000003 /* SceneDelegate.h */,
 				4C65485A2EA0A47E006DD8DD /* AudioFileFormats.h */,
 				4C65485B2EA0A47E006DD8DD /* AudioFileFormats.m */,
 				4C5E4BC32EA10E13009B5708 /* MusicLibraryManager.h */,
+				BACC00310000000000000001 /* AudioSampleBuffer-Bridging-Header.h */,
 				4C5E4BC42EA10E13009B5708 /* MusicLibraryManager.m */,
 				A1AM000130C3000000000002 /* AppleMusicArtworkService.h */,
 				A1AM000130C3000000000003 /* AppleMusicArtworkService.m */,
@@ -915,6 +977,9 @@
 				90A1000130C1000000000004 /* ViewController+MotionPhoto.h */,
 				90A1000130C1000000000005 /* ViewController+MotionPhoto.m */,
 				8A5F000130A2000000000002 /* ViewController+Playback.m */,
+				BACC00210000000000000022 /* SignatureMVClipPlayer.h */,
+				BACC00210000000000000020 /* SignatureMVClipPlayer.m */,
+				BACC00210000000000000021 /* FirestarterSignature.mp4 */,
 				8A5F000130A2000000000003 /* ViewController+Lyrics.m */,
 				8A5F000130A2000000000004 /* ViewController+Library.m */,
 				8A5F000130A2000000000005 /* ViewController+Visuals.m */,
@@ -942,6 +1007,30 @@
 			path = AudioSampleBuffer;
 			sourceTree = "<group>";
 		};
+		BACC01000000000000000001 /* PlatformAccounts */ = {
+			isa = PBXGroup;
+			children = (
+				BACC00110000000000000001 /* PlatformAccount.swift */,
+				BACC00120000000000000002 /* PlatformCredentialStore.swift */,
+				BACC00130000000000000003 /* ProviderCookiePolicy.swift */,
+				BACC00140000000000000004 /* PlatformLoginViewController.swift */,
+				BACC00150000000000000005 /* PlatformAccountManager.swift */,
+				BACC00160000000000000006 /* PlatformMusicModels.swift */,
+				BACC00170000000000000007 /* PlatformMusicService.swift */,
+				BACC00180000000000000008 /* NetEasePlatformClient.swift */,
+				BACC00190000000000000009 /* QQMusicPlatformClient.swift */,
+				BACC00200000000000000010 /* KugouPlatformClient.swift */,
+				BACC00210000000000000011 /* PlatformMusicAccountViewController.swift */,
+				BACC00220000000000000012 /* BilibiliVideoClient.swift */,
+				DDCC01000000000000000004 /* MVLyricsTimelineSelector.swift */,
+				DDCC01000000000000000003 /* MVTimelineCoordinator.swift */,
+				DDCC01000000000000000002 /* MVSourceTimelineSelector.swift */,
+				DDCC01000000000000000001 /* MVAudioAlignment.swift */,
+				DDCC01000000000000000007 /* BiliPlaybackSupport.swift */,
+			);
+			path = PlatformAccounts;
+			sourceTree = "<group>";
+		};
 		64C544CD28C83B1200C23393 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
@@ -967,6 +1056,8 @@
 				64C5448728C83A7700C23393 /* AudioSpectrumRecorder.m */,
 				64C5448428C83A7600C23393 /* RealtimeAnalyzer.h */,
 				64C5448A28C83A7700C23393 /* RealtimeAnalyzer.m */,
+				MV0000010000000000000002 /* MVMomentAnalyzer.h */,
+				MV0000010000000000000003 /* MVMomentAnalyzer.m */,
 				4CDSP00012F24CF0000000002 /* RealtimeAnalyzerDSP.h */,
 				4CDSP00012F24CF0000000003 /* RealtimeAnalyzerDSP.c */,
 				64C5448328C83A7600C23393 /* SpectrumView.h */,
@@ -1111,6 +1202,8 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A5CA000130C4000000000001 /* VectorAssaultCanvas.html in Resources */,
+				A5CA000130C4000000000003 /* vector_assault_reference.js in Resources */,
 				A1A7000130C3000000000007 /* YAMNet.mlpackage in Resources */,
 				A1AD000130C3000000000002 /* HTDemucs6s_Guitar_iOS16.mlpackage in Resources */,
 				A1AG000130C3000000000001 /* LiRongHao-MingZi-GuitarControl.csv in Resources */,
@@ -1131,6 +1224,7 @@
 				4C9E510130BB100000ACCA11 /* InstrumentTruthConfig.json in Resources */,
 				4CE2D33A2FA3555B0006CE2C /* HPSSValidation.md in Resources */,
 				64C5446B28C838D100C23393 /* Main.storyboard in Resources */,
+				BACC00010000000000000021 /* FirestarterSignature.mp4 in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1141,6 +1235,24 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				BACC00010000000000000001 /* PlatformAccount.swift in Sources */,
+				BACC00010000000000000002 /* PlatformCredentialStore.swift in Sources */,
+				BACC00010000000000000003 /* ProviderCookiePolicy.swift in Sources */,
+				BACC00010000000000000004 /* PlatformLoginViewController.swift in Sources */,
+				BACC00010000000000000005 /* PlatformAccountManager.swift in Sources */,
+				BACC00010000000000000006 /* PlatformMusicModels.swift in Sources */,
+				BACC00010000000000000007 /* PlatformMusicService.swift in Sources */,
+				BACC00010000000000000008 /* NetEasePlatformClient.swift in Sources */,
+				BACC00010000000000000009 /* QQMusicPlatformClient.swift in Sources */,
+				BACC00010000000000000010 /* KugouPlatformClient.swift in Sources */,
+				BACC00010000000000000011 /* PlatformMusicAccountViewController.swift in Sources */,
+				BACC00010000000000000012 /* BilibiliVideoClient.swift in Sources */,
+				DDCC02000000000000000006 /* MVLyricsProvider.m in Sources */,
+				DDCC02000000000000000004 /* MVLyricsTimelineSelector.swift in Sources */,
+				DDCC02000000000000000003 /* MVTimelineCoordinator.swift in Sources */,
+				DDCC02000000000000000002 /* MVSourceTimelineSelector.swift in Sources */,
+				DDCC02000000000000000001 /* MVAudioAlignment.swift in Sources */,
+				DDCC02000000000000000007 /* BiliPlaybackSupport.swift in Sources */,
 				4C699F822E9F951A009090AB /* sse_optimized.cpp in Sources */,
 				4C699F832E9F951A009090AB /* RateTransposer.cpp in Sources */,
 				4C699F842E9F951A009090AB /* PeakFinder.cpp in Sources */,
@@ -1227,6 +1339,7 @@
 				90A1000130C1000000000015 /* MotionPhotoFlowRenderer.m in Sources */,
 				90A1000130C1000000000016 /* MotionPhotoFlowShader.metal in Sources */,
 				8A5F000130A2000000000012 /* ViewController+Playback.m in Sources */,
+				BACC00010000000000000020 /* SignatureMVClipPlayer.m in Sources */,
 				8A5F000130A2000000000013 /* ViewController+Lyrics.m in Sources */,
 				8A5F000130A2000000000014 /* ViewController+Library.m in Sources */,
 				8A5F000130A2000000000015 /* ViewController+Visuals.m in Sources */,
@@ -1271,6 +1384,7 @@
 				64C5448B28C83A7700C23393 /* AudioSpectrumRecorder.m in Sources */,
 				4C66E71D2E8A98FB003200DA /* GalaxyControlPanel.m in Sources */,
 				64C5446228C838D100C23393 /* AppDelegate.m in Sources */,
+				F0A000000000000000000001 /* SceneDelegate.m in Sources */,
 				64C5448228C83A0700C23393 /* TTi.m in Sources */,
 				64C5447328C838D400C23393 /* main.m in Sources */,
 				64C5448D28C83A7700C23393 /* SpectrumView.m in Sources */,
@@ -1287,6 +1401,7 @@
 				4C66E70A2E8A8DBB003200DA /* ParticleAnimationManager.m in Sources */,
 				4C66E70B2E8A8DBB003200DA /* AnimationProtocol.m in Sources */,
 				64C5448C28C83A7700C23393 /* RealtimeAnalyzer.m in Sources */,
+				MV0000010000000000000001 /* MVMomentAnalyzer.m in Sources */,
 				A1A7000130C3000000000001 /* YAMNetAudioAnalyzer.m in Sources */,
 				A1AD000130C3000000000001 /* HTDemucsGuitarAnalyzer.m in Sources */,
 				4CDSP00012F24CF0000000001 /* RealtimeAnalyzerDSP.c in Sources */,
@@ -1462,6 +1577,8 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.mfj.AudioSampleBuffer;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTS_MACCATALYST = YES;
+				SWIFT_VERSION = 5.0;
+				SWIFT_OBJC_BRIDGING_HEADER = "AudioSampleBuffer/AudioSampleBuffer-Bridging-Header.h";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
@@ -1497,6 +1614,8 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.mfj.AudioSampleBuffer;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTS_MACCATALYST = YES;
+				SWIFT_VERSION = 5.0;
+				SWIFT_OBJC_BRIDGING_HEADER = "AudioSampleBuffer/AudioSampleBuffer-Bridging-Header.h";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};

@@ -7,6 +7,7 @@
 
 #import "LyricsManager.h"
 #import "QQMusicLyricsAPI.h"
+#import "AudioSampleBuffer-Swift.h"
 #import <AVFoundation/AVFoundation.h>
 
 @interface LyricsManager ()
@@ -136,7 +137,7 @@
         }
     }
     
-    // 优先级4: 从网易云API动态获取
+    // 优先级4: 从网易云 API 获取。文件名里的曲目编号优先于标签。
     NSString *musicId = [self extractNeteaseIdFromAudio:audioPath];
     
     if (musicId) {
@@ -144,15 +145,20 @@
         [self fetchLyricsFromNetease:musicId completion:^(LRCParser *parser, NSError *error) {
             if (parser) {
                 [self.lyricsCache setObject:parser forKey:audioPath];
-                
-                // 保存到沙盒
                 NSString *lrcContent = [self convertParserToLRCString:parser];
                 [self saveLyrics:lrcContent forAudioFile:audioPath];
+                if (completion) completion(parser, nil);
+                return;
             }
-            
-            if (completion) {
-                completion(parser, error);
-            }
+            NSLog(@"⚠️ [歌词] 网易云歌词失败，改用 QQ 音乐：%@", error.localizedDescription ?: @"无歌词");
+            [self fetchLyricsFromQQMusicForAudioFile:audioPath completion:^(LRCParser *qqParser, NSError *qqError) {
+                if (qqParser) {
+                    [self.lyricsCache setObject:qqParser forKey:audioPath];
+                    NSString *lrcContent = [self convertParserToLRCString:qqParser];
+                    [self saveLyrics:lrcContent forAudioFile:audioPath];
+                }
+                if (completion) completion(qqParser, qqParser ? nil : qqError);
+            }];
         }];
         return;
     }
@@ -180,79 +186,53 @@
 
 - (void)fetchLyricsFromNetease:(NSString *)musicId
                     completion:(LyricsCompletionBlock)completion {
-    
-    // 网易云音乐歌词API
+    [[NetEaseLyricsBridge sharedBridge] fetchLyricsForTrackID:musicId completion:^(NSString *lrcContent, NSString *errorMessage) {
+        if (lrcContent.length > 0) {
+            NSLog(@"✅ [歌词] 网易云登录态歌词获取成功，长度: %lu", (unsigned long)lrcContent.length);
+            [self completeNeteaseLyrics:lrcContent completion:completion];
+            return;
+        }
+        NSLog(@"⚠️ [歌词] 网易云登录态接口未返回歌词：%@", errorMessage ?: @"空内容");
+        [self fetchPublicNeteaseLyrics:musicId completion:completion];
+    }];
+}
+
+- (void)fetchPublicNeteaseLyrics:(NSString *)musicId
+                      completion:(LyricsCompletionBlock)completion {
     NSString *urlString = [NSString stringWithFormat:@"https://music.163.com/api/song/lyric?id=%@&lv=1&tv=-1", musicId];
     NSURL *url = [NSURL URLWithString:urlString];
-    
     if (!url) {
-        NSError *error = [NSError errorWithDomain:@"LyricsManager"
-                                             code:400
-                                         userInfo:@{NSLocalizedDescriptionKey: @"无效的URL"}];
-        if (completion) {
-            completion(nil, error);
-        }
+        NSError *error = [NSError errorWithDomain:@"LyricsManager" code:400 userInfo:@{NSLocalizedDescriptionKey: @"无效的URL"}];
+        if (completion) completion(nil, error);
         return;
     }
-    
-    NSURLSessionDataTask *task = [_session dataTaskWithURL:url
-                                         completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
-        
-        if (error) {
-            dispatch_async(dispatch_get_main_queue(), ^{
-                if (completion) {
-                    completion(nil, error);
-                }
-            });
+    NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
+    [request setValue:@"https://music.163.com/" forHTTPHeaderField:@"Referer"];
+    [request setValue:@"Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)" forHTTPHeaderField:@"User-Agent"];
+    [[self.session dataTaskWithRequest:request completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+        if (error || !data) {
+            dispatch_async(dispatch_get_main_queue(), ^{ if (completion) completion(nil, error); });
             return;
         }
-        
-        NSError *jsonError = nil;
-        NSDictionary *json = [NSJSONSerialization JSONObjectWithData:data
-                                                             options:0
-                                                               error:&jsonError];
-        
-        if (jsonError || !json) {
-            dispatch_async(dispatch_get_main_queue(), ^{
-                if (completion) {
-                    completion(nil, jsonError);
-                }
-            });
-            return;
-        }
-        
+        NSDictionary *json = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
         NSString *lrcContent = json[@"lrc"][@"lyric"];
-        
-        if (!lrcContent || lrcContent.length == 0) {
-            NSError *noLyricsError = [NSError errorWithDomain:@"LyricsManager"
-                                                         code:404
-                                                     userInfo:@{NSLocalizedDescriptionKey: @"该歌曲暂无歌词"}];
-            dispatch_async(dispatch_get_main_queue(), ^{
-                if (completion) {
-                    completion(nil, noLyricsError);
-                }
-            });
+        if (![lrcContent isKindOfClass:NSString.class] || lrcContent.length == 0) {
+            NSError *noLyricsError = [NSError errorWithDomain:@"LyricsManager" code:404 userInfo:@{NSLocalizedDescriptionKey: @"该歌曲暂无歌词"}];
+            dispatch_async(dispatch_get_main_queue(), ^{ if (completion) completion(nil, noLyricsError); });
             return;
         }
-        
-        LRCParser *parser = [[LRCParser alloc] init];
-        BOOL success = [parser parseFromString:lrcContent];
-        
-        dispatch_async(dispatch_get_main_queue(), ^{
-            if (completion) {
-                if (success) {
-                    completion(parser, nil);
-                } else {
-                    NSError *parseError = [NSError errorWithDomain:@"LyricsManager"
-                                                              code:500
-                                                          userInfo:@{NSLocalizedDescriptionKey: @"歌词解析失败"}];
-                    completion(nil, parseError);
-                }
-            }
-        });
-    }];
-    
-    [task resume];
+        [self completeNeteaseLyrics:lrcContent completion:completion];
+    }] resume];
+}
+
+- (void)completeNeteaseLyrics:(NSString *)lrcContent completion:(LyricsCompletionBlock)completion {
+    LRCParser *parser = [[LRCParser alloc] init];
+    BOOL success = [parser parseFromString:lrcContent];
+    dispatch_async(dispatch_get_main_queue(), ^{
+        if (!completion) return;
+        if (success) completion(parser, nil);
+        else completion(nil, [NSError errorWithDomain:@"LyricsManager" code:500 userInfo:@{NSLocalizedDescriptionKey: @"歌词解析失败"}]);
+    });
 }
 
 - (void)loadLocalLyrics:(NSString *)lrcPath
@@ -278,34 +258,23 @@
 }
 
 - (nullable NSString *)extractNeteaseIdFromAudio:(NSString *)audioPath {
+    NSString *base = [[audioPath lastPathComponent] stringByDeletingPathExtension];
+    NSRegularExpression *expression = [NSRegularExpression regularExpressionWithPattern:@"^netease-([0-9]{4,20})$" options:0 error:nil];
+    NSTextCheckingResult *match = [expression firstMatchInString:base options:0 range:NSMakeRange(0, base.length)];
+    if (match.numberOfRanges >= 2) {
+        NSString *musicId = [base substringWithRange:[match rangeAtIndex:1]];
+        NSLog(@"📖 [歌词] 从文件名找到网易云 ID: %@", musicId);
+        return musicId;
+    }
+
     NSURL *audioURL = [NSURL fileURLWithPath:audioPath];
     AVAsset *asset = [AVAsset assetWithURL:audioURL];
-    
     NSArray *metadata = [asset commonMetadata];
-    
     for (AVMetadataItem *item in metadata) {
-        if ([item.commonKey.lowercaseString isEqualToString:@"comment"]) {
-            NSString *comment = (NSString *)item.value;
-            
-            // 查找 "163 key(Don't modify):" 标记
-            if ([comment containsString:@"163 key"]) {
-                // 尝试解密163 key获取音乐ID
-                // 注意：这需要实现AES解密，这里先返回nil
-                // 实际应用中可以使用CommonCrypto框架解密
-                NSLog(@"发现163 key，但需要解密: %@", [comment substringToIndex:MIN(50, comment.length)]);
-                
-                // TODO: 实现163 key解密
-                // 目前返回nil，让应用使用其他方式获取歌词
-                return nil;
-            }
-        }
-        
-        // 有些应用可能直接存储musicId
         if ([item.commonKey.lowercaseString isEqualToString:@"musicid"]) {
             return (NSString *)item.value;
         }
     }
-    
     return nil;
 }
 

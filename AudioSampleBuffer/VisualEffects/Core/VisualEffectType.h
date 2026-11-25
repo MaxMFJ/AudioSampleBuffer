@@ -58,6 +58,8 @@ typedef NS_ENUM(NSUInteger, VisualEffectType) {
     VisualEffectTypeRetiredReserved,          // 保留旧水墨特效编号，避免后续类型编号变化
     VisualEffectTypeLiquidPigment,            // 液态颜料 - 旋律牵引半透明颜料，鼓点局部扩散
     VisualEffectTypeOpticalDarkroom,           // 光学暗房 - 三轨累积显影的胶片抽象照片
+    VisualEffectTypeVectorAssault,              // 矢量突袭 - 正交折线攻击箭矢
+    VisualEffectTypeVectorAssaultCanvas,        // 矢量突袭 Canvas 对照版
 
     // 数量
     VisualEffectTypeCount
